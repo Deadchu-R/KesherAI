@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { explainCommand, parseScenePreview } from "@kesher/shared";
 import { api } from "./api";
-import { callDuration, errorLine, formatDuration, paramSummary, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
+import { callDuration, errorLine, formatDuration, maskSecrets, paramSummary, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
 import { FileChips } from "./MediaView";
 import { ShotThumb } from "./chat/ShotView";
-import type { ActedOn } from "./chat/step-fold";
+import { stepPreview, type ActedOn } from "./chat/step-fold";
 import { mediaKindOf } from "./chat/chat-inline";
 import { dangerWhat, reviewHeldText, splitReview } from "./chat/gate-text";
 import { getLocale, t, he$ } from "./i18n";
@@ -97,6 +97,7 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
   const param = paramSummary(call.input);
   const hits = call.name === "web_search" && result?.ok ? searchHits(result.output) : [];
   const out = result && !result.diff && !hits.length ? prettyOutput(result.output) : "";
+  const preview = maskSecrets(stepPreview(call.name, result));
   const card = (
     <details className={`tool tool-card ${state}`}>
       <summary>
@@ -110,6 +111,8 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
         </span>
         {pinned && <span className="tool-pinned" title={L("נעוץ: המודל מקבל את התוצאה במלואה", "Pinned: the model gets this result in full")}>📌</span>}
         {result && !result.ok && <span className="tool-err" dir="auto">{errorLine(result.output)}</span>}
+        {/* What the step ended on (page title · domain, window, command's last line, +N −M), as Claude's step rows. */}
+        {preview && <bdi className="tool-preview" dir="auto">{preview}</bdi>}
       </summary>
       {result && convId && <PinResult convId={convId} callId={call.callId} pinned={!!pinned} />}
       {result?.diff && <Diff diff={result.diff} />}

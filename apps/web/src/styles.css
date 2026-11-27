@@ -324,6 +324,8 @@ button.on { border-color: var(--accent); }
 .tool-card .tool-state { order: 1; display: inline-flex; align-items: center; gap: 6px; margin-inline-start: auto; }
 .tool-card .tool-state .spinner { width: 12px; height: 12px; }
 .tool-err { order: 3; flex: 1 1 100%; min-width: 0; color: var(--bad, #e5534b); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 23px; }
+/* What a finished step ended on (page title · domain, window, last output line), one muted line under the row. */
+.tool-preview { order: 3; flex: 1 1 100%; min-width: 0; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 23px; unicode-bidi: isolate; }
 .tool-hits { margin: 6px 0 0; padding-inline-start: 22px; display: grid; gap: 4px; font-size: 13.5px; }
 .tool-hits li { overflow-wrap: anywhere; }
 .tool-hits li bdi { margin-inline-start: 8px; }
@@ -344,7 +346,11 @@ button.on { border-color: var(--accent); }
 .live-output pre { margin: 4px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--code-bg, rgba(127,127,127,.12)); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
 .activity-images { display: flex; flex-wrap: wrap; gap: 8px; }
 .activity-thumbs { display: inline-flex; align-items: center; gap: 4px; }
-.activity-thumbs img { width: 34px; height: 22px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+.activity-thumbs img { width: 34px; height: 22px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); display: block; }
+/* A folded line's thumbnail is a button (opens the picture large); 44 px tall tap area on touch without a bigger picture. */
+.activity-thumb { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 4px; }
+.activity-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) { .activity-thumb { padding: 11px 2px; margin: -11px 0; } }
 .activity-shots { display: flex; flex-wrap: wrap; gap: 8px; padding-inline-start: 24px; margin-top: 6px; }
 .activity-shots img { width: 180px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }

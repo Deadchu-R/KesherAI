@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileChips, MadeMedia, MediaView, fileUrl } from "./MediaView";
 import { MemoryChip } from "./chat/MemoryChip";
 import { InstallOffer } from "./chat/InstallOffer";
@@ -11,7 +11,8 @@ import { api, withToken } from "./api";
 import { desktop } from "./library";
 import { getLocale, t, type StringKey } from "./i18n";
 import { callDuration, formatDuration, groupCalls, groupTitle, maskSecrets, toolInfo, type ToolRun } from "./chat/tool-cards";
-import { actedOnShots, foldHeader, turnDuration, type ActedOn } from "./chat/step-fold";
+import { ShotLightbox } from "./chat/ShotView";
+import { actedOnShots, foldHeader, foldKind, turnDuration, type ActedOn, type FoldKind } from "./chat/step-fold";
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
@@ -106,10 +107,10 @@ export function groupSummary(steps: Step[]): string {
 const foldChoice = new Map<string, boolean>();
 
 /**
- * The fold's header: "What the model did · 12 steps · 1:42", or while it works "Working… step 5: click 'Save'". It
+ * The fold's header: "Used the browser · 6 steps · 3 screenshots · 1:42", or while it works "Working… step 5: click 'Save'". It
  * has its own clock, so the chat around it does not render again for the time alone.
  */
-function FoldHeader({ steps, live, current }: { steps: Step[]; live: boolean; current: Step | undefined }) {
+function FoldHeader({ steps, live, current, kind, shots }: { steps: Step[]; live: boolean; current: Step | undefined; kind: FoldKind; shots: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;
@@ -117,7 +118,7 @@ function FoldHeader({ steps, live, current }: { steps: Step[]; live: boolean; cu
     return () => clearInterval(tick);
   }, [live]);
   const ms = turnDuration(steps, now);
-  return <span className="activity-sum" dir="auto">{foldHeader({ steps: steps.length, ms, running: live, current: current ? stepLabel(current) : undefined }, getLocale() === "he")}</span>;
+  return <span className="activity-sum" dir="auto">{foldHeader({ steps: steps.length, ms, running: live, current: current ? stepLabel(current) : undefined, kind, shots }, getLocale() === "he")}</span>;
 }
 
 /**
@@ -135,12 +136,16 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   const acted = actedOnShots(steps);
   const foldKey = `${convId ?? ""}:${steps[0]?.call.callId ?? ""}`;
   const [, redraw] = useState(0);
+  // A screenshot opened from the folded line's thumbnails (drawn outside the fold, so it shows while it is closed).
+  const [big, setBig] = useState<string>();
+  const closeBig = useCallback(() => setBig(undefined), []);
   const open = foldChoice.get(foldKey) ?? live;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   // A song's cover picture shows beside its player, not again as a picture.
   const images = steps.flatMap((s) => (SCREEN.test(s.call.name) || s.result?.audioIds?.length ? [] : s.result?.assetIds ?? []));
   // Screen pictures: small, in order, on the folded line (open one to see it full size).
   const shots = steps.flatMap((s) => (SCREEN.test(s.call.name) ? s.result?.assetIds ?? [] : []));
+  const kind = foldKind(steps.map((s) => s.call.name));
   const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
   // A song's title and lyrics come from the make_music call itself (t80).
   const sounds = steps.flatMap((s) => (s.result?.audioIds ?? []).map((id) => {
@@ -196,12 +201,19 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
         <summary>
           <span className="chev" aria-hidden />
           {live && <span className="spinner" aria-hidden />}
-          <FoldHeader steps={steps} live={live} current={current} />
-          {!live && <span className="activity-kinds muted small" dir="auto">{groupSummary(steps)}</span>}
+          <FoldHeader steps={steps} live={live} current={current} kind={kind} shots={shots.length} />
+          {/* The kinds line only for mixed work: "Used the browser · 6 steps" already says it otherwise. */}
+          {!live && kind === "mixed" && <span className="activity-kinds muted small" dir="auto">{groupSummary(steps)}</span>}
           {failed > 0 && <span className="pill bad">{t("stepsFailed", { n: failed })}</span>}
           {shots.length > 0 && (
             <span className="activity-thumbs" aria-label={t("sumShots", { n: shots.length })}>
-              {shots.slice(-4).map((id) => <img key={id} src={withToken(`/api/assets/${id}`)} alt="" />)}
+              {/* Each opens large without opening the fold (the click does not reach the summary). */}
+              {shots.slice(-4).map((id, i) => (
+                <button key={id} type="button" className="activity-thumb" aria-label={`${t("sumShots", { n: shots.length })}: ${shots.length - Math.min(4, shots.length) + i + 1}`} aria-haspopup="dialog"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBig(id); }}>
+                  <img src={withToken(`/api/assets/${id}`)} alt="" loading="lazy" decoding="async" />
+                </button>
+              ))}
               {shots.length > 4 && <span className="muted small">+{shots.length - 4}</span>}
             </span>
           )}
@@ -218,6 +230,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
           ))}
         </ol>
       </details>
+      {big && <ShotLightbox src={withToken(`/api/assets/${big}`)} alt={t("sumShots", { n: shots.length })} onClose={closeBig} />}
       {/* What failed and why, without opening the group (only the first line of each error). */}
       {failed > 0 && (
         <ul className="activity-fails">
