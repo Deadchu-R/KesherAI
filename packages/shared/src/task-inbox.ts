@@ -582,6 +582,34 @@ export interface InboxTaskView extends InboxTaskSpec {
   handoff?: InboxHandoff;
   /** Every run of the task, oldest first (at most 8): the page shows the chain once there was a handoff. */
   chain?: HandoffStep[];
+  /**
+   * Model attempts nested inside this task (r-20261126-06): runs live inside the task instead of creating chats in
+   * the chat list. Newest first; the page renders attempt, model, steps, duration and result. Raw logs are pruned
+   * after 30 days; only the summary stays.
+   */
+  runs?: InboxRunAttempt[];
+}
+
+/**
+ * One model attempt inside a task inbox run (r-20261126-06). Kept as a summary; raw logs are pruned after 30 days.
+ * The task page lists these in a "Runs" section; "Continue as a chat" promotes one into a normal conversation only
+ * when the user asks.
+ */
+export interface InboxRunAttempt {
+  /** Stable id for this attempt (used by "Continue as a chat"). */
+  id: string;
+  /** The model that ran (e.g. `gemini-2.5-pro`, `qwen3-coder`). */
+  model: string;
+  /** Agent steps executed in this attempt. */
+  steps: number;
+  /** When the attempt started (ms since epoch). */
+  startedAt: number;
+  /** When the attempt ended (ms since epoch); absent while running. */
+  endedAt?: number;
+  /** Final outcome of the attempt. */
+  result: "done" | "partial" | "failed" | "stopped";
+  /** One-line summary kept after raw logs are pruned. */
+  summary: string;
 }
 
 /** Where a continuation may go (task-handoff.ts): a failover target, or Claude's own Opus agent (security-sensitive or L work only). */

@@ -733,9 +733,26 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         </section>
       )}
 
-      {!!t.checks?.length && (
-        <section className="card stack">
-          <h2>{L("בדיקות של KesherAI", "KesherAI's checks")}</h2>
+      {!!t.runs?.length && (
+       <section className="card stack">
+       <h2>{L("ריצות", "Runs")}</h2>
+       {t.runs.map((r) => (
+       <div key={r.id} className="row wrap small tinbox-run">
+       <b className="grow">{r.model}</b>
+       <span className="small muted">{L(`${r.steps} צעדים`, `${r.steps} steps`)}</span>
+       <span className="small muted">{clock(r.startedAt)}</span>
+       <span className={`tinbox-st ${r.result === "done" ? "good" : r.result === "failed" || r.result === "stopped" ? "bad" : ""}`}>
+       {r.result === "done" ? "✓" : r.result === "failed" || r.result === "stopped" ? "✕" : "…"} {r.summary || r.result}
+       </span>
+       </div>
+       ))}
+       <p className="small muted">{L("כל ריצה היא ניסיון של מודל בתוך המשימה; ניתן להמשיך אחת מהן כצ׳אט.", "Each run is one model attempt inside the task; any can be continued as a chat.")}</p>
+       </section>
+       )}
+
+              {!!t.checks?.length && (
+                <section className="card stack">
+                  <h2>{L("בדיקות של KesherAI", "KesherAI's checks")}</h2>
           {t.checks.map((c, i) => (
             <div key={i} className="row wrap small tinbox-check">
               <b className="grow">{c.name === "paths" ? L("נתיבים מותרים", "Allowed paths") : c.name === "secrets and privacy" ? L("סריקת סודות ופרטיות", "Secrets and privacy scan") : c.name}</b>
