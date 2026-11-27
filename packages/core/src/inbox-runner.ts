@@ -8,7 +8,7 @@ import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { isPrivacySkip } from "./privacy-guard.js";
-import { createSessionWorktree, excludeWorktrees, sweepWorktrees, tidyWorktreesRoot, worktreeFolder, type Git } from "./session-worktrees.js";
+import { createSessionWorktree, excludeWorktrees, runBaseCommit, sweepWorktrees, tidyWorktreesRoot, worktreeFolder, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { UsageLog, baselineOf, overBaseline, type UsageEntry } from "./usage-log.js";
 import { findSavings } from "./savings.js";
@@ -1728,7 +1728,8 @@ export class TaskInbox {
       return;
     }
     // The diff and the path check are against the task's own base, also when the work continues from a partial branch.
-    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
+    const baseSha = await runBaseCommit(this.gitStrict, repo, base, taskBase).catch(() => wt.base);
+    t.baseSha = baseSha;
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: modelLabel(model), ...(trainingRiskOf(model) ? { mayTrain: true } : {}) });
     for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions", "watchLog", "review"] as const) delete t[k];
     if (resume) t.note = `Continuing from the partial branch ${resume.replace(/^refs\/(heads|remotes\/origin)\//, "")}.`;
@@ -1870,7 +1871,7 @@ export class TaskInbox {
     const cools = Object.values(cooldowns());
     const until = limited ? (exhausted || gh ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
     const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `${lane} limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? USER_STOP : run.why ? this.stopText(t, run.why) : error ? `${lane} failed: ${error.slice(0, 300)}` : "";
-    await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
+    await this.finish(t, wt.path, baseSha, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
     // GhostCLI's put-off task goes again by itself when its first model is back (doGhostcli skips it until then).
     if (gh && t.status === "deferred-quota" && until) {
       t.retryAt = until;
@@ -2160,7 +2161,8 @@ export class TaskInbox {
       await this.save();
       return;
     }
-    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
+    const baseSha = await runBaseCommit(this.gitStrict, repo, base, taskBase).catch(() => wt.base);
+    t.baseSha = baseSha;
     const cs = this.cs;
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: `Claude Code${cs.model ? ` · ${cs.model}` : ""}` });
     for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions", "watchLog", "review"] as const) delete t[k];
@@ -2224,7 +2226,7 @@ export class TaskInbox {
     } else if (run.why === "stop") why = USER_STOP;
     else if (run.why) why = this.stopText(t, run.why);
     else if (!out.result?.ok) why = `Claude Code failed: ${(out.result?.text || out.stderr || `exit code ${out.code}`).slice(0, 300)}`;
-    await this.finish(t, wt.path, baseSha ?? wt.base, repo, !!out.result?.ok && !run.why && !limited, why, limited ? "deferred-quota" : undefined);
+    await this.finish(t, wt.path, baseSha, repo, !!out.result?.ok && !run.why && !limited, why, limited ? "deferred-quota" : undefined);
   }
 
   /**
@@ -2392,13 +2394,6 @@ export class TaskInbox {
       if ((await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).code === 0) return ref;
     }
     return undefined;
-  }
-
-  /** The commit a ref points to, or undefined. */
-  private async commitOf(repo: string, ref: string): Promise<string | undefined> {
-    const r = await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-    const sha = r.out.trim();
-    return r.code === 0 && /^[0-9a-f]{40}$/.test(sha) ? sha : undefined;
   }
 
   /** Task ids whose watchdog said "off-task" in this run (kept for the end review). */
@@ -2689,7 +2684,8 @@ export class TaskInbox {
     const branch = `${branchFor(t, "antigravity")}${attempt > 1 ? `-r${attempt}` : ""}`;
     if (!validBranchName(branch)) throw fail("Bad branch name.", 400);
     const wt = await createSessionWorktree(repo, `agy-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
-    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
+    const baseSha = await runBaseCommit(this.gitStrict, repo, base, taskBase).catch(() => wt.base);
+    t.baseSha = baseSha;
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: now, plan: [], steps: 0, decisions: [], checks: [], files: [], pushed: false, resultWritten: false });
     delete t.endedAt;
     delete t.watchLog;
@@ -2702,7 +2698,7 @@ export class TaskInbox {
     today.used++;
     await this.save();
     if (!active.quiet) this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`, { path: `#/task-inbox/${t.id}`, ref: progressRef(t.id) });
-    void this.work(t, active, wt.path, baseSha ?? wt.base, repo).finally(async () => {
+    void this.work(t, active, wt.path, baseSha, repo).finally(async () => {
       this.active = undefined;
       // The next task of the line is asked about or started by the user's own queue tap (the ask is made before `idle` resolves).
       await this.slotFreed(t).catch(() => undefined);

@@ -543,6 +543,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   files?: Array<{ path: string; added: number; removed: number }>;
   /** The diff (cut to about 60 KB) for the task page. */
   diff?: string;
+  /** The commit the run's own changes are measured from (set when the run starts; the path checks diff against it). */
+  baseSha?: string;
   headSha?: string;
   pushed?: boolean;
   /** The agent's own short report. */

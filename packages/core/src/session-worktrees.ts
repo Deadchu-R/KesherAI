@@ -33,6 +33,26 @@ export interface SessionWorktree {
   base: string;
 }
 
+/**
+ * The commit a task run's own changes are measured from. A fresh run starts at the fetched base, so that commit is it.
+ * A run that continues from an earlier partial branch starts elsewhere, and the base ref has usually moved on since
+ * (a release bump or a new feature landed): comparing against the moved ref would list main's own changes as the
+ * run's (2026-11-27, task o-20261127-18). The merge-base of the start and the base ref is the commit the partial work
+ * grew from, so the diff holds the partial work and the new work, never what main gained.
+ *
+ * @param git - The git runner.
+ * @param repo - The project.
+ * @param start - What the worktree was made from (a commit or a ref).
+ * @param taskBase - The task's base ref, as fetched when the run started.
+ * @returns The commit sha to diff against; the start commit when the two share no history.
+ */
+export async function runBaseCommit(git: Git, repo: string, start: string, taskBase: string): Promise<string> {
+  const sha = (await git(repo, ["rev-parse", "--verify", `${start}^{commit}`])).trim();
+  if (start === taskBase) return sha;
+  const mb = (await git(repo, ["merge-base", start, taskBase]).catch(() => "")).trim();
+  return /^[0-9a-f]{40}$/.test(mb) ? mb : sha;
+}
+
 /** The configured worktrees folder (set once at start-up from {@link resolveWorktreesDir}); undefined: inside each repo. */
 let worktreesRoot: string | undefined;
 

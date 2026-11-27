@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runIn } from "./run-in.js";
-import { createSessionWorktree, includedFiles, removeSessionWorktree, resolveWorktreesDir, setWorktreesRoot, sweepWorktrees, worktreeName, worktreeWork, type Git } from "./session-worktrees.js";
+import { createSessionWorktree, includedFiles, runBaseCommit, removeSessionWorktree, resolveWorktreesDir, setWorktreesRoot, sweepWorktrees, worktreeName, worktreeWork, type Git } from "./session-worktrees.js";
 
 const git: Git = async (cwd, args) => {
   const r = await runIn(cwd, "git", args, false);
@@ -130,4 +130,40 @@ test("worktrees go under the worktrees folder and the daily sweep removes only t
   } finally {
     setWorktreesRoot(undefined);
   }
+});
+
+test("the run's base commit stays the one it started from while main moves on (resume case included)", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "kesher-base-"));
+  await git(repo, ["init", "-q", "-b", "main"]);
+  await writeFile(join(repo, "package.json"), '{\n  "version": "0.6.503"\n}\n');
+  await writeFile(join(repo, "a.txt"), "a\n");
+  await git(repo, ["add", "."]);
+  await git(repo, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "first"]);
+  const old = (await git(repo, ["rev-parse", "HEAD"])).trim();
+  // A partial run: its own allowed change, committed on a branch from the old main.
+  const wt = await createSessionWorktree(repo, "p1", git, { branch: "partial", base: "main" });
+  await writeFile(join(wt.path, "own.txt"), "own\n");
+  await git(wt.path, ["add", "."]);
+  await git(wt.path, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "own"]);
+  // Main moves on: a release bump and a new file.
+  await writeFile(join(repo, "package.json"), '{\n  "version": "0.6.504"\n}\n');
+  await writeFile(join(repo, "new-feature.tsx"), "x\n");
+  await git(repo, ["add", "."]);
+  await git(repo, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "release"]);
+
+  assert.equal(await runBaseCommit(git, repo, "main", "main"), (await git(repo, ["rev-parse", "main"])).trim(), "a fresh run: the fetched base itself");
+  const base = await runBaseCommit(git, repo, "partial", "main");
+  assert.equal(base, old, "a resumed run: the commit the partial work grew from, not the moved main");
+  // The run's own change passes: only own.txt differs from that base, no version bump.
+  await writeFile(join(wt.path, "more.txt"), "more\n");
+  await git(wt.path, ["add", "-A"]);
+  assert.deepEqual((await git(wt.path, ["diff", "--cached", "--name-only", base])).trim().split("\n").sort(), ["more.txt", "own.txt"]);
+  // A real out-of-path change by the run is still in the diff (and a version bump of its own would show).
+  await writeFile(join(wt.path, "package.json"), '{\n  "version": "9.9.9"\n}\n');
+  await git(wt.path, ["add", "-A"]);
+  const names = (await git(wt.path, ["diff", "--cached", "--name-only", base])).trim().split("\n");
+  assert.ok(names.includes("package.json") && !names.includes("new-feature.tsx"));
+  assert.match(await git(wt.path, ["diff", "--cached", base, "--", "package.json"]), /\+\s*"version": "9\.9\.9"/);
+  // With the moved main as the base (the old bug) main's own files would have been listed as the run's.
+  assert.ok((await git(wt.path, ["diff", "--cached", "--name-only", "main"])).includes("new-feature.tsx"));
 });
