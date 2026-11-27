@@ -13,6 +13,7 @@ import type { FaultLog } from "../fault-log.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import type { LlamaEngine } from "../llamacpp.js";
 import { GameWatch } from "../game-watch.js";
+import { LightProfile, readFullscreen } from "../heavy-app.js";
 import { PlayStandby } from "../play-standby.js";
 import { unityInPlay } from "../unity-play.js";
 import { closeLeftOverEngines, parseGpuApps, processParent } from "../pc-fix.js";
@@ -28,6 +29,19 @@ import type { KesherServices } from "../services.js";
 export function startEngines(p: { app: FastifyInstance; services: KesherServices; guard: GpuGuard; engine: LlamaEngine; comfy: ComfyManager; config: KesherConfig; faults: FaultLog; registry: ProviderRegistry; afterTerminate: boolean }): void {
   const games = new GameWatch();
   const { app, services, guard, engine, comfy, config, faults, registry, afterTerminate } = p;
+  // The automatic light profile: a heavy app (a game, a full-screen program) frees the card like a game in Play does.
+  // One look every 10 s; the process list is the game watch's own (cached 30 s), the full-screen read is one PowerShell.
+  const light = (services.lightProfile = new LightProfile({
+    settings: () => config.lightProfile,
+    actions: { unloadGpu: () => guard.unloadLoaded(), reloadGpu: (names) => guard.reloadNamed(names) },
+    look: async () => {
+      const [g, fullscreen] = await Promise.all([games.running(), readFullscreen()]);
+      return { games: g, programs: games.programNames(), ...(fullscreen ? { fullscreen } : {}) };
+    },
+    log: (line) => app.log.info(line),
+  }));
+  light.start();
+  app.addHook("onClose", async () => light.stop());
   // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
   /** The last model's load at start-up, while it runs. */
   let startLoad: Promise<unknown> | undefined;
@@ -54,7 +68,7 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
       // taking the card (Roee, 27.11: the 27B model loaded itself as Slay the Spire 2 started). A chat the user opens
       // still loads it.
       if (!titles.length && config.guard.freeForPlay !== false) {
-        const playing = await games.running();
+        const playing = [...(await games.running()), ...light.status().apps.filter(() => light.active())];
         if (playing.length) {
           app.log.info(`chat model: not loaded for a background request while a game runs (${playing.slice(0, 2).join(", ")})`);
           throw new Error(`A game is running (${playing[0]}): the chat model loads after it closes.`);

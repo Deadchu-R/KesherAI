@@ -1,0 +1,55 @@
+{
+  "group": "מחשב · Computer",
+  "mocks": [
+    {
+      "url": "**/api/light-profile",
+      "json": {
+        "on": true,
+        "enabled": true,
+        "apps": [
+          "Slay the Spire 2"
+        ],
+        "unloaded": [
+          "chat model",
+          "ComfyUI"
+        ],
+        "settings": {
+          "enabled": true,
+          "unloadGpu": true,
+          "keepCpuPool": true,
+          "pauseInbox": false,
+          "reloadWhenDone": false,
+          "programs": {
+            "blender": "light",
+            "obs64": "ignore",
+            "slack": "ignore"
+          }
+        }
+      }
+    }
+  ],
+  "boards": [
+    {
+      "id": "SettingsLightProfile",
+      "title": "הגדרות › מחשב: פרופיל קל אוטומטי (\"פרופיל קל: פעיל (Slay the Spire 2)\"), מה הוא עושה, ורשימת תוכנות: תמיד קל / להתעלם; בטלפון מרוחק לקריאה בלבד",
+      "titleEn": "Settings › Computer: automatic light profile (\"Light profile: on (Slay the Spire 2)\"), what it does, program list (light / ignore); read-only on the phone",
+      "route": "#/settings/computer",
+      "viewports": [
+        "desktop",
+        "phone"
+      ],
+      "height": {
+        "desktop": 900,
+        "phone": 1300
+      },
+      "steps": [
+        {
+          "wait": ".light-profile"
+        },
+        {
+          "scroll": ".light-profile"
+        }
+      ]
+    }
+  ]
+}

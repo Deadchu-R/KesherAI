@@ -230,6 +230,8 @@ export interface KesherServices {
   semantic: Semantic;
   /** The pool of small models on the processor (watchdog, translator, embeddings): server/build-cpu-pool.ts. */
   cpuModels?: import("./server/build-cpu-pool.js").CpuModels;
+  /** The automatic light profile (heavy-app.ts), started with the engines. */
+  lightProfile?: import("./heavy-app.js").LightProfile;
   /** KesherAI's translator (translate.ts): the Translate page and English prompts for media models. */
   translator?: import("./translate.js").Translator;
   /** "Access from anywhere" (Cloudflare tunnel). */

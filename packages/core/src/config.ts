@@ -442,6 +442,17 @@ export const KesherConfigSchema = z.object({
       maxCpuTemp: z.number().int().min(0).max(105).default(0),
     })
     .prefault({}),
+  /** The automatic light profile for heavy apps (heavy-app.ts; Settings › Computer). */
+  lightProfile: z
+    .object({
+      enabled: z.boolean().default(true),
+      unloadGpu: z.boolean().default(true),
+      keepCpuPool: z.boolean().default(true),
+      pauseInbox: z.boolean().default(false),
+      reloadWhenDone: z.boolean().default(false),
+      programs: z.record(z.string().max(120), z.enum(["light", "ignore"])).default({}),
+    })
+    .prefault({}),
   /**
    * The pool of small models on the processor (cpu-pool.ts): the watchdog, the translator and embeddings share one CPU
    * budget. `ramBudgetMb` 0 means a quarter of the RAM; `pinCcd` keeps them on the X3D chip's plain CCD (measure

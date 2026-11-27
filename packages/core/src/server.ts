@@ -683,7 +683,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       enginesDir: paths.engines,
       binary: () => engine.status().binaryPath,
       files: { watchdog: routerFile, translator: () => findTranslationFile(config, paths.models), embeddings: () => config.engines.embedModel },
-      games: new GameWatch(),
+      // The light profile can hold the pool too ("keep the CPU pool running" off), as a game does.
+      games: (() => {
+        const watch = new GameWatch();
+        return { running: async () => [...(await watch.running()), ...(services.lightProfile?.pausesCpuPool() ?? [])] };
+      })(),
       log: (line) => console.info(`[cpu-pool] ${line}`),
     });
     services.cpuModels = cpuModels;
@@ -702,6 +706,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
     githubToken: () => github.pushToken(),
     draining: () => updateDrain.pending,
+    lightPaused: () => services.lightProfile?.pausesInbox() ?? [],
     localChat: () => {
       const st = engine.status();
       return st.running && st.modelPath && !st.job ? `llamacpp/${basename(st.modelPath).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}` : undefined;

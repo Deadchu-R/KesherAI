@@ -33,6 +33,11 @@ export class GameWatch {
     return this.looking;
   }
 
+  /** The names of the programs in the last look (no new scan; for the light profile's per-program list). */
+  programNames(): string[] {
+    return this.programs.list.map((p) => p.name);
+  }
+
   /** One look, with the caches. */
   private async look(): Promise<string[]> {
     const now = (this.d.now ?? Date.now)();
