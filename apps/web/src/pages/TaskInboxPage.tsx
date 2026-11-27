@@ -199,11 +199,40 @@ export function TaskInboxPage({ id }: { id?: string }) {
   const [busy, setBusy] = useState(false);
   /** The task whose Run the PC refused because another one runs: its row says so and offers "Add to queue". */
   const [busyRun, setBusyRun] = useState<string | undefined>();
+  /** One provider's meter line at the top of the inbox (runs today, avg minutes, remaining share). */
+  type MeterLine = { executor: string; runs: number; avgMin: number; label: string };
+  const [meters, setMeters] = useState<MeterLine[]>([]);
   const load = () => void api<InboxState>("/api/task-inbox").then(setS, () => undefined);
+  const loadMeters = () => {
+    const since = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
+    void api<{ day: string; executor: string; runs: number; minutes: number }[]>("/api/usage-log/totals?since=" + encodeURIComponent(since)).then((rows) => {
+      const map = new Map<string, { runs: number; minutes: number }>();
+      for (const r of rows ?? []) {
+        const cur = map.get(r.executor) ?? { runs: 0, minutes: 0 };
+        cur.runs += r.runs;
+        cur.minutes += r.minutes;
+        map.set(r.executor, cur);
+      }
+      const lines: MeterLine[] = [];
+      for (const [ex, v] of map) {
+        if (v.runs <= 0) continue;
+        const avg = Math.round(v.minutes / v.runs);
+        const low = ex.toLowerCase();
+        let label = `${v.runs} ${L("היום", "today")}`;
+        if (low.includes("opencode")) label = `${Math.min(100, Math.round((v.runs * 30) / 1))}% ${L("של החודש", "of the month")}`;
+        else if (low.includes("antigravity") || low.includes("claude")) label = `${Math.min(100, Math.round(v.runs / 1))}% ${L("שבוע", "week")}`;
+        else if (low.includes("ghostcli") || low.includes("openrouter")) label = `${v.runs}/500 ${L("היום", "today")}`;
+        lines.push({ executor: ex, runs: v.runs, avgMin: avg, label });
+      }
+      setMeters(lines.sort((a, b) => b.runs - a.runs));
+    }, () => undefined);
+  };
   useEffect(() => {
     load();
+    loadMeters();
     const t = setInterval(load, 3000);
-    return () => clearInterval(t);
+    const m = setInterval(loadMeters, 60_000);
+    return () => { clearInterval(t); clearInterval(m); };
   }, []);
   const act = async (path: string, body: unknown = {}, runOf?: string) => {
     setBusy(true);
@@ -266,7 +295,17 @@ export function TaskInboxPage({ id }: { id?: string }) {
         <button type="button" className="primary" onClick={() => setAdding(true)}>{L("＋ משימה", "＋ Task")}</button>
       </div>
 
-      <div className="row wrap small tinbox-status">
+              {meters.length > 0 && (
+                <div className="row wrap small tinbox-meters" role="list" aria-label={L("מדדי שימוש", "Usage meters")}>
+                  {meters.map((m) => (
+                    <span key={m.executor} className="tinbox-chip" role="listitem" dir="ltr">
+                      {m.executor} · {m.runs} {L("ריצות", "runs")} · {L("ממוצע", "avg")} {m.avgMin} {L("דק׳", "min")} · {m.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="row wrap small tinbox-status">
         <span className={`tinbox-chip ${s.busy.free ? "good" : "warn"}`}>● {s.busy.free ? L("המחשב פנוי", "The PC is free") : L("המחשב עסוק", "The PC is busy")}{s.busy.reasons.length ? `: ${s.busy.reasons.join(", ")}` : s.busy.gpu !== undefined ? `: GPU ${s.busy.gpu}%` : ""}{!s.busy.free && L(" · Antigravity רץ בכל זאת (בענן)", " · Antigravity still runs (in the cloud)")}</span>
         {s.loop && s.loop.state !== "off" && (
           <a href="#/settings/inbox" className={`tinbox-chip ${s.loop.state === "running" ? "good" : "warn"}`} title={L("הגדרות › תיבת משימות › לולאת העבודה", "Settings › Task inbox › Work loop")}>

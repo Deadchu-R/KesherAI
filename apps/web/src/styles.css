@@ -4485,6 +4485,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-chip.warn { color: var(--warn); border-color: rgb(242 182 109 / 0.35); }
 .tinbox .chip-text.on { background: var(--raised); color: var(--text); }
 .tinbox-status { gap: 8px; }
+.tinbox-meters { gap: 6px; margin-top: 4px; }
 .tinbox-err { color: var(--warn); }
 .tinbox-terms { border-inline-start: 3px solid var(--accent); padding-inline-start: 10px; }
 .tinbox-later { opacity: 0.7; border: 1px dashed var(--border-strong); border-radius: 6px; padding: 0 6px; }
