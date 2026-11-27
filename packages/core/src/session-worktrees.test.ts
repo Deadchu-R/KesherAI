@@ -55,6 +55,20 @@ test("a session worktree: own folder and branch, .env copied, user's status clea
   assert.ok(!(await git(repo, ["branch"])).includes("kesher/s1"), "branch removed");
 });
 
+test("a folder left by an earlier run is kept, and the new worktree takes the next free name", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "kesher-wt-"));
+  await git(repo, ["init", "-q", "-b", "main"]);
+  await writeFile(join(repo, "a.txt"), "a\n");
+  await git(repo, ["add", "."]);
+  await git(repo, ["commit", "-qm", "first"]);
+  const first = await createSessionWorktree(repo, "gcli-o-1-2", git, { branch: "gcli/a" });
+  await writeFile(join(first.path, "left.txt"), "work\n");
+  const second = await createSessionWorktree(repo, "gcli-o-1-2", git, { branch: "gcli/b" });
+  assert.notEqual(second.path, first.path);
+  assert.ok(second.path.endsWith("gcli-o-1-2-2"));
+  assert.ok(existsSync(join(first.path, "left.txt")), "the old folder and its work stay");
+});
+
 test("the worktrees folder: the setting, else next to the models folder when on another drive than Windows", () => {
   assert.equal(resolveWorktreesDir("   ", "E:\\KesherAI\\models", "C:"), "E:\\KesherAI\\worktrees");
   assert.equal(resolveWorktreesDir(undefined, "e:\\KesherAI\\models", "C:"), "e:\\KesherAI\\worktrees");

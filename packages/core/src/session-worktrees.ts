@@ -120,7 +120,15 @@ export async function createSessionWorktree(folder: string, name: string, git: G
   }
   const base = (await git(repo, ["rev-parse", "--verify", `${opts.base ?? "HEAD"}^{commit}`]).catch(() => "")).trim();
   if (!base) throw new Error(opts.base ? `There is no commit ${opts.base} in this project.` : "The git project has no commit yet: commit once, then start a session in a worktree.");
-  const path = worktreeFolder(repo, name);
+  // A folder left by an earlier failed run (27.11: "'…/gcli-o-…-2' already exists" failed a GhostCLI task): forget
+  // worktrees whose folders are gone, then take the next free folder name. The old folder is never deleted (it may
+  // hold work).
+  let path = worktreeFolder(repo, name);
+  if (existsSync(path)) {
+    await git(repo, ["worktree", "prune"]).catch(() => "");
+    for (let i = 2; existsSync(path) && i <= 9; i++) path = worktreeFolder(repo, `${name}-${i}`.slice(-60).replace(/^-+/, ""));
+    if (existsSync(path)) throw new Error("Every work folder name for this run is taken; remove old ones in Settings › Worktrees.");
+  }
   const branch = opts.branch ?? `kesher/${name}`;
   if (!worktreesRoot) await excludeWorktrees(repo, git);
   await mkdir(dirname(path), { recursive: true });
