@@ -116,7 +116,7 @@ export function LogsPage() {
   const shown = useMemo(() => {
     const list = patterns?.patterns ?? [];
     const q = f.q.trim().toLowerCase();
-    return list.filter((p) => (showIgnored || p.label !== "ignore") && (!f.cat || p.cat === f.cat) && (!q || p.template.toLowerCase().includes(q) || p.sample.toLowerCase().includes(q)));
+    return list.filter((p) => (showIgnored || p.label !== "ignore" || p.rising) && (!f.cat || p.cat === f.cat) && (!q || p.template.toLowerCase().includes(q) || p.sample.toLowerCase().includes(q)));
   }, [patterns, showIgnored, f.q, f.cat]);
   const ignored = (patterns?.patterns ?? []).filter((p) => p.label === "ignore").length;
   const cats = useMemo(() => [...new Set([...(found?.cats ?? []), ...(patterns?.patterns ?? []).map((p) => p.cat).filter((c): c is string => !!c)])].sort(), [found, patterns]);
@@ -285,7 +285,7 @@ export function LogsPage() {
                       <div className="row log-pattern-head">
                         <span className={`log-count lvl-${p.level}`} dir="ltr">×{p.count}</span>
                         {p.isNew && <span className="pill log-new">{L("חדש", "New")}</span>}
-                        {p.rising && <span className="pill log-rising">{L("↗ עולה", "↗ Rising")}</span>}
+                        {p.rising && <span className={`pill log-rising${p.label === "ignore" ? " log-rising-ignored" : ""}`}>{p.label === "ignore" ? L("↗ עולה (התעלמות)", "↗ Rising (ignored)") : L("↗ עולה", "↗ Rising")}</span>}
                         {p.cat && <span className="muted small" dir="ltr">{p.cat}</span>}
                         <span className="grow" />
                         <Trend trend={p.trend} rising={p.rising} />

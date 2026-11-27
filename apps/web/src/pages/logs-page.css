@@ -32,6 +32,7 @@
 .log-count.lvl-warning { color: var(--warn); }
 .log-new { color: var(--accent); border-color: var(--accent); }
 .log-rising { color: var(--warn); }
+.log-rising.log-rising-ignored { color: var(--bad); border-color: var(--bad); }
 .log-trend path { fill: var(--text-2); }
 .log-trend.rising path { fill: var(--warn); }
 .log-template { font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
