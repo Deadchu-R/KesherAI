@@ -76,3 +76,4 @@ export * from "./voice-handoff.js";
 export * from "./voice-stream.js";
 export * from "./training-risk.js";
 export * from "./leak-guard.js";
+export * from "./overlay-state.js";
