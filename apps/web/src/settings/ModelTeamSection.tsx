@@ -75,7 +75,7 @@ export function ModelTeamSection() {
       <p className="muted small">{L("כשמודל קטן טעון ליד הראשי (מודלים > צ'אט), הודעה קצרה ופשוטה (שלום, תודה, שאלה קצרה) נענית בו, מהר יותר. קוד, קבצים וכלים נשארים אצל המודל הראשי.", "When a small model is loaded beside the main one (Models > Chat), a short, simple message (hello, thanks, a short question) is answered by it, faster. Code, files and tools stay with the main model.")}</p>
       <label className="row">
         <input type="checkbox" checked={shortAnswers} onChange={(e) => saveShort(e.target.checked)} />
-        <span className="grow">✂️ {L("תשובות קצרות כמו של Claude", "Keep answers short like Claude")}</span>
+        <span className="grow">✂️ {L("לענות כמו Claude (לסיים את העבודה, תשובות קצרות)", "Answer like Claude (finish the job, short answers)")}</span>
       </label>
       <p className="muted small">{L("במודל מקומי: אם התשובה הסופית ארוכה ומונה את כל השלבים שנעשו, או שנכתבה באנגלית למי שכתב בעברית, המודל מתבקש פעם אחת לכתוב אותה מחדש: מה יצא, הקובץ, והצעד הבא.", "On a local model: when the final answer is long and lists every step taken, or is in English for someone who wrote Hebrew, the model is asked once to rewrite it: what came out, the file, and the next step.")}</p>
     </section>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, silentToolStart, stripCode } from "./turn-shape.js";
+import { asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, silentToolStart, stripCode } from "./turn-shape.js";
 
 const lines = (n: number, s = "line of text") => Array.from({ length: n }, () => s).join("\n");
 
@@ -50,4 +50,35 @@ test("silent tool start is recorded for a tool call with no text", () => {
   assert.equal(silentToolStart("", 1), true);
   assert.equal(silentToolStart("Reading the file.", 1), false);
   assert.equal(silentToolStart("", 0), false);
+});
+
+test("act, don't ask: permission questions for a clear request are found (English and Hebrew)", () => {
+  assert.equal(asksPermission("Shall I go ahead and create the file?", "create a file a.txt", false), true);
+  assert.equal(asksPermission("I found the bug. Do you want me to fix it?", "fix the login bug", false), true);
+  assert.equal(asksPermission("רוצה שאמשיך?", "תכין לי קובץ", false), true);
+  assert.equal(asksPermission("שאתחיל?", "תבנה את הדף", false), true);
+});
+
+test("act, don't ask: not for ask_user, no request, destructive, long answers or plain questions", () => {
+  assert.equal(asksPermission("Shall I create the file?", "create a file", true), false);
+  assert.equal(asksPermission("Shall I create the file?", "what do you think about files?", false), false);
+  assert.equal(asksPermission("Shall I delete the old folder?", "clean up the project", false), false);
+  assert.equal(asksPermission("רוצה שאמחק את הקבצים?", "תנקה את התיקייה", false), false);
+  assert.equal(asksPermission("Do you want me to push to main?", "finish the feature", false), false);
+  assert.equal(asksPermission("The file is ready.", "create a file", false), false);
+  assert.equal(asksPermission("Here is the whole report. ".repeat(30) + "Want me to continue?", "write a report", false), false);
+});
+
+test("finish follow-up: open todo steps first, each kind once, never when skipped", () => {
+  const todo = [{ id: "1", title: "Write a", state: "done" as const }, { id: "2", title: "Check b", state: "pending" as const }];
+  const base = { answer: "Done.", userText: "make it", todo, askedUser: false, used: new Set<string>(), skip: false };
+  const a = finishFollowUp(base);
+  assert.equal(a?.kind, "open-steps");
+  assert.match(a!.message, /still open: 2\. Check b\. Continue, or mark them done\/dropped with a reason/);
+  assert.equal(finishFollowUp({ ...base, used: new Set(["open-steps"]) }), undefined);
+  assert.equal(finishFollowUp({ ...base, skip: true }), undefined);
+  const b = finishFollowUp({ ...base, todo: undefined, answer: "Shall I start?" });
+  assert.equal(b?.kind, "act");
+  assert.match(b!.message, /already asked for this — do it/);
+  assert.equal(finishFollowUp({ ...base, todo: undefined, answer: "Shall I start?", used: new Set(["act"]) }), undefined);
 });

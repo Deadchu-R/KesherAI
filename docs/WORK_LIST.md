@@ -605,10 +605,10 @@ in a fresh guest profile of KesherAI's browser, never the user's Chrome, never m
 
 ## Chats like Claude — from the 28.11 gap research
 Ordered by user impact (RESEARCH_LOG "2026-11-28 night — chats like Claude, gap research"). Each ships checked in remote (phone) too.
-- ⬜ S: done-gate in `session.ts`: a final answer while `todo` has open items gets one nudge (max 2 per message), plus the open steps appended to the newest tool result (recitation); add a chat-checks scenario `stops-with-open-todo`; measure the rate on Qwen 27B / 9B before and after.
+- ✅ S: done-gate in `session.ts` (28.11): a final answer while `todo` has open items gets one nudge per message, plus "Open steps: 2/5 — …" appended to each tool result (`finishFollowUp` in turn-shape.ts, `todoOpenLine` in shared); same "Answer like Claude" setting. ⬜ still open: chat-checks scenario `stops-with-open-todo` and the Qwen 27B / 9B before/after rate.
 - ⬜ S: sampling presets per model family for agent turns (Qwen top_k 20, top_p 0.95, temperature by thinking mode; confirm values on the model cards), sent through `llamaCppFields`, switch in Settings › Engine, off for other providers.
 - ⬜ M: a foreground `run_command` that reaches its timeout moves to the background (id returned, `command_output` / `command_stop` work) instead of being killed; "Run in background" button on a running command card (desktop and phone).
-- ⬜ S: "Shall I...?" detector: a final answer that only asks permission for a clear, non-destructive request gets one re-prompt to act; never when `ask_user` was used or the action is destructive.
+- ✅ S (28.11, `asksPermission` in turn-shape.ts): "Shall I...?" detector: a final answer that only asks permission for a clear, non-destructive request gets one re-prompt to act; never when `ask_user` was used or the action is destructive.
 - ⬜ M: parallel dispatch of read-only tool calls from one model step (`Promise.all`, order of results kept, limit 3 on CPU-only machines); measure steps and seconds per task.
 - ⬜ S: static prefill budget test: fails when the system prompt plus core tool specs grow past a byte limit; log `prompt_n` vs cached tokens per turn and compare before/after `capTools` re-ranking.
 - ⬜ S: grammar-constrained retry (GBNF from the tool schema) only after an invalid-JSON tool call, per-build flag.

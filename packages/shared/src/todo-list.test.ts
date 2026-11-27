@@ -66,3 +66,14 @@ test("latestTodo takes the newest todo event; todoReply tells the model what is 
   assert.match(todoReply([{ id: "1", title: "a", state: "done" }]), /All steps are done/);
   assert.match(todoReply(a), /Mark the next step in_progress/);
 });
+
+test("todoOpenLine: short line while steps are open, none when all done, cut at 120", async () => {
+  const { todoOpenLine, todoOpenNudge } = await import("./todo-list.js");
+  const items = [{ id: "1", title: "A", state: "done" as const }, { id: "2", title: "B", state: "pending" as const }, { id: "3", title: "C", state: "in_progress" as const }];
+  assert.equal(todoOpenLine(items), "Open steps: 2/3 — B; C");
+  assert.equal(todoOpenLine([items[0]!]), undefined);
+  assert.equal(todoOpenLine(undefined), undefined);
+  assert.equal(todoOpenNudge([items[0]!]), undefined);
+  const long = [{ id: "1", title: "x".repeat(120), state: "pending" as const }, { id: "2", title: "y".repeat(120), state: "pending" as const }];
+  assert.ok(todoOpenLine(long)!.length <= 120);
+});

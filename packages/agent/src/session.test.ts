@@ -1121,3 +1121,41 @@ test("turn shape: a Hebrew user gets one Hebrew rewrite request for a Latin answ
   assert.equal(seen.length, 2);
   assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /in Hebrew/);
 });
+
+test("done-gate: a final answer with open todo steps is sent back once; tool results carry the open steps", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const { model, seen } = scripted([
+    { calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt", state: "in_progress" }, { title: "Check it" }] } }] },
+    { calls: [{ name: "list_files", arguments: { path: "." } }] },
+    { text: "All finished." },
+    { text: "Still finished." },
+  ]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", shortAnswers: () => ({ maxLines: 25 }) });
+  session.send("make a.txt");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle" && seen.length >= 4);
+  assert.equal(seen.length, 4, "one nudge, then the second final answer stands");
+  assert.match(JSON.stringify(seen[2]!.messages.filter((m) => m.role === "tool").at(-1)), /Open steps: 2\/2 — Write a\.txt; Check it/);
+  assert.match(JSON.stringify(seen[3]!.messages.at(-1)), /These steps are still open: 1\. Write a\.txt; 2\. Check it/);
+});
+
+test("done-gate: off without the setting", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const { model, seen } = scripted([
+    { calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt" }] } }] },
+    { text: "All finished." },
+  ]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+  session.send("make a.txt");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  assert.equal(seen.length, 2);
+});
+
+test("act, don't ask: 'Shall I...?' for a clear request gets one nudge", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const { model, seen } = scripted([{ text: "Shall I create the file?" }, { text: "Shall I create the file?" }, { text: "unused" }]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", shortAnswers: () => ({ maxLines: 25 }) });
+  session.send("create a file a.txt");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle" && seen.length >= 2);
+  assert.equal(seen.length, 2);
+  assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /already asked for this — do it/);
+});

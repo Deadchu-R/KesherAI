@@ -17,11 +17,11 @@ import type {
   QueuedMessage,
   SignInInfo,
 } from "@kesher/shared";
-import { applyTodo, latestTodo, takeSteers, todoProgress, todoReply } from "@kesher/shared";
+import { applyTodo, latestTodo, takeSteers, todoOpenLine, todoProgress, todoReply } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { TURN_SHAPE_PROMPT, shapeFollowUp, silentToolStart } from "./turn-shape.js";
+import { TURN_SHAPE_PROMPT, finishFollowUp, shapeFollowUp, silentToolStart } from "./turn-shape.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
@@ -1420,6 +1420,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       let cutNudged = false;
       // The turn-shape rewrite (turn-shape.ts) is asked for once per message.
       let reshaped = false;
+      // The finish-the-job nudges (open todo steps, "act, don't ask"): each kind once per message.
+      const finishUsed = new Set<string>();
       // Whether this message's first output already started a tool (to record a start with no sentence before it).
       let firstOutputSeen = false;
       let reviews = 0;
@@ -1535,6 +1537,25 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           // "Keep answers short like Claude": one rewrite, local models only, when the answer recaps its steps at
           // length or is in the wrong script (the checks cost no model call).
           const shape = !reshaped && !abort.signal.aborted ? this.shortAnswers?.() : undefined;
+          // Same setting: a final answer with open `todo` steps, or one that only asks permission, is sent back once.
+          if (this.shortAnswers?.()) {
+            const lastUser = this.events.filter((e) => e.type === "user").at(-1);
+            const asked = [...this.messages].reverse().find((m) => m.role === "user" && !(typeof m.content === "string" && m.content.startsWith("[KesherAI]")));
+            const finish = finishFollowUp({
+              answer: shown,
+              userText: typeof asked?.content === "string" ? asked.content : "",
+              todo: latestTodo(this.events),
+              askedUser: this.events.some((e) => e.type === "tool_call" && e.name === ASK_USER_TOOL && e.seq > (lastUser?.seq ?? -1)),
+              used: finishUsed,
+              skip: abort.signal.aborted || step >= this.maxSteps - 1,
+            });
+            if (finish) {
+              finishUsed.add(finish.kind);
+              this.push({ type: "note", text: finish.kind === "open-steps" ? "The task list still has open steps: the agent was asked to continue once." : "The agent asked for permission for work you already asked for: it was told to do it." });
+              this.messages.push({ role: "user", content: finish.message });
+              continue;
+            }
+          }
           if (shape) {
             const asked = [...this.messages].reverse().find((m) => m.role === "user" && !(typeof m.content === "string" && m.content.startsWith("[KesherAI]")));
             const fix = shapeFollowUp(shown, typeof asked?.content === "string" ? asked.content : "", shape.maxLines);
@@ -1564,7 +1585,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             // Screenshots are big: only the newest one stays in the conversation.
             for (const m of this.messages) if (m.images) delete m.images;
           }
-          this.messages.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: output, ...(images ? { images } : {}) });
+          // While the `todo` list has open steps, its short state ends each tool result (recitation for small models).
+          const open = call.name !== TODO_TOOL && this.shortAnswers?.() ? todoOpenLine(latestTodo(this.events)) : undefined;
+          this.messages.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: open ? `${output}\n\n${open}` : output, ...(images ? { images } : {}) });
           // The loop guard (from Microsoft's TokenEconomizer): the same step failing the same way three times gets one
           // note to stop and change course, instead of the model trying it again (small local models do).
           const key = failureKey(call.name, output);
