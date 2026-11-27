@@ -546,6 +546,20 @@ split them into steps, reorder, set priority, assign an executor. No code, no sh
 - ✅ Build (27.11, no release yet): sealed kinds `taskchat` / `taskchat_answer` (packages/shared/src/hub-task-chat.ts, PC desk packages/core/src/hub-task-chat.ts on the CPU pool's chat role, panel apps/hub/page/task-chat.ts on the Tasks page); proposals only, Apply / Cancel, board HubTaskChat. Still open: a chat GGUF for the pool's chat slot, a check on the real PC, a Hebrew quality check.
 - ⬜ Build: PC side (task-chat.ts: fixed action list with a JSON-schema grammar, only the relevant tasks in the prompt, confirm for deletes), hub side (chat tab, streaming through the relay), tests, then a release.
 
+## Travel skill (Roee 27.11: ₪ + phone alerts, search on the PC) — research r-20261127-08 and -10 (Gemini, 28.11 night)
+
+Reports are on the PC (task inbox › r-20261127-08 / -10); generic but complete. Rules: no booking or payment by the app;
+official APIs with the user's own free key first (Amadeus Self-Service, Duffel search, Kiwi Tequila); pages read only
+in a fresh guest profile of KesherAI's browser, never the user's Chrome, never more often than the polling budget.
+- ⬜ T1 (M) Providers: Amadeus / Duffel / Kiwi adapters behind one `searchFlights` / `searchStays` shape; keys in Settings › Travel
+- ⬜ T2 (S) Prices in ₪: Bank of Israel daily rates (official, free) with a 24 h cache; show the source currency too
+- ⬜ T3 (S) Israel first: TLV as the default origin; El Al / Israir / Arkia flagged in results
+- ⬜ T4 (M) Price watch: saved routes/dates, polling budget (default every 6 h, max 4 watches per provider per day), price history
+- ⬜ T5 (S) Alerts: phone notification on a drop ≥ threshold (default 8% or ₪150), de-duplicated per watch per day
+- ⬜ T6 (L) Browser-assisted fallback: read a results page the user opened (or a fresh guest profile), no cookies, no logins
+- ⬜ T7 (M) Chat skill + Travel page (desktop + phone): "flights to Rome in March under ₪1500" → table + watch button
+- ⬜ T8 (L) Real-world test with Roee's next trip
+
 ## 27.11 (chat 4)
 - ✅ Past chats like Claude's conversation_search / recent_chats / read_conversation (Roee 27.11 "chats that work just like Claude"): tools `search_chats` {query, max 1-10} (chat id, title, when, ±300-char snippet labelled user/assistant, page token), `recent_chats` {n ≤ 20, before?, after?}, `read_chat` {id, page_token?, pages 1-2} (6 turns a page); scope = the current project's chats, else the non-project ones; never incognito or guest chats, never the current chat (read_chat refuses ids outside the scope); BM25 keyword ranking (Hebrew prefixes), re-ranked by meaning when the embeddings model is set (falls back to keywords on failure; no chat vector index yet, candidates are embedded on the fly); prompt line only when offered; tool cards "Searched past chats: 'X' · 3 results" with a link per chat (desktop + phone); board ChatPastSearch in chat-past-search.json (packages/core/src/past-chat-tools.ts, apps/web ChatCards.tsx + chat/tool-cards.ts). Later: a persistent embeddings index of chats.
 - ✅ Recurring scheduled tasks from a chat like Claude (Roee 27.11 "chats that work just like Claude"): tools `schedule_task` {name, prompt, when: "daily HH:MM" / "weekdays HH:MM" / "weekly mon HH:MM" / "every N hours" (N≥1) / one ISO time, local time, DST-safe; new_chat}, `list_scheduled`, `cancel_scheduled` reuse ChatTimers (timers.json, packages/core/src/chat-schedule.ts); each firing is "[KesherAI] Scheduled: <name>" in the chat (or a fresh one), follows the chat's mode, missed runs fire once marked late (never a burst), limits 10/chat, 30 total, phone notified at turn end; UI: ChatHeader "Scheduled" list + Settings › Scheduled (Pause/Resume/Run now/Delete, also on the phone) via /api/scheduled; boards ChatScheduled and SettingsScheduled in tools/design/scenarios/chat-scheduled.json; tests chat-schedule.test.ts.
