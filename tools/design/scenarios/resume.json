@@ -80,7 +80,7 @@
  "boards": [
   {
    "id": "ResumeCard",
-   "title": "המשך את מה שרץ: אחרי עדכון או הפעלה מחדש",
+   "title": "המשך את מה שרץ: וילון מקופל שנפתח בלחיצה (אחרי עדכון או הפעלה מחדש)",
    "route": "#/",
    "viewports": [
     "desktop",
@@ -91,6 +91,12 @@
     "phone": 1200
    },
    "steps": [
+    {
+     "wait": ".resume-pull"
+    },
+    {
+     "click": ".resume-pull"
+    },
     {
      "wait": ".resume-row"
     }
