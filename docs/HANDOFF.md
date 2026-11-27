@@ -23,7 +23,7 @@ keep Opus for complex or security code, give each helper a small focused task, a
 stocked for KesherAI's local model (small, precise tasks) and Antigravity (research, larger isolated tasks), check what
 they finish, and review it before it ships. Don't let the PC agents sit idle while Claude helpers do everything.
 0. Helper agents: launch them as general-purpose agents with the `model` named in .claude/agents/kesher-research.md
-   (sonnet), kesher-build.md (opus) and kesher-lookup.md (haiku), telling each to read that file and docs/AGENT_BRIEF.md
+   (sonnet), kesher-build.md (opus) and kesher-lookup.md (sonnet; haiku is not offered), telling each to read that file and docs/AGENT_BRIEF.md
    first (LEAD_GUIDE "How the work runs").
 1. Read this file, LEAD_GUIDE.md, WORK_LIST.md. Read AGENT_BRIEF.md only before launching an agent.
 2. Clone if needed: the repo is Deadchu-R/KesherAI, worked on in /home/claude/kesher.
@@ -51,8 +51,12 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
   "Stopped at:". AI editors: in-depth research (Photoshop, Affinity…).
 - Quality: readable, documented (TSDoc), efficient, secure code; Hebrew + English for every text; works at 390 px and in
   remote (phone ↔ PC); editors are independent plugins.
-- Tests: only for what changed while working; the full suite before each build. Security/performance scan every 5
-  builds (last: scan 166, before 0.6.400; 0.6.401 is build 1 of the next 5).
+- Tests: only for what changed while working; the full suite AND `pnpm -s lint` before each build (lint broke CI twice).
+  Security/performance scan every 5 builds (last: 26.11 after 0.6.486 → in 0.6.487; next after 0.6.492+5 = 0.6.497).
+- Research: never on Claude. Every research of a new feature has a "Language and weight" part and covers EVERY
+  platform (Windows/macOS/Linux/Android, NVIDIA/AMD/Apple/CPU-only): KesherAI is for all users (Roee 25–26.11).
+  Keep Gemini reports short ("under 1,200 words"): long ones came back cut off or empty.
+- Screens: design-doc board first (cloud doc for inbox/hub). Every report ends with what's next, then start it.
 - Releases: version in 5 package.json files, full checks, commit `0.6.NN: …` with Desktop-he/Phone-he lines, push main,
   then `git push -qf origin HEAD:release`; one background wait; three updates (building / available / status).
 - Testing on his PC: only through KesherAI itself; close what you open (Unreal etc.), leave KesherAI open.
@@ -125,6 +129,24 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
   ComfyUI → Unity demo. Start with a gap list against the code.
 
 ## State (update on each move)
+- **Chat 4, 2026-11-27 13:15 (this handoff).** Last release 0.6.493, installed on the PC. Claude usage back to 100% (Friday).
+  - Built 24–26.11 (0.6.468–0.6.493):
+    - Free cloud providers (/api/free-cloud): Cloudflare (Account ID set), Zhipu (global), NVIDIA (works), OpenRouter. Mistral disabled (asks to buy credits — never buy).
+    - GhostCLI relay (ghostcli preset, RELAY_PROVIDERS): only safe tasks (safeForRelay + privacy scan); a 15-min health probe; "👻 GhostCLI" in "Who does it" (RELAY_PIN `ghostcli/*` = OpenCode pinned to the relay). Third-party models may not change security files (checked on real files). **27.11: GhostCLI fixed on their side — Opus/Sonnet/GLM/DeepSeek all answer; a-20261122-02 finished on ghostcli/claude-opus-5-5 (review its ocgo/* branch).** Roee's trial month: he cancelled auto-renew; he wants it loaded with heavy, non-sensitive work while it works.
+    - Task inbox: readable steps + progress bar (task page, list, hub); filters Open (default)/All/Waiting/Running/Ask/Ended + provider; auto-retry ×2 back to the queue; "why it did not succeed" line kept on the box (lastFail); auto routing (research→gemini, ≤15 files→opencode, L/no coder→antigravity, small→local, risky/vague→opus).
+    - Antigravity: quota read locally from its own process (antigravity-quota.ts, any Antigravity process with a CSRF token; Windows has only ide.exe now) → per-model line on the tasks page + hub chip, real reset times, families reopened; its "⚠ Individual quota reached … Resets in" answer = quota (deferred), not failure; model chip on each Antigravity row opens the model list (Roee 26.11); a picked model is tried even if a family was only guessed out; model list kept as a union.
+    - OpenCode scratch files (*.log, prev_*, *.bak…) dropped from commits; tool_call_id fix; /api/models deadline; lazy pages (first bundle −26%).
+    - Research 26.11 (r-20261126-02…09) → tasks in WORK_LIST ("Research results 26.11"): stay on Electron + llama.cpp, napi-rs only where measured slow; updates in parts (signed core/ui bundles); runs out of the chat list (one Run per task, "continue as chat"); engine per platform.
+  - Open / next:
+    1. Review + merge a-20261122-02's branch (done on GhostCLI Opus); rerun a-20261122-03 (failed on OpenCode mimo — give it GhostCLI or Antigravity Opus).
+    2. Load GhostCLI with heavy safe tasks (Roee wants its "unlimited" tested); watch the relay report.
+    3. Design doc (cloud doc 1MJnsdiaPC1WWwNt75DS1G) owes boards: filters, fail line, Antigravity model button, quota line, GhostCLI in Who does it, progress bar/steps, hub chips. A Sonnet helper started 26.11 and stopped on the usage limit (nothing published) — redo.
+    4. Inbox runs flooding the chat list → build per r-20261126-06 (runs inside the task, "continue as chat").
+    5. Travel skill idea (WORK_LIST "Idea: travel skill"): research first (Gemini), then design boards.
+    6. Hub: Antigravity quota already on its chip; Kaggle batch worker follow-ups; updates in parts.
+  - Antigravity quotas: a 5-hour window + a weekly one per group (Gemini / Claude+GPT); KesherAI shows them. Gemini 4 Carbon/Argon/Neon show 0% (not on his plan).
+  - PC API cheat sheet (built-in browser at http://127.0.0.1:7420): /api/task-inbox (state, tasks, agQuota, agQuotaWhy, relay), /tasks/:id (+/queue, /run, /skip, /reassign {to}, PUT /model {model}), /api/free-cloud, /api/chat (SSE), /api/logs/search?source=kesher-main&q=…, /api/version, /api/guard. Results of runs: branch kesher-inbox results/<id>.md.
+  - Release recipe: in a clean clone: pull --rebase → lint → build → hub build:page → full tests (NODE_OPTIONS=--max-old-space-size=4096) → bump all package.json → commit as Roee Tal <Deadchu-R@users.noreply.github.com> → push main → `git push -qf origin HEAD:release` → send_later ~20 min to check `gh run list -b release` and /api/version → updates 2/3, 3/3.
 - Chat 3, 2026-11-23 ~13:10: last release 0.6.463 (building; the PC is on 0.6.462). Done today:
   - Unreal 4.27 bridge works in ForMigration; "open" status fixed with one path-compare helper (project-path.ts).
   - OpenCode Go: per-model 429 cooldown + fallback; free models (beam-free, iceman-contributor-free) first, outside dailyCap (setting useFree).
