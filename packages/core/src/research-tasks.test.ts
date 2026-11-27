@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { goalFor, nextForExecutor, parseResearchTasks, sameTask } from "./research-tasks.js";
+import {
+  dedupeResearchTasks,
+  goalFor,
+  nextForExecutor,
+  normTitle,
+  parseResearchTasks,
+  routeResearchTask,
+  sameTask,
+  splitByCap,
+} from "./research-tasks.js";
 
 const SYNTH = `# Synthesis
 
@@ -82,4 +91,61 @@ test("goalFor: names the report and the rules", () => {
   const g = goalFor(parseResearchTasks(SYNTH, "S.md")[2]!);
   assert.match(g, /docs\/research\/S\.md \(GE-6\)/);
   assert.match(g, /already exists/);
+});
+
+test("normTitle sorts words and drops fillers", () => {
+  // normTitle lowercases, strips non-alphanumerics, removes short/filler words, then sorts alphabetically.
+  assert.equal(normTitle("Overlay State (pure model)"), "model overlay pure state");
+  assert.equal(normTitle("Add the Unreal level-cache"), "cache level unreal");
+});
+
+test("dedupeResearchTasks drops done and matching titles", () => {
+  const tasks = parseResearchTasks(SYNTH, "S.md");
+  // Use normalized forms that match normTitle's sorted-word output.
+  const existing = ["model overlay pure state"];
+  const workList = ["builds cloud unreal"];
+  const kept = dedupeResearchTasks(tasks, existing, workList);
+  // CD-1 matches existing, GE-9 is DONE, X-1 matches workList → all removed
+  assert.ok(!kept.some((t) => t.id === "CD-1"));
+  assert.ok(!kept.some((t) => t.id === "GE-9"));
+  assert.ok(!kept.some((t) => t.id === "X-1"));
+  // CD-2 and GE-6 remain
+  assert.ok(kept.some((t) => t.id === "CD-2"));
+  assert.ok(kept.some((t) => t.id === "GE-6"));
+});
+
+test("routeResearchTask maps size/who to executor and status", () => {
+  const s = routeResearchTask({ id: "T-1", title: "t", body: "", key: "X#1", files: [], size: "S", who: "local", status: "new" });
+  assert.equal(s.executor, "local");
+  assert.equal(s.status, "waiting");
+  const m = routeResearchTask({ id: "T-2", title: "t", body: "", key: "X#2", files: [], size: "M", who: "antigravity", status: "new" });
+  assert.equal(m.executor, "antigravity");
+  assert.equal(m.model, "opus");
+  assert.equal(m.status, "waiting");
+  const l = routeResearchTask({ id: "T-3", title: "t", body: "", key: "X#3", files: [], size: "L", who: "lead", status: "new" });
+  assert.equal(l.executor, "claude");
+  assert.equal(l.status, "needs-lead");
+});
+
+test("splitByCap respects priority order and the 15 runnable cap", () => {
+ const make = (id: string, key: string, size: "S" | "M" | "L", who: "local" | "antigravity" | "lead"): import("./research-tasks.js").ResearchTask => ({
+ id, title: id, body: "", key, files: [], size, who, status: "new",
+ });
+ const tasks = [
+ make("X-1", "X#1", "S", "local"),
+ make("CD-1", "CD#1", "S", "local"),
+ make("GE-1", "GE#1", "M", "antigravity"),
+ make("CH-1", "CH#1", "S", "local"),
+ make("LEAD-1", "CD#2", "L", "lead"),
+ ];
+ const { queue, backlog } = splitByCap(tasks, 2);
+ // Lead task always in queue, not counted against cap
+ assert.ok(queue.some((t) => t.id === "LEAD-1"));
+ // Priority follows SECTION_ORDER (CD, CH, GE, X); with cap=2 runnable, CD-1 and CH-1 are first
+ const runnableQueue = queue.filter((t) => t.who !== "lead" && t.size !== "L");
+ assert.equal(runnableQueue.length, 2);
+ assert.equal(runnableQueue[0]!.id, "CD-1");
+ assert.equal(runnableQueue[1]!.id, "CH-1");
+ assert.ok(backlog.some((t) => t.id === "GE-1"));
+ assert.ok(backlog.some((t) => t.id === "X-1"));
 });

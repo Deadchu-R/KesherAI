@@ -452,7 +452,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         <button type="button" className="link" onClick={open} dir="auto">{t.label?.name || t.title}</button>
         {t.label?.name && <div className="small muted alab-sub" dir="auto">{t.title}</div>}
         {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
-        <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}</div>
+        <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}{t.source ? ` · ${L("מקור", "Source")}: ${t.source.replace(/^docs\/research\//, "").replace(/\.md$/, "")}` : ""}</div>
         {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
         {t.status === "running" && !!t.steps && (
           <div className="tinbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={estimateTaskSteps(t)} aria-valuenow={Math.min(t.steps, estimateTaskSteps(t))}>

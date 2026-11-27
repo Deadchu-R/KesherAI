@@ -154,6 +154,84 @@ export function nextForExecutor(backlog: readonly ResearchTask[], who: "local" |
 }
 
 /**
+ * Dedupes parsed research tasks against existing inbox task titles and WORK_LIST lines.
+ * Returns only NEW/PARTIAL tasks whose title does not match any known title (using {@link sameTask}).
+ *
+ * @param tasks - Parsed tasks from one or more reports.
+ * @param existingTitles - Titles already in the inbox (from tasks/*.md on kesher-inbox).
+ * @param workListLines - Lines from docs/WORK_LIST.md (used as additional known titles).
+ */
+export function dedupeResearchTasks(
+ tasks: ResearchTask[],
+ existingTitles: string[],
+ workListLines: string[],
+): ResearchTask[] {
+ const known = [...existingTitles, ...workListLines].filter(Boolean);
+ return tasks.filter((t) => {
+ if (t.status === "done") return false;
+ return !known.some((k) => sameTask(t.title, k));
+ });
+}
+
+/** Priority rank by section prefix (lower = higher priority). Matches {@link SECTION_ORDER}. */
+function sectionRank(key: string): number {
+ const sec = key.split("#")[0] ?? "";
+ if (/^CD$/i.test(sec)) return 0;
+ if (/^CH$/i.test(sec)) return 1;
+ if (/^GE$/i.test(sec)) return 2;
+ return 3; // X and others
+}
+
+/**
+ * Splits deduped tasks into a runnable queue (at most `cap`) and a backlog, ordered by section priority
+ * (CD → CH → GE → X) then report order. L-size / lead tasks go to needs-lead and do not count toward the cap.
+ *
+ * @param tasks - Deduped tasks.
+ * @param cap - Max runnable tasks to return (default 15).
+ */
+export function splitByCap(
+ tasks: ResearchTask[],
+ cap = 15,
+): { queue: ResearchTask[]; backlog: ResearchTask[] } {
+ const sorted = tasks
+ .map((t, i) => ({ t, i }))
+ .sort((a, b) => sectionRank(a.t.key) - sectionRank(b.t.key) || a.i - b.i)
+ .map((x) => x.t);
+ const queue: ResearchTask[] = [];
+ const backlog: ResearchTask[] = [];
+ let runnable = 0;
+ for (const t of sorted) {
+ if (t.who === "lead" || t.size === "L") {
+ queue.push(t); // needs-lead shown immediately, not counted against cap
+ continue;
+ }
+ if (runnable < cap) {
+ queue.push(t);
+ runnable++;
+ } else {
+ backlog.push(t);
+ }
+ }
+ return { queue, backlog };
+}
+
+/**
+ * Routes a research task to an inbox executor and status per the autonomy-loop rules:
+ * S → local, M → antigravity (opus), L → needs-lead.
+ *
+ * @param t - The research task.
+ */
+export function routeResearchTask(t: ResearchTask): {
+ executor: "local" | "antigravity" | "claude";
+ model?: string;
+ status: "waiting" | "needs-lead";
+} {
+ if (t.who === "lead" || t.size === "L") return { executor: "claude", status: "needs-lead" };
+ if (t.who === "antigravity" || t.size === "M") return { executor: "antigravity", model: "opus", status: "waiting" };
+ return { executor: "local", status: "waiting" };
+}
+
+/**
  * The inbox goal text for a research task: what the report says, where it came from, and the rules for the agent.
  *
  * @param t - The task.

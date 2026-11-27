@@ -295,8 +295,9 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     ...(sec("acceptance") ? { acceptance: sec("acceptance")! } : {}),
     ...(sec("out of scope") ? { outOfScope: sec("out of scope")! } : {}),
     ...(sec("report") ? { report: sec("report")! } : {}),
-  };
-  return { spec };
+          ...(str("source", 200) ? { source: str("source", 200) } : {}),
+        };
+        return { spec };
 }
 
 /**
@@ -324,7 +325,8 @@ export function taskFileText(s: InboxTaskSpec): string {
     `max_files: ${s.maxFiles}`,
     ...(s.model ? [`model: ${one(s.model)}`] : []),
     ...(s.localOk ? ["local_ok: true"] : []),
-    "---",
+          ...(s.source ? [`source: ${one(s.source)}`] : []),
+          "---",
     "",
     "## Goal",
     s.goal,

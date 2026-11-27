@@ -403,8 +403,10 @@ export interface InboxTaskSpec {
   readFirst?: string;
   acceptance?: string;
   outOfScope?: string;
-  report?: string;
-}
+      report?: string;
+      /** The research report this task came from (e.g. `docs/research/SYNTHESIS-2026-11-22.md`). */
+      source?: string;
+    }
 
 /** A second model's review of a finished task's diff against its goal and allowed paths. */
 export interface InboxReview {
