@@ -1,5 +1,6 @@
+import { EXECUTOR_NAMES } from "./quota-failover.js";
 /** Limits of the snapshot (the cleaner enforces them on what arrives). */
-export const QUOTA_LIMITS = { items: 24, bars: 8, nameChars: 60, labelChars: 40 };
+export const QUOTA_LIMITS = { items: 24, bars: 8, nameChars: 60, labelChars: 40, moves: 6 };
 /** A share under this counts as low. */
 const LOW = 0.2;
 const DAY_MS = 86_400_000;
@@ -158,6 +159,15 @@ export function buildProviderQuotas(input) {
         const bar = { label: "day", used: p.day.used, ...(p.day.limit ? { limit: p.day.limit } : {}), ...(until ? { resetAt: until } : p.day.limit && p.day.used >= p.day.limit ? { resetAt: nextUtcDay(now) } : {}) };
         out.push({ id: `cloud-${p.id}`.slice(0, 64), kind: "free", group: "chat", name: (p.name ?? p.id).slice(0, QUOTA_LIMITS.nameChars), state: !p.enabled || p.state === "off" ? "off" : until ? "out" : p.day.limit ? stateOf([bar]) : "ok", bars: [bar], ...(until ? { until } : {}), readAt: now });
     }
+    // Where the work of each task agent went while it was out (the row ids are the executors' ids).
+    for (const row of out) {
+        const to = new Map();
+        for (const m of inbox.moves ?? [])
+            if (m.from === row.id && row.group === "tasks")
+                to.set(EXECUTOR_NAMES[m.to], (to.get(EXECUTOR_NAMES[m.to]) ?? 0) + 1);
+        if (to.size)
+            row.movedTo = [...to].map(([name, tasks]) => ({ name, tasks })).slice(0, QUOTA_LIMITS.moves);
+    }
     return out.slice(0, QUOTA_LIMITS.items);
 }
 const KINDS = ["antigravity", "ghostcli", "opencode", "gemini", "free", "local", "claude"];
@@ -177,6 +187,18 @@ function cleanCounts(x) {
     if (runs === undefined)
         return undefined;
     return { runs, ...opt("done", n0(c.done)), ...opt("partial", n0(c.partial)), ...opt("failed", n0(c.failed)), ...opt("rateLimited", n0(c.rateLimited)) };
+}
+/** "Where the work went" from untrusted input: one-line names and whole counts, at most {@link QUOTA_LIMITS}.moves. */
+function cleanMoves(x) {
+    if (!Array.isArray(x))
+        return undefined;
+    const out = x.slice(0, QUOTA_LIMITS.moves).flatMap((m) => {
+        const r = m && typeof m === "object" ? m : {};
+        const name = line(r.name, QUOTA_LIMITS.nameChars);
+        const tasks = n0(r.tasks);
+        return name && tasks ? [{ name, tasks }] : [];
+    });
+    return out.length ? out : undefined;
 }
 function cleanBar(x) {
     if (!x || typeof x !== "object")
@@ -229,6 +251,7 @@ export function cleanProviderQuotas(x) {
             ...opt("model", model || undefined),
             ...opt("readAt", n0(q.readAt) || undefined),
             ...opt("offWhy", OFF_WHY.includes(q.offWhy) ? q.offWhy : undefined),
+            ...opt("movedTo", cleanMoves(q.movedTo)),
         });
     }
     return out;

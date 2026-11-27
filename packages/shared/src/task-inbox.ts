@@ -566,6 +566,24 @@ export interface InboxTaskView extends InboxTaskSpec {
    * one run, it is used up by the answer and expires after 30 minutes; a "yes" is never remembered.
    */
   runAsk?: InboxRunAsk;
+  /**
+   * The task was moved because its executor ran out of quota (quota-failover.ts): where from, when, and when that
+   * executor is expected back (the row shows "↪ moved from X (quota)").
+   */
+  movedFrom?: InboxMove;
+  /** When the PC last asked whether to move this hand-picked task (once per quota stop). */
+  quotaAskAt?: number;
+}
+
+/** A quota move of a task. */
+export interface InboxMove {
+  from: Exclude<InboxExecutor, "auto">;
+  /** When it moved (ms). */
+  at: number;
+  /** When the first executor is expected back (ms), when known. */
+  back?: number;
+  /** Executors it was moved away from before `from` (it never moves back to any of them: no bouncing). */
+  via?: Array<Exclude<InboxExecutor, "auto">>;
 }
 
 /** A waiting "Run this task in Antigravity?" question. */
@@ -601,6 +619,8 @@ export interface InboxSettings {
   ghostcli?: GhostcliSettings;
   /** Claude Code on this PC (absent: the defaults, CLAUDE_DEFAULTS). */
   claude?: ClaudeSettings;
+  /** When a quota runs out: move waiting tasks to an executor with quota left (absent: FAILOVER_DEFAULTS). */
+  failover?: Partial<import("./quota-failover.js").FailoverSettings>;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
   loop?: boolean;
   /**

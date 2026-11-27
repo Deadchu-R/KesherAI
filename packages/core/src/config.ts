@@ -326,6 +326,15 @@ export const KesherConfigSchema = z.object({
           model: z.string().max(80).default(""),
         })
         .prefault({}),
+      // Quota failover (quota-failover.ts): waiting tasks move to an executor with quota left; the two fallback orders.
+      failover: z
+        .object({
+          enabled: z.boolean().default(true),
+          moveManual: z.boolean().default(true),
+          code: z.array(z.enum(["ghostcli", "opencode", "antigravity", "local"])).max(4).optional(),
+          research: z.array(z.enum(["gemini", "ghostcli", "antigravity"])).max(3).optional(),
+        })
+        .optional(),
       maxMinutes: z.number().int().min(1).max(480).default(120),
       stallMinutes: z.number().int().min(1).max(120).default(10),
       maxRequests: z.number().int().min(1).max(1000).default(80),

@@ -29,6 +29,21 @@
        "ghostcli/gpt-5-codex"
       ],
       "takeHeavy": true
+     },
+     "failover": {
+      "enabled": true,
+      "moveManual": true,
+      "code": [
+       "ghostcli",
+       "opencode",
+       "antigravity",
+       "local"
+      ],
+      "research": [
+       "gemini",
+       "ghostcli",
+       "antigravity"
+      ]
      }
     },
     "today": {
@@ -258,6 +273,69 @@
       "steps": 4,
       "startedAt": {
        "$agoMs": "3m"
+      }
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0508",
+      "title": "להוסיף מיון לפי תאריך ברשימת ההורדות",
+      "goal": "להוסיף מיון לפי תאריך ברשימת ההורדות",
+      "status": "running",
+      "runBy": "ghostcli",
+      "model": "ghostcli/*",
+      "modelUsed": "GhostCLI · claude-opus-5-5",
+      "branch": "gcli/t-0508",
+      "steps": 3,
+      "startedAt": {
+       "$agoMs": "2m"
+      },
+      "movedFrom": {
+       "from": "antigravity",
+       "at": {
+        "$agoMs": "3m"
+       },
+       "back": {
+        "$inMs": "8h"
+       }
+      }
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0509",
+      "title": "מחקר: איך מתחרים מציגים תור משימות",
+      "goal": "מחקר: איך מתחרים מציגים תור משימות",
+      "kind": "research",
+      "status": "waiting",
+      "runBy": "ghostcli",
+      "branch": "gcli/t-0509",
+      "movedFrom": {
+       "from": "gemini",
+       "at": {
+        "$agoMs": "1m"
+       },
+       "back": {
+        "$inMs": "40m"
+       }
       }
      }
     ],
@@ -562,6 +640,42 @@
     },
     {
      "top": ".tinbox-row:has-text('t-0507')"
+    }
+   ]
+  },
+  {
+   "id": "InboxQuotaMoved",
+   "title": "תיבת משימות: משימה שעברה כשנגמרה המכסה — \"↪ הועבר מ-Antigravity (מכסה) · חוזר ב-HH:MM\", ומחקר שעבר מ-Gemini ל-GhostCLI",
+   "titleEn": "Task inbox: tasks moved when a quota ran out — \"↪ moved from Antigravity (quota) · back at HH:MM\", and research moved from Gemini to GhostCLI",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has-text('t-0508')"
+    },
+    {
+     "top": ".tinbox-row:has-text('t-0508')"
+    }
+   ]
+  },
+  {
+   "id": "SettingsQuotaFallback",
+   "title": "הגדרות › תיבת משימות › כשנגמרת מכסה: מתג, \"להעביר גם משימות שבחרתי\", סדר לקוד ולמחקר עם ▲▼, וכללי הבטיחות",
+   "titleEn": "Settings › Task inbox › When a quota runs out: switch, \"move my tasks too\", code and research order with ▲▼, and the safety rules",
+   "route": "#/settings/inbox",
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-failover"
+    },
+    {
+     "top": ".tinbox-failover"
     }
    ]
   }

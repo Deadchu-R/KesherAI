@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CLAUDE_DEFAULTS, GHOSTCLI_DEFAULTS, OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
+import { CLAUDE_DEFAULTS, cleanFailoverOrder, FAILOVER_DEFAULTS, type FailoverTarget, GHOSTCLI_DEFAULTS, OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
 import { ClaudeQuotaLine, claudeWhen } from "../ClaudeCodeCard";
 import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -196,11 +196,72 @@ function ClaudeSettingsCard({ s, put }: { s: InboxState; put: (body: Record<stri
   );
 }
 
+/** Names of the fallback executors, as the chips of the Tasks page show them. */
+const TARGET_NAME: Record<FailoverTarget, () => string> = {
+  ghostcli: () => "👻 GhostCLI",
+  opencode: () => L("◈ OpenCode Go (חינמיים קודם)", "◈ OpenCode Go (free models first)"),
+  antigravity: () => L("✦ Antigravity (ממתין להפעלה שלך)", "✦ Antigravity (waits for your Run)"),
+  local: () => L("◆ מודל מקומי (משימות S)", "◆ Local model (S tasks)"),
+  gemini: () => L("✧ Gemini (מפתח חינמי)", "✧ Gemini (free key)"),
+};
+
+/**
+ * Settings → Task inbox → When a quota runs out (quota-failover.ts): move waiting tasks to an executor with quota left
+ * (on by default), also the ones picked by hand (on by default; off: the PC asks), and the fallback order per kind with
+ * up/down buttons (big enough to tap on a 390 px phone; works from the phone too). Safety is fixed and shown: nothing
+ * sensitive goes to a relay or a service that may train, and nothing that costs extra.
+ *
+ * @param p - The inbox's state and the settings writer.
+ */
+function FailoverSettingsCard({ s, put }: { s: InboxState; put: (body: Record<string, unknown>) => void }) {
+  const f = { ...FAILOVER_DEFAULTS, ...s.settings.failover };
+  const set = (v: Record<string, unknown>) => put({ failover: v });
+  const order = (kind: "code" | "research") => {
+    const list = cleanFailoverOrder(kind, f[kind]);
+    const move = (i: number, by: -1 | 1) => {
+      const next = [...list];
+      [next[i], next[i + by]] = [next[i + by]!, next[i]!];
+      set({ [kind]: next });
+    };
+    return (
+      <div className="stack">
+        <span className="small muted">{kind === "code" ? L("סדר למשימות קוד", "Order for code tasks") : L("סדר למשימות מחקר", "Order for research tasks")}</span>
+        <ol className="small stack tinbox-fo-order" aria-label={kind === "code" ? L("סדר למשימות קוד", "Order for code tasks") : L("סדר למשימות מחקר", "Order for research tasks")}>
+          {list.map((x, i) => (
+            <li key={x} className="row tinbox-fo-item">
+              <span className="mono">{i + 1}.</span>
+              <span className="grow" dir="auto">{TARGET_NAME[x]()}</span>
+              <button type="button" className="chip-text" disabled={!f.enabled || i === 0} onClick={() => move(i, -1)} aria-label={L(`העבר למעלה: ${x}`, `Move up: ${x}`)}>▲</button>
+              <button type="button" className="chip-text" disabled={!f.enabled || i === list.length - 1} onClick={() => move(i, 1)} aria-label={L(`העבר למטה: ${x}`, `Move down: ${x}`)}>▼</button>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  };
+  return (
+    <div className="stack tinbox-failover">
+      <div className="row">
+        <h3 className="grow">↪ {L("כשנגמרת מכסה", "When a quota runs out")}</h3>
+        <label className="row small"><input type="checkbox" role="switch" checked={f.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> {L("פעיל", "On")}</label>
+      </div>
+      <p className="small muted">{L("משימה שממתינה למבצע שנגמרה לו המכסה (נגמרה, הגיעה לסף, הגבלת קצב, צינון) עוברת למבצע הבא בסדר שיש לו מכסה עכשיו, ורצה שם לפי הכללים הרגילים. משימה שכבר רצה לא זזה. כשהמכסה חוזרת, משימות חדשות הולכות שוב למבצע הראשון.", "A task waiting on an executor that ran out of quota (used up, at its cap, rate-limited, cooling down) moves to the next executor in the order that has quota now, and runs there by the usual rules. A running task never moves. When the quota is back, new tasks go to the first executor again.")}</p>
+      <label className="row wrap small">
+        <input type="checkbox" role="switch" checked={f.moveManual} disabled={!f.enabled} onChange={(e) => set({ moveManual: e.target.checked })} />
+        <span className="grow">{L("להעביר גם משימות שבחרתי להן מבצע (כבוי: המחשב שואל)", "Move my tasks too (ones I gave an executor by hand; off: the PC asks)")}</span>
+      </label>
+      {order("code")}
+      {order("research")}
+      <p className="small muted">🔒 {L("תמיד: משימה עם מידע רגיש לא עוברת לריליי או לשירות שעשוי לאמן; משימת אבטחה רק ל-Antigravity; משימת L לא עוברת ל-OpenCode Go; שום מעבר לא עולה כסף מעבר למה שכבר משולם.", "Always: a task with sensitive content never moves to a relay or a service that may train; a security task only to Antigravity; an L task never to OpenCode Go; no move ever costs more than you already pay.")}</p>
+    </div>
+  );
+}
+
 /**
  * Settings → Task inbox (packages/core/src/inbox-runner.ts): on/off (the kill switch also stops fetching), the project
  * and its inbox branch, how often to look, the daily limit for Antigravity (default 10) and the minutes per task, the
  * model inside Antigravity (empty: Gemini's default), who does each kind of task, what KesherAI may push, the paths and
- * commands, the secrets scan, and "not while the PC is busy". Antigravity runs only on the user's Run: the automatic
+ * commands, the secrets scan, "not while the PC is busy" and the quota failover. Antigravity runs only on the user's Run: the automatic
  * mode stays locked. Works from the phone too, except choosing the project folder.
  */
 export function TaskInboxSection() {
@@ -272,6 +333,8 @@ export function TaskInboxSection() {
       <GhostcliSettings s={s} put={put} />
 
       <ClaudeSettingsCard s={s} put={put} />
+
+      <FailoverSettingsCard s={s} put={put} />
 
       <h3>{L("מבצע לכל סוג משימה", "Who does each kind of task")}</h3>
       <div className="small stack">

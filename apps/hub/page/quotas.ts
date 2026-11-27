@@ -2,7 +2,7 @@
  * "Quotas" (מכסות) page of the hub (`#quotas`, the design doc's HubQuotas board): what is left of every provider each
  * PC's agents use, as the PC reports it (a sealed `quotas` snapshot: names, numbers and times only; see
  * packages/shared/src/provider-quotas.ts). One row per provider with the Tasks tab's icon, a bar per window or model
- * group, "back at HH:MM" when it is used up, and how old the reading is. Anything the PC does not know is "unknown".
+ * group, "back at HH:MM" when it is used up, where its waiting work went (the quota failover), and how old the reading is. Anything the PC does not know is "unknown".
  * Reached from the Tasks and Agents tabs (the "📊 Quotas" button); nothing is stored here.
  */
 import { shareLeft, type ProviderQuota, type QuotaBar, type QuotaKind, type QuotaState } from "../../../packages/shared/src/provider-quotas.js";
@@ -102,6 +102,7 @@ function row(q: ProviderQuota, now: number): HTMLElement {
     q.offWhy ? h("div", { class: "xs mut" }, L(...OFF_WHY[q.offWhy])) : null,
     q.bars.map((b) => bar(b, now)),
     counts(q),
+    q.movedTo?.length ? h("div", { class: "xs q-moved", dir: "auto" }, L("↪ העבודה עברה ל: ", "↪ Its work went to: "), q.movedTo.map((m) => L(`${m.name} (${m.tasks} משימות)`, `${m.name} (${m.tasks} ${m.tasks === 1 ? "task" : "tasks"})`)).join(" · ")) : null,
     q.lastRateLimitAt ? h("div", { class: "xs mut" }, L(`הגבלת קצב אחרונה ${ago(q.lastRateLimitAt, now)}`, `Last rate limit ${ago(q.lastRateLimitAt, now)}`)) : null,
     !q.bars.length && !q.offWhy && q.kind !== "local" && q.kind !== "ghostcli" ? h("div", { class: "xs mut" }, q.state === "unknown" ? L("המחשב עוד לא קרא את המכסה", "The PC has not read its quota yet") : L("אין מכסה מדווחת", "No quota reported")) : null,
     h("div", { class: "xs mut q-age" }, q.readAt ? L(`נקרא ${ago(q.readAt, now)}`, `Read ${ago(q.readAt, now)}`) : L("לא נקרא", "Not read")),

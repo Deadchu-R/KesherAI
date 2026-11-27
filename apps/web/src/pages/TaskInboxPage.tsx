@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView, type AntigravityQuota } from "@kesher/shared";
+import { BUSY_RUN_TEXT, EXECUTOR_NAMES, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView, type AntigravityQuota } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -112,6 +112,25 @@ function executorChip(runBy: InboxTaskView["runBy"], kind?: InboxTaskView["kind"
   if (runBy === "claude") return { text: "✳ Claude Code", cls: "claude" };
   if (runBy === "local") return { text: L("◆ מודל מקומי", "◆ Local model"), cls: "local" };
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
+}
+
+/** The executors' short names in "moved from X". */
+const exName = (ex: InboxTaskView["runBy"]): string => (ex === "local" ? L("המודל המקומי", "the local model") : ex === "opus" ? L("סוכן Opus", "the Opus agent") : EXECUTOR_NAMES[ex]);
+/** "HH:MM" in the user's own time (24 h). */
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * The quota failover's line for a task (quota-failover.ts): "↪ moved from Antigravity (quota) · back at 18:00", or,
+ * for a hand-picked task while "move my tasks too" is off, the PC's ask to move it.
+ */
+function MovedLine({ t }: { t: InboxTaskView }) {
+  const m = t.movedFrom;
+  if (m) {
+    const back = m.back && m.back > Date.now() ? L(` · חוזר ב-${hhmm(m.back)}`, ` · back at ${hhmm(m.back)}`) : "";
+    return <div className="small tinbox-moved" dir="auto" title={L(`הועבר ב-${hhmm(m.at)}`, `Moved at ${hhmm(m.at)}`)}>↪ {L(`הועבר מ-${exName(m.from)} (מכסה)`, `moved from ${exName(m.from)} (quota)`)}{back}</div>;
+  }
+  if (t.quotaAskAt && (t.status === "waiting" || t.status === "deferred-quota")) return <div className="small warn" dir="auto">↪ {L(`ל-${exName(t.runBy)} נגמרה המכסה: להעביר? (מי מבצע)`, `${exName(t.runBy)} is out of quota: move it? (Who does it)`)}</div>;
+  return null;
 }
 
 const fromName = (f: InboxTaskView["from"]) => ({ claude: "Claude", roee: L("רועי", "Roee"), "self-work": L("עבודה עצמית", "self-work"), hub: L("ענן Kesher", "Kesher Cloud"), device: L("מכשיר אחר", "another device") })[f];
@@ -457,6 +476,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.label?.name && <div className="small muted alab-sub" dir="auto">{t.title}</div>}
         {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}{t.source ? ` · ${L("מקור", "Source")}: ${t.source.replace(/^docs\/research\//, "").replace(/\.md$/, "")}` : ""}</div>
+        <MovedLine t={t} />
         {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
         {t.status === "running" && !!t.steps && (
           <div className="tinbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={estimateTaskSteps(t)} aria-valuenow={Math.min(t.steps, estimateTaskSteps(t))}>
@@ -609,6 +629,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} {...modelProp(t, state)} />}
       </div>
+      <MovedLine t={t} />
       {t.modelFallback && <p className="small warn" dir="auto">↘ {L("המודל שנבחר לא היה זמין (מכסה), עבר אוטומטית:", "The chosen model could not run (quota), switched by itself:")} <span dir="ltr">{t.modelFallback}</span></p>}
       <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
       {editing && (

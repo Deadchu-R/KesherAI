@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { RELAY_PIN, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -376,7 +376,9 @@ export class TaskInbox {
     const opencode = { ...OPENCODE_DEFAULTS, ...((given.opencode as Partial<OpencodeSettings> | undefined) ?? {}) };
     const claude = { ...CLAUDE_DEFAULTS, ...((given.claude as Partial<ClaudeSettings> | undefined) ?? {}) };
     const ghostcli = { ...GHOSTCLI_DEFAULTS, ...((given.ghostcli as Partial<GhostcliSettings> | undefined) ?? {}) };
-    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode, ghostcli, claude } as InboxSettings;
+    const fo = { ...FAILOVER_DEFAULTS, ...((given.failover as Partial<FailoverSettings> | undefined) ?? {}) };
+    const failover: FailoverSettings = { ...fo, code: cleanFailoverOrder("code", fo.code), research: cleanFailoverOrder("research", fo.research) };
+    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode, ghostcli, claude, failover } as InboxSettings;
   }
 
   /** The Claude Code settings, with the defaults filled in. */
@@ -633,6 +635,141 @@ export class TaskInbox {
     // marked big, and only when nothing private would leave (Roee, 27.11).
     if (spec.executor === "auto" && runBy === "gemini" && ((this.saved.geminiUntil ?? 0) > this.now() || !this.d.research?.ready() || taskSize(spec) === "L") && this.ghostcliResearchOk(spec)) return "ghostcli";
     return runBy;
+  }
+
+  /** Whether every GhostCLI model in its order (the saved one, else the last list read) cools down after a 429. */
+  private ghostcliAllCooling(): number | undefined {
+    const cool = this.ghostcliCooldowns();
+    const order = this.gc.models.length ? this.gc.models : (this.modelsCache.get("ghostcli")?.list ?? []).filter((m) => relayProviderOf(m));
+    if (!order.length || !order.every((m) => cool[m])) return undefined;
+    return Math.min(...order.map((m) => cool[m]!));
+  }
+
+  /**
+   * What each executor can do now, for {@link pickFailover}. The task's own executor counts as out only for a quota
+   * reason (used up, capped, rate-limited, cooling down), never for being off or unconnected; any other executor must be
+   * fully ready to be a target. Antigravity is a target only while its last reading shows quota left.
+   *
+   * @param t - The task the rooms are for.
+   */
+  private failoverRooms(t: InboxTaskView): Partial<Record<InboxTaskView["runBy"], ExecutorRoom>> {
+    const now = this.now();
+    const midnight = nextUtcMidnight(now);
+    const mine = (ex: InboxTaskView["runBy"]) => t.runBy === ex;
+    // Antigravity: every model family spent, its plan's stop, or today's cap.
+    const agFamilies = (["opus", "sonnet", "flash"] as ModelFamily[]).map((f) => this.saved.familyUntil?.[f] ?? 0);
+    const agOut = this.antigravityOut();
+    const agUntil = (this.saved.quota?.until ?? 0) > now ? this.saved.quota!.until : agFamilies.every((u) => u > now) ? Math.min(...agFamilies) : this.today().used >= this.s.dailyCap ? midnight : undefined;
+    // OpenCode Go: its plan's limit (every model cooling) or today's cap with no free model open; off / no key is not a quota.
+    const ocLimit = this.opencodeFamilyUntil();
+    const ocCapped = this.ocToday().used >= this.oc.dailyCap && !this.opencodeFreeOpen();
+    const ocReady = this.oc.enabled && !!this.d.coder?.ready();
+    // GhostCLI: today's cap or every model cooling down; it is a target only while its last check answered.
+    const gcCool = this.ghostcliAllCooling();
+    const gcCapped = this.gcToday().used >= this.gc.dailyCap;
+    const gcReady = this.gc.enabled && !!this.d.coder?.free?.ghostcli?.ready() && this.saved.relayHealth?.ok !== false && (t.kind !== "research" || !!this.d.research?.viaModel);
+    // Gemini (research): the free key's quota stop.
+    const gemUntil = (this.saved.geminiUntil ?? 0) > now ? this.saved.geminiUntil : undefined;
+    const claude = this.claudeBlocked();
+    const out = (until: number | undefined): ExecutorRoom => ({ open: false, ...(until ? { until } : {}) });
+    return {
+      antigravity: agOut ? { ...out(agUntil), needsTap: true } : { open: mine("antigravity") || this.agQuotaLeft(), needsTap: true },
+      opencode: ocLimit || ocCapped ? out(ocLimit ?? midnight) : { open: mine("opencode") || ocReady },
+      ghostcli: gcCool || gcCapped ? { ...out(gcCool ?? midnight), relay: true } : { open: mine("ghostcli") || gcReady, relay: true },
+      gemini: gemUntil ? { ...out(gemUntil), training: true } : { open: mine("gemini") || !!this.d.research?.ready(), training: true },
+      // The local model has no quota; it takes tasks through the board (self-work).
+      local: { open: mine("local") || !!this.d.board },
+      // Claude Code is never a target (not in a fallback order); only whether a task on it is stopped by its limits.
+      claude: claude && claude.code === 429 && claude.until ? out(claude.until) : { open: true },
+      opus: { open: true },
+    };
+  }
+
+  /** The task as {@link pickFailover} sees it: its size, and the relay, training and security checks on what would be sent. */
+  private failoverTask(t: InboxTaskView): FailoverTask {
+    const size = taskSize(t);
+    const safe = safeForRelay(t);
+    const sent = t.kind === "research" ? researchQuestion(t) : agentPrompt(t, t.branch);
+    const clean = !scanDiff(sent.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length;
+    const relayOk = safe.ok && clean;
+    const trainOk = t.kind === "research" ? relayOk : clean && safeForTrainingProvider({ ...t, size }).ok;
+    const sensitive = t.risk === "high" || /security|sensitive/.test(safe.why ?? "");
+    return { kind: t.kind ?? "code", size, risk: t.risk, status: t.status, executor: t.executor, runBy: t.runBy, relayOk, trainOk, sensitive, ...(t.movedFrom ? { movedFrom: t.movedFrom } : {}) };
+  }
+
+  /**
+   * The quota failover pass (Roee, 27.11): every task that waits on an executor with no quota now moves to the next one
+   * in its order that has quota and may take it (quota-failover.ts), and starts there by the normal rules (Antigravity
+   * asks for its Run tap). A hand-picked task moves only with "move my tasks too"; otherwise the PC asks once per stop.
+   * Runs after each fetch, each loop tick and each quota stop. A running task never moves.
+   */
+  private async quotaFailover(): Promise<void> {
+    const s = this.s;
+    const fo: FailoverSettings = { ...FAILOVER_DEFAULTS, ...s.failover };
+    if (!s.enabled || s.paused || !fo.enabled) return;
+    let changed = false;
+    for (const t of this.saved.tasks) {
+      if (t.status !== "waiting" && t.status !== "queued" && t.status !== "deferred-quota") continue;
+      if (this.active?.id === t.id) continue;
+      const d = pickFailover(this.failoverTask(t), this.failoverRooms(t), fo);
+      if (d.action === "move") {
+        await this.moveForQuota(t, d.to, d.back);
+        changed = true;
+      } else if (d.action === "ask" && (!t.quotaAskAt || this.now() - t.quotaAskAt > 6 * 3_600_000)) {
+        t.quotaAskAt = this.now();
+        t.note = `${EXECUTOR_NAMES[t.runBy]} is out of quota${d.back ? ` (back at ${hhmmUtc(d.back)})` : ""}; ${EXECUTOR_NAMES[d.to]} has quota: move it with "Who does it" (you picked this executor by hand).`;
+        this.d.notify(`↪ ${EXECUTOR_NAMES[t.runBy]} is out of quota`, `${t.id}: ${t.title} · move it to ${EXECUTOR_NAMES[d.to]}?`, { path: `#/task-inbox/${t.id}` });
+        changed = true;
+      }
+    }
+    if (changed) await this.save();
+  }
+
+  /**
+   * Moves one waiting task to another executor because its own is out of quota: like {@link reassign}, but the task's
+   * own choice (`executor`) is kept, and `movedFrom` says where it came from and when that one is back. The usage log
+   * gets a line, the board item a note.
+   *
+   * @param t - The task (not running).
+   * @param to - The executor with quota left.
+   * @param back - When the first executor is expected back (ms), when known.
+   */
+  private async moveForQuota(t: InboxTaskView, to: FailoverTarget, back?: number): Promise<void> {
+    const from = t.runBy;
+    const via = [...new Set([...(t.movedFrom?.via ?? []), ...(t.movedFrom ? [t.movedFrom.from] : [])])].filter((x) => x !== from).slice(-6);
+    this.lines.remove(t.id);
+    delete t.boardState;
+    t.runBy = to;
+    if (t.model && !this.offersModel(to, t.model)) delete t.model;
+    for (const k of ["retryAt", "autoRetried", "runAsk", "endedAt", "quotaAskAt"] as const) delete t[k];
+    t.status = to === "local" ? "queued" : "waiting";
+    if (!(t.headSha && t.branch.endsWith("-partial") && to !== "gemini" && to !== "local")) t.branch = branchFor(t, to);
+    t.movedFrom = { from, at: this.now(), ...(back ? { back } : {}), ...(via.length ? { via } : {}) };
+    t.resultWritten = false;
+    const line = `Moved from ${EXECUTOR_NAMES[from]}: quota${back ? `, back at ${hhmmUtc(back)}` : ""}.`;
+    t.note = `${line} ${to === "antigravity" ? "Antigravity runs it after your Run." : to === "local" ? "Self-work takes it from the task board." : `${EXECUTOR_NAMES[to]} runs it by itself.`}`;
+    this.log(t, "quota", "info", back ? { backInMinutes: Math.max(0, Math.round((back - this.now()) / 60_000)) } : {}, `moved from ${from} to ${to}`);
+    if (t.boardId) await this.d.board?.change("kesher", to === "local" ? [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: "small", forKesher: true }] : [{ op: "note", text: line, task: t.boardId }]).catch(() => undefined);
+    await this.save();
+    if (to === "antigravity") this.makeAsk(t);
+    else if (to === "gemini") void this.pumpGemini().catch(() => undefined);
+    else if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
+    else if (to === "ghostcli") void this.pumpGhostcli().catch(() => undefined);
+  }
+
+  /**
+   * Where the work of executors that are out of quota went: one entry per task moved off it that has not ended
+   * (for the hub's Quotas page).
+   *
+   * @returns The moves, newest first, at most 40.
+   */
+  async quotaMoves(): Promise<Array<{ from: InboxTaskView["runBy"]; to: InboxTaskView["runBy"] }>> {
+    await this.load();
+    return this.saved.tasks
+      .filter((t) => t.movedFrom && !isEnded(t.status))
+      .sort((a, b) => b.movedFrom!.at - a.movedFrom!.at)
+      .slice(0, 40)
+      .map((t) => ({ from: t.movedFrom!.from, to: t.runBy }));
   }
 
   /** Reads the queue file once; a run cut off by a restart is marked failed (its worktree stays for a look). */
@@ -966,6 +1103,7 @@ export class TaskInbox {
     await this.publishDoneResearch().catch(() => undefined);
     await this.loopWork().catch(() => undefined);
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
+    await this.quotaFailover().catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
     void this.pumpOpencode().catch(() => undefined);
@@ -1275,6 +1413,7 @@ export class TaskInbox {
     rememberFail(t, status, this.now());
     await this.save();
     await this.retryLater(t);
+    if (t.status === "deferred-quota") await this.quotaFailover().catch(() => undefined);
   }
 
   /**
@@ -3240,6 +3379,7 @@ export class TaskInbox {
     this.syncing ??= (async () => {
       await this.load();
       await this.loopWork();
+      await this.quotaFailover().catch(() => undefined);
       await this.save();
       void this.pumpOpencode().catch(() => undefined);
       void this.pumpGhostcli().catch(() => undefined);
@@ -3561,6 +3701,7 @@ export class TaskInbox {
     rememberFail(t, status, this.now());
     await this.save();
     await this.retryLater(t);
+    if (t.status === "deferred-quota") await this.quotaFailover().catch(() => undefined);
   }
 
   /**
@@ -3654,6 +3795,8 @@ export class TaskInbox {
 const researchQuestion = (t: Pick<InboxTaskSpec, "title" | "goal" | "acceptance" | "outOfScope">): string => [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
 
 /** A task's model, as shown on its card: GhostCLI's or the free service's name, else OpenCode Go. */
+/** "HH:MM UTC" of a time, for notes written on the PC (the pages show their own local time from the number). */
+const hhmmUtc = (ms: number): string => `${new Date(ms).toISOString().slice(11, 16)} UTC`;
 const modelLabel = (model: string): string => `${relayProviderOf(model)?.name ?? freeProviderOf(model)?.name ?? "OpenCode Go"} · ${opencodeModelName(model).replace(/^ghostcli\//, "")}`;
 
 export const OPENCODE_LIMIT_MS = 5 * 3_600_000;

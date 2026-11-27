@@ -317,6 +317,7 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .q-sub { padding: 8px 16px 2px; text-transform: uppercase; letter-spacing: .04em; }
 .q-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; padding: 6px 12px 12px; }
 .q-row { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 11px; background: #1c1c20; border: 1px solid #26262b; min-width: 0; }
+.q-moved { color: #8fd3ff; overflow-wrap: anywhere; }
 .q-row.q-out { border-color: #4a2a2c; } .q-row.q-low { border-color: #4a3a26; } .q-row.q-unknown, .q-row.q-off { opacity: .85; }
 .q-head { gap: 8px; } .q-ic { width: 20px; text-align: center; font-size: 15px; }
 .q-bar-head { gap: 8px; }

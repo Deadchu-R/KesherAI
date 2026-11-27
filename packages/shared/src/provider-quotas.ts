@@ -10,7 +10,8 @@
  * Pure (no I/O), so it runs on the PC, in the hub page and in tests alike.
  */
 import type { ClaudeState } from "./claude-code.js";
-import type { AntigravityQuota, FreeProviderState, OpencodeState, RelayReport } from "./task-inbox.js";
+import type { AntigravityQuota, FreeProviderState, InboxExecutor, OpencodeState, RelayReport } from "./task-inbox.js";
+import { EXECUTOR_NAMES } from "./quota-failover.js";
 
 /** Which family a row belongs to: picks its icon on the page (the same as the Tasks tab's agent chips). */
 export type QuotaKind = "antigravity" | "ghostcli" | "opencode" | "gemini" | "free" | "local" | "claude";
@@ -69,6 +70,8 @@ export interface ProviderQuota {
   readAt?: number;
   /** Why an `off` row is off, when it is one the page can name (Claude Code: not installed, not signed in, an API key). */
   offWhy?: QuotaOffWhy;
+  /** Where its waiting work went while it was out of quota (the quota failover): each executor's name and how many tasks. */
+  movedTo?: Array<{ name: string; tasks: number }>;
 }
 
 /** Why a row is off. */
@@ -89,6 +92,8 @@ export interface ProviderQuotaInput {
     free?: FreeProviderState[];
     /** Antigravity's plan ran out (InboxState.quota): back after `until`. */
     quota?: { until: number };
+    /** Tasks the quota failover moved that have not ended: from which executor to which. */
+    moves?: Array<{ from: Exclude<InboxExecutor, "auto">; to: Exclude<InboxExecutor, "auto"> }>;
   };
   /** The free cloud helpers of chats (`/api/free-cloud`'s providers). */
   freeCloud?: Array<{ id: string; name?: string; configured: boolean; enabled: boolean; state: string; until?: number; day: { used: number; limit: number }; lastOkAt?: number }>;
@@ -97,7 +102,7 @@ export interface ProviderQuotaInput {
 }
 
 /** Limits of the snapshot (the cleaner enforces them on what arrives). */
-export const QUOTA_LIMITS = { items: 24, bars: 8, nameChars: 60, labelChars: 40 } as const;
+export const QUOTA_LIMITS = { items: 24, bars: 8, nameChars: 60, labelChars: 40, moves: 6 } as const;
 
 /** A share under this counts as low. */
 const LOW = 0.2;
@@ -247,6 +252,12 @@ export function buildProviderQuotas(input: ProviderQuotaInput): ProviderQuota[] 
     const bar: QuotaBar = { label: "day", used: p.day.used, ...(p.day.limit ? { limit: p.day.limit } : {}), ...(until ? { resetAt: until } : p.day.limit && p.day.used >= p.day.limit ? { resetAt: nextUtcDay(now) } : {}) };
     out.push({ id: `cloud-${p.id}`.slice(0, 64), kind: "free", group: "chat", name: (p.name ?? p.id).slice(0, QUOTA_LIMITS.nameChars), state: !p.enabled || p.state === "off" ? "off" : until ? "out" : p.day.limit ? stateOf([bar]) : "ok", bars: [bar], ...(until ? { until } : {}), readAt: now });
   }
+  // Where the work of each task agent went while it was out (the row ids are the executors' ids).
+  for (const row of out) {
+    const to = new Map<string, number>();
+    for (const m of inbox.moves ?? []) if (m.from === row.id && row.group === "tasks") to.set(EXECUTOR_NAMES[m.to], (to.get(EXECUTOR_NAMES[m.to]) ?? 0) + 1);
+    if (to.size) row.movedTo = [...to].map(([name, tasks]) => ({ name, tasks })).slice(0, QUOTA_LIMITS.moves);
+  }
   return out.slice(0, QUOTA_LIMITS.items);
 }
 
@@ -266,6 +277,18 @@ function cleanCounts(x: unknown): QuotaCounts | undefined {
   const runs = n0(c.runs);
   if (runs === undefined) return undefined;
   return { runs, ...opt("done", n0(c.done)), ...opt("partial", n0(c.partial)), ...opt("failed", n0(c.failed)), ...opt("rateLimited", n0(c.rateLimited)) };
+}
+
+/** "Where the work went" from untrusted input: one-line names and whole counts, at most {@link QUOTA_LIMITS}.moves. */
+function cleanMoves(x: unknown): ProviderQuota["movedTo"] {
+  if (!Array.isArray(x)) return undefined;
+  const out = x.slice(0, QUOTA_LIMITS.moves).flatMap((m) => {
+    const r = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+    const name = line(r.name, QUOTA_LIMITS.nameChars);
+    const tasks = n0(r.tasks);
+    return name && tasks ? [{ name, tasks }] : [];
+  });
+  return out.length ? out : undefined;
 }
 
 function cleanBar(x: unknown): QuotaBar | null {
@@ -315,6 +338,7 @@ export function cleanProviderQuotas(x: unknown): ProviderQuota[] {
       ...opt("model", model || undefined),
       ...opt("readAt", n0(q.readAt) || undefined),
       ...opt("offWhy", OFF_WHY.includes(q.offWhy as QuotaOffWhy) ? (q.offWhy as QuotaOffWhy) : undefined),
+      ...opt("movedTo", cleanMoves(q.movedTo)),
     });
   }
   return out;

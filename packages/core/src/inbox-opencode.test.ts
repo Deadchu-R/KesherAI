@@ -757,7 +757,8 @@ test("run guard: the safety ceiling is never below 120 minutes (an old 15-minute
 test("ghostcli: a task given to GhostCLI runs on it as its own executor (own counter, gcli/* branch), not on OpenCode Go's; a sensitive one never reaches it", async () => {
   const { root, repo } = await setup({ "c-20261126-41": TASK("c-20261126-41", "opencode"), "c-20261126-42": TASK("c-20261126-42", "opencode").replace("Add a clear button", "Rotate the API token") });
   const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-flash"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
-  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: true, useRelay: false, dailyCap: 0 } });
+  // The quota failover is off here: this test gives the task to GhostCLI by hand (the failover test is further down).
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: true, useRelay: false, dailyCap: 0 }, failover: { enabled: false } });
   try {
     await inbox.sync();
     await inbox.reassign("c-20261126-41", "ghostcli");
@@ -899,5 +900,47 @@ test("ghostcli research: runs like Gemini's on GhostCLI's model (report kept, no
     assert.equal((await inbox.task("c-20261127-60")).status === "done", false, "a sensitive research task never reaches GhostCLI");
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("quota failover: OpenCode Go at its cap moves a waiting task to GhostCLI (noted, logged, run there); a sensitive one stays; with 'move my tasks too' off the PC asks", async () => {
+  const { root, repo } = await setup({ "c-20261127-51": TASK("c-20261127-51", "opencode"), "c-20261127-52": TASK("c-20261127-52", "opencode").replace("Add a clear button", "Rotate the API token") });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-pro"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const settings: Record<string, unknown> = { opencode: { enabled: true, useFree: false, useRelay: false, dailyCap: 0 }, ghostcli: { enabled: true, takeHeavy: false, dailyCap: 30, models: [] } };
+  const usage = new UsageLog(join(root, "usage"));
+  const { inbox } = inboxFor(repo, root, coder, settings, () => Date.now(), { usage });
+  try {
+    await inbox.sync();
+    await inbox.pumpGhostcli();
+    await inbox.idle();
+    const t = await inbox.task("c-20261127-51");
+    assert.equal(t.runBy, "ghostcli");
+    assert.equal(t.executor, "opencode", "the task's own choice is kept");
+    assert.equal(t.movedFrom?.from, "opencode");
+    assert.equal(t.status, "done");
+    assert.deepEqual(runs.filter((r) => r.title.includes("c-20261127-51")).map((r) => r.model), ["ghostcli/claude-opus-5-5"]);
+    const log = await inbox.usageLog({ task: "c-20261127-51" });
+    assert.ok(log.entries.some((e) => e.event === "quota" && /moved from opencode to ghostcli/.test(e.why ?? "")), JSON.stringify(log.entries));
+    // A security task never reaches the relay: it waits on OpenCode Go for its quota.
+    const s = await inbox.task("c-20261127-52");
+    assert.equal(s.runBy, "opencode");
+    assert.equal(s.movedFrom, undefined);
+    assert.deepEqual(await inbox.quotaMoves(), [], "the moved task ended, so nothing is listed as moved now");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+  // "Move my tasks too" off: a hand-picked task is not moved; the PC asks once.
+  const two = await setup({ "c-20261127-53": TASK("c-20261127-53", "opencode") });
+  const c2 = fakeCoder({ listed: ["opencode-go/mimo-v2.6-pro"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const { inbox: i2, notes } = inboxFor(two.repo, two.root, c2.coder, { ...settings, failover: { moveManual: false } });
+  try {
+    await i2.sync();
+    await i2.loopTick();
+    const t = await i2.task("c-20261127-53");
+    assert.equal(t.runBy, "opencode");
+    assert.ok(t.quotaAskAt, "asked (the row shows it; the note is its executor's own wait line)");
+    assert.equal(notes.filter((n) => n.startsWith("↪ OpenCode Go is out of quota")).length, 1, notes.join("\n"));
+  } finally {
+    rmSync(two.root, { recursive: true, force: true });
   }
 });

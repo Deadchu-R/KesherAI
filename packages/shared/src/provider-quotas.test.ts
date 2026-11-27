@@ -185,3 +185,16 @@ test("the cleaner drops bad rows and caps texts, numbers and counts", () => {
   assert.equal(out.length, 21);
   assert.deepEqual(cleanProviderQuotas("nope"), []);
 });
+
+test("quota failover: an out provider's row says where its waiting work went; the cleaner keeps only names and counts", () => {
+  const now = 1_800_000_000_000;
+  const rows = buildProviderQuotas({ now, inbox: { quota: { until: now + 3_600_000 }, moves: [{ from: "antigravity", to: "ghostcli" }, { from: "antigravity", to: "ghostcli" }, { from: "antigravity", to: "opencode" }, { from: "gemini", to: "ghostcli" }] } });
+  const ag = rows.find((r) => r.id === "antigravity")!;
+  assert.equal(ag.state, "out");
+  assert.deepEqual(ag.movedTo, [{ name: "GhostCLI", tasks: 2 }, { name: "OpenCode Go", tasks: 1 }]);
+  assert.deepEqual(rows.find((r) => r.id === "gemini")!.movedTo, [{ name: "GhostCLI", tasks: 1 }]);
+  assert.equal(rows.find((r) => r.id === "ghostcli")!.movedTo, undefined);
+  const clean = cleanProviderQuotas([{ ...ag, movedTo: [{ name: "Ghost\nCLI", tasks: 2.7 }, { name: "", tasks: 1 }, { name: "x", tasks: -1 }, ...Array(9).fill({ name: "y", tasks: 1 })] }]);
+  assert.deepEqual(clean[0]!.movedTo?.[0], { name: "Ghost CLI", tasks: 2 });
+  assert.ok((clean[0]!.movedTo?.length ?? 0) <= 6);
+});

@@ -854,7 +854,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       const eng = engine.status();
       return buildProviderQuotas({
         now: Date.now(),
-        inbox: { agQuota: st.agQuota, relay: st.relay, opencode: st.opencode, opencodeDailyCap: st.settings.opencode?.dailyCap, claude: st.claude, free: st.free, quota: st.quota },
+        inbox: { agQuota: st.agQuota, relay: st.relay, opencode: st.opencode, opencodeDailyCap: st.settings.opencode?.dailyCap, claude: st.claude, free: st.free, quota: st.quota, moves: await taskInbox.quotaMoves() },
         freeCloud: freeCloud.status().map((p) => ({ ...p, name: freeProvider(p.id)?.name ?? p.id })),
         local: { loaded: eng.running && !!eng.modelPath, ...(eng.modelPath ? { model: eng.modelPath } : {}) },
       });

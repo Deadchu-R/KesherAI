@@ -9,7 +9,7 @@ import type { KesherServices } from "../services.js";
 import { validBranchName } from "../task-inbox.js";
 import { DIGEST_FILE } from "../inbox-digest.js";
 import { usageQueryOf } from "../usage-log.js";
-import { parseAssignTo, parseWorkList, type InboxTaskView } from "@kesher/shared";
+import { cleanFailoverOrder, FAILOVER_DEFAULTS, FAILOVER_TARGETS, parseAssignTo, parseWorkList, type InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox (inbox-runner.ts): the queue, a task's page, Run / Stop / Skip, answers to the PC's "Run this task
@@ -219,6 +219,19 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
           oc.dailyCap = n;
         }
         cur.opencode = oc;
+      }
+      // Quota failover (Settings › Task inbox › When a quota runs out): the two switches and the two fallback orders.
+      if (b.failover && typeof b.failover === "object") {
+        const o = b.failover as Record<string, unknown>;
+        const fo = { ...FAILOVER_DEFAULTS, ...cur.failover };
+        if (typeof o.enabled === "boolean") fo.enabled = o.enabled;
+        if (typeof o.moveManual === "boolean") fo.moveManual = o.moveManual;
+        for (const k of ["code", "research"] as const) {
+          if (o[k] === undefined) continue;
+          if (!Array.isArray(o[k]) || (o[k] as unknown[]).some((x) => !FAILOVER_TARGETS[k].includes(x as never))) throw new Error(`The ${k} fallback order has an executor that is not allowed.`);
+          fo[k] = cleanFailoverOrder(k, o[k]);
+        }
+        cur.failover = { enabled: fo.enabled, moveManual: fo.moveManual, code: cleanFailoverOrder("code", fo.code) as Array<"ghostcli" | "opencode" | "antigravity" | "local">, research: cleanFailoverOrder("research", fo.research) as Array<"gemini" | "ghostcli" | "antigravity"> };
       }
       // GhostCLI (Settings › Task inbox card): on/off, the daily cap, the model order (only `ghostcli/…` ids), heavy tasks to it.
       if (b.ghostcli && typeof b.ghostcli === "object") {
