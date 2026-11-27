@@ -298,6 +298,13 @@ abstract class BaseTransport implements RelayTransport {
 }
 
 /** Ably's protocol message actions this adapter uses. */
+/**
+ * The client ID every KesherAI device claims on Ably (allowed with an API key). Some apps or namespaces refuse
+ * anonymous clients (error 40161, identified_client_required); a fixed, non-personal ID satisfies them. Devices are
+ * told apart by the sealed envelopes, never by this.
+ */
+export const ABLY_CLIENT_ID = "kesher";
+
 const ABLY = { HEARTBEAT: 0, CONNECTED: 4, DISCONNECTED: 6, CLOSED: 8, ERROR: 9, ATTACH: 10, ATTACHED: 11, DETACH: 12, DETACHED: 13, MESSAGE: 15 } as const;
 
 /**
@@ -320,7 +327,7 @@ export class AblyTransport extends BaseTransport {
   }
 
   protected socketUrl(): string {
-    return `wss://realtime.ably.io/?key=${encodeURIComponent(this.key)}&format=json&heartbeats=true&echo=false`;
+    return `wss://realtime.ably.io/?key=${encodeURIComponent(this.key)}&clientId=${ABLY_CLIENT_ID}&format=json&heartbeats=true&echo=false`;
   }
 
   protected onOpen(): void {
@@ -380,7 +387,7 @@ export class AblyTransport extends BaseTransport {
   protected publishRequest(channel: string, env: SealedEnvelope): { url: string; init: RequestInit } {
     return {
       url: `https://rest.ably.io/channels/${encodeURIComponent(channel)}/messages`,
-      init: { method: "POST", headers: { authorization: `Basic ${btoa(this.key)}`, "content-type": "application/json" }, body: JSON.stringify({ name: "env", data: JSON.stringify(env) }) },
+      init: { method: "POST", headers: { authorization: `Basic ${btoa(this.key)}`, "content-type": "application/json" }, body: JSON.stringify({ name: "env", clientId: ABLY_CLIENT_ID, data: JSON.stringify(env) }) },
     };
   }
 }

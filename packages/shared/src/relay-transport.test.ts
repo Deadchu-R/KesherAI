@@ -110,7 +110,7 @@ test("Ably: attaches after CONNECTED, delivers envelopes, publishes with REST an
   assert.equal(f.sockets.length, 0, "no channels: no socket");
   t.setChannels(["kesher-aa"]);
   const s = f.sockets[0]!;
-  assert.match(s.url, /^wss:\/\/realtime\.ably\.io\/\?key=appId1\.keyId1%3Aabcdefghijklmnop&format=json&heartbeats=true/);
+  assert.match(s.url, /^wss:\/\/realtime\.ably\.io\/\?key=appId1\.keyId1%3Aabcdefghijklmnop&clientId=kesher&format=json&heartbeats=true/, "claims a client ID (namespaces that need identified clients, 40161)");
   s.open();
   assert.deepEqual(s.sent, []);
   s.frame({ action: 4, connectionDetails: { maxIdleInterval: 15000 } });
@@ -125,7 +125,7 @@ test("Ably: attaches after CONNECTED, delivers envelopes, publishes with REST an
   const p = f.posts[0]!;
   assert.equal(p.url, "https://rest.ably.io/channels/kesher-aa/messages");
   assert.equal((p.init.headers as Record<string, string>).authorization, `Basic ${btoa(ABLY_KEY)}`);
-  assert.deepEqual(JSON.parse(String(p.init.body)), { name: "env", data: JSON.stringify(env) });
+  assert.deepEqual(JSON.parse(String(p.init.body)), { name: "env", clientId: "kesher", data: JSON.stringify(env) });
   t.setChannels(["kesher-bb"]);
   assert.deepEqual(s.sent.slice(1), [{ action: 12, channel: "kesher-aa" }, { action: 10, channel: "kesher-bb" }]);
 });
