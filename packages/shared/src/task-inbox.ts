@@ -459,6 +459,31 @@ export interface InboxTaskSpec {
   source?: string;
 }
 
+/** One model attempt inside a task inbox run (nested under the task, not a chat list entry). */
+export interface TaskRunAttempt {
+  /** 1-based attempt number inside this task. */
+  attempt: number;
+  /** The model id that ran this attempt. */
+  model: string;
+  /** Agent steps executed in this attempt. */
+  steps: number;
+  /** Wall-clock duration of the attempt in milliseconds. */
+  durationMs: number;
+  /** Short result summary kept after raw logs are pruned. */
+  result: "done" | "failed" | "stopped" | "quota" | "error";
+  /** Optional human-readable note (error message, stop reason). */
+  note?: string;
+  /** When the attempt started (ms since epoch). */
+  startedAt: number;
+  /** The chat id that holds this run's messages (hidden from the chat list unless toggled). */
+  chatId: string;
+}
+
+/** Build the stable chat id for a task inbox run attempt. */
+export function inboxRunChatId(taskId: string, attempt: number): string {
+  return `inbox-run:${taskId}:${attempt}`;
+}
+
 /** A second model's review of a finished task's diff against its goal and allowed paths. */
 export interface InboxReview {
   verdict: "ok" | "doubtful" | "reject";
@@ -567,10 +592,12 @@ export interface InboxTaskView extends InboxTaskSpec {
   /** Whether the result file was written to the inbox branch. */
   resultWritten?: boolean;
   /**
-   * The PC asks "Run this task in Antigravity?" (shown on the PC and the phone, and sent through the hub): one ask is
-   * one run, it is used up by the answer and expires after 30 minutes; a "yes" is never remembered.
-   */
-  runAsk?: InboxRunAsk;
+       * The PC asks "Run this task in Antigravity?" (shown on the PC and the phone, and sent through the hub): one ask is
+       * one run, it is used up by the answer and expires after 30 minutes; a "yes" is never remembered.
+       */
+      runAsk?: InboxRunAsk;
+      /** Past and current runs of this task (the inbox page lists them; hidden from the main chat list). */
+      runs?: TaskRunAttempt[];
   /**
    * The task was moved because its executor ran out of quota (quota-failover.ts): where from, when, and when that
    * executor is expected back (the row shows "↪ moved from X (quota)").
