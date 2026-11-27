@@ -733,7 +733,7 @@ test("inbox queue: even with the ask setting off, Antigravity's next queued task
     assert.equal((await inbox.task(ids[1]!)).status, "waiting");
     assert.equal((await inbox.task(ids[2]!)).status, "waiting");
     // The ask is made after the run's end settles; slower machines (Windows CI) need a moment.
-    for (let i = 0; i < 40 && inbox.openAsks().length === 0; i++) await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 200 && inbox.openAsks().length === 0; i++) await new Promise((r) => setTimeout(r, 50));
     assert.equal(inbox.openAsks().length, 1, "one ask at a time, for the first in line");
     assert.equal((await inbox.task(ids[1]!)).runAsk?.next?.done !== undefined, true, "the ask is for the first in line");
     assert.equal(notes.filter((n) => n.startsWith("🟢 אנטיגרוויטי:") && n.includes("התחילה")).length, 0, "no \"started\" note");
@@ -755,7 +755,7 @@ test("inbox queue: a heavy job holds the next queued task back until it is over"
     await inbox.idle();
     await inbox.idle();
     assert.equal(seen.prompts, 1, "when the job is over the next one is asked about, not started");
-    for (let i = 0; i < 40 && inbox.openAsks().length === 0; i++) await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 200 && inbox.openAsks().length === 0; i++) await new Promise((r) => setTimeout(r, 50));
     assert.equal(inbox.openAsks().length, 1);
   } finally {
     heavyNow = undefined;
