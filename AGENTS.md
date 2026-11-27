@@ -31,6 +31,9 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 - Never type passwords, keys or tokens. Never change system or security settings.
 - Ask before deleting files outside the project, and before downloads.
 
+## Plan, then edit early (27.11)
+Runs were lost to reading only (85 steps, no edit). Find the files (search, then ranges), write a 3-5 line plan, start editing within 15 steps, smallest working change first. 25 steps without an edit: stop exploring and make the change.
+
 ## Quality (from reviews of self-work's commits)
 - Before you build a task, search whether it already exists. If it does, check it and mark it done with where it is.
 - Match the code around you: the same indentation, quotes and naming. Change only what the item needs; do not reformat.

@@ -400,6 +400,8 @@ export function agentPrompt(s: InboxTaskSpec, branch: string): string {
     "- Do not install packages, do not use the network, do not read files outside this folder or secret files (.env, keys).",
     `- Change only files under: ${s.allowedPaths.join(", ")}. Never: ${s.forbiddenPaths.join(", ")}. At most ${s.maxFiles} files. A change outside these paths is refused (and would fail the whole task), so plan the work inside them.`,
     "- No emails, user names, personal paths, keys or tokens in any file.",
+    "- Work in this order (agents lost whole runs only reading, 27.11): find the files you need (search, then read the parts with a line range, not whole big files), write a plan of 3-5 lines, then start editing within your first 15 steps. Make the smallest working change first, then extend it. If 25 steps pass with no edit, stop exploring and make the change with what you know; say what was uncertain in the report.",
+    "- Run the check yourself when you finish an edit (do not only write that you will).",
     "- When done, end with a short report: what you changed (files), how you checked it, anything left open.",
     "",
     "<task>",
