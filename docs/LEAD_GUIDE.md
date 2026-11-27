@@ -82,7 +82,7 @@ When Roee asks for a work night (or leaves the lead running overnight), the lead
 2. **Never wait on a build.** Release builds, tests and renders run in the background (`run_in_background`);
    meanwhile the lead reviews agents' reports, reads inbox results, writes the next tasks, fixes small things.
 3. **Keep every lane busy, in Roee's priority order** (tonight: "chats that work just like Claude" first):
-   - Claude agents: up to the count Roee approved for the night (27.11: 3), Sonnet by default, Opus for security and
+   - Claude agents: up to the count Roee approved for the night (27.11: 3, lowered to 2 at 01:31 because usage ran high), Sonnet by default, Opus for security and
      complex logic; each with the efficiency rules (tail/grep outputs, no whole-file reads, no screenshots, ≤10-line
      report). When one finishes, start the next task at once.
    - GhostCLI / OpenCode / Gemini / local model through the task inbox: keep 3-6 tasks queued; when one fails, read
