@@ -233,8 +233,66 @@ export class CachedStore implements HubStore {
     return this.queueSize;
   }
 
+  /** Buffered audit rows waiting for a batched write; flushed on size or timer to cut storage calls. */
+  private auditBuffer: AuditRow[] = [];
+  /** Handle of the pending flush timer, so it can be cleared on prune or re-scheduled. */
+  private auditFlushTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Maximum rows buffered before forcing a flush; keeps one batch bounded under free-tier limits. */
+  private static readonly AUDIT_BATCH_CAP = 20;
+  /** Maximum ms a row waits in the buffer; trades latency for fewer storage writes. */
+  private static readonly AUDIT_FLUSH_MS = 5_000;
+
+  /** Writes the buffered audit rows in one call when the store supports it, else falls back to single writes. */
+  private flushAuditBuffer(): void {
+    if (this.auditBuffer.length === 0) return;
+    const rows = this.auditBuffer.splice(0);
+    if (this.auditFlushTimer !== undefined) {
+      clearTimeout(this.auditFlushTimer);
+      this.auditFlushTimer = undefined;
+    }
+    try {
+      if (this.inner.auditBatch) {
+        this.inner.auditBatch(rows);
+        this.expiringWrites += rows.length;
+        if (this.auditRows) for (const r of rows) this.auditRows.push(r);
+      } else {
+        for (const r of rows) {
+          this.inner.audit(r);
+          this.expiringWrites++;
+          if (this.auditRows) this.auditRows.push(r);
+        }
+      }
+    } catch (e) {
+      // On failure, keep rows in memory so they are not lost; retry on next flush trigger.
+      this.auditBuffer.unshift(...rows);
+      throw e;
+    }
+  }
+
+  /** Schedules a flush if one is not already pending; called after every buffered row. */
+  private scheduleAuditFlush(): void {
+    if (this.auditFlushTimer !== undefined) return;
+    this.auditFlushTimer = setTimeout(() => {
+      this.auditFlushTimer = undefined;
+      try {
+        this.flushAuditBuffer();
+      } catch {
+        // best-effort: failures surface on the next write path that triggers a flush.
+      }
+    }, CachedStore.AUDIT_FLUSH_MS);
+  }
+
   /** @inheritdoc */
   audit(row: AuditRow): void {
+    if (this.inner.auditBatch) {
+      this.auditBuffer.push(row);
+      if (this.auditBuffer.length >= CachedStore.AUDIT_BATCH_CAP) {
+        this.flushAuditBuffer();
+      } else {
+        this.scheduleAuditFlush();
+      }
+      return;
+    }
     this.inner.audit(row);
     this.expiringWrites++;
     if (this.auditRows) this.auditRows = [{ ...row }, ...this.auditRows].slice(0, AUDIT_KEPT);
@@ -246,7 +304,28 @@ export class CachedStore implements HubStore {
     return this.auditRows.slice(0, limit).map((a) => ({ ...a }));
   }
   /** @inheritdoc */
+  auditBatch(rows: AuditRow[]): void {
+    if (rows.length === 0) return;
+    if (this.inner.auditBatch) {
+      this.inner.auditBatch(rows);
+      this.expiringWrites += rows.length;
+      if (this.auditRows) {
+        for (let i = rows.length - 1; i >= 0; i--) this.auditRows.unshift({ ...rows[i] } as AuditRow);
+        this.auditRows = this.auditRows.slice(0, AUDIT_KEPT);
+      }
+      return;
+    }
+    for (const r of rows) this.audit(r);
+  }
+
+  /** @inheritdoc */
   pruneAudit(before: number): void {
+    // Flush buffered writes first so prune sees every row and the cache does not resurrect pruned entries.
+    try {
+      this.flushAuditBuffer();
+    } catch {
+      // best-effort: prune still runs on what storage has.
+    }
     this.inner.pruneAudit(before);
     if (this.auditRows) this.auditRows = this.auditRows.filter((a) => a.ts >= before);
   }

@@ -262,6 +262,20 @@ export class SqlStore implements HubStore {
     this.exec("audit", "INSERT INTO audit (ts, action, device_id, ip_hash) VALUES (?, ?, ?, ?)", a.ts, a.action, a.deviceId ?? null, a.ipHash ?? null);
   }
   /** @inheritdoc */
+  auditBatch(rows: AuditRow[]): void {
+    if (!rows.length) return;
+    if (rows.length === 1) {
+      this.audit(rows[0]!);
+      return;
+    }
+    const values = rows.map(() => "(?, ?, ?, ?)").join(", ");
+    const args: (number | string | null)[] = [];
+    for (const r of rows) {
+      args.push(r.ts, r.action, r.deviceId ?? null, r.ipHash ?? null);
+    }
+    this.exec("auditBatch", `INSERT INTO audit (ts, action, device_id, ip_hash) VALUES ${values}`, ...args);
+  }
+  /** @inheritdoc */
   auditList(limit: number): AuditRow[] {
     return this.all("auditList", "SELECT * FROM audit ORDER BY ts DESC LIMIT ?", limit).map((r) => ({ ts: num(r.ts), action: String(r.action), ...(opt(r.device_id) ? { deviceId: String(r.device_id) } : {}), ...(opt(r.ip_hash) ? { ipHash: String(r.ip_hash) } : {}) }));
   }

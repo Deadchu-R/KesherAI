@@ -294,8 +294,28 @@ export class Hub {
     return (await sha256Hex(`${salt}|${ip}`)).slice(0, 16);
   }
 
+  /**
+   * Audit rows waiting for the next batched write. Flushed on every call when `auditBatch` exists; falls back to
+   * per-row writes otherwise. Kept small so a busy hub does not hold unbounded memory between storage calls.
+   */
+  private auditBuffer: AuditRow[] = [];
+
   private audit(action: string, extra: Omit<AuditRow, "ts" | "action"> = {}): void {
-    this.bestEffort(() => this.store.audit({ ts: this.now(), action, ...extra }));
+    const row: AuditRow = { ts: this.now(), action, ...extra };
+    if (this.store.auditBatch) {
+      this.auditBuffer.push(row);
+      // Flush once we have a handful; keeps latency low without hammering storage on every call.
+      if (this.auditBuffer.length >= 8) this.flushAudit();
+      return;
+    }
+    this.bestEffort(() => this.store.audit(row));
+  }
+
+  /** Writes any buffered audit rows in one storage call; safe to call repeatedly. */
+  private flushAudit(): void {
+    if (!this.auditBuffer.length || !this.store.auditBatch) return;
+    const rows = this.auditBuffer.splice(0);
+    this.bestEffort(() => this.store.auditBatch!(rows));
   }
 
   /** A setting, or undefined when storage refuses to read it (a switch then reads as off). */

@@ -167,6 +167,8 @@ export interface HubStore {
   queueCount(): number;
 
   audit(row: AuditRow): void;
+  /** Writes several audit rows in one storage call (one row-write instead of N). Falls back to per-row when batching is not available. */
+  auditBatch?(rows: AuditRow[]): void;
   auditList(limit: number): AuditRow[];
   pruneAudit(before: number): void;
 
@@ -354,11 +356,15 @@ export class MemoryStore implements HubStore {
     return this.queue.length;
   }
   /** @inheritdoc */
-  audit(row: AuditRow): void {
-    this.log.push({ ...row });
-  }
-  /** @inheritdoc */
-  auditList(limit: number): AuditRow[] {
+      audit(row: AuditRow): void {
+        this.log.push({ ...row });
+      }
+      /** @inheritdoc */
+      auditBatch(rows: AuditRow[]): void {
+        for (const r of rows) this.log.push({ ...r });
+      }
+      /** @inheritdoc */
+      auditList(limit: number): AuditRow[] {
     return this.log.slice(-limit).reverse();
   }
   /** @inheritdoc */
