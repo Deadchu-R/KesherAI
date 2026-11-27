@@ -468,6 +468,8 @@ export const KesherConfigSchema = z.object({
       idleChat: z.number().int().min(0).max(1440).default(10),
       pinCcd: z.boolean().default(false),
       translatorDevice: z.enum(["cpu", "gpu", "auto"]).default("cpu"),
+      /** The chat role's GGUF (the hub task chat) by file name in the models folder; empty: the router's small model. */
+      chatModel: z.string().max(200).regex(/^[\w.+-]*$/).default(""),
     })
     .prefault({}),
   /** Microsoft 365 Copilot (work or school account with a Copilot licence). */

@@ -683,7 +683,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       config,
       enginesDir: paths.engines,
       binary: () => engine.status().binaryPath,
-      files: { watchdog: routerFile, translator: () => findTranslationFile(config, paths.models), embeddings: () => config.engines.embedModel },
+      // The chat role (hub task chat): the chosen file, else the router's small model (one 2B serves both roles).
+      files: { chat: async () => (config.cpuPool.chatModel ? (await modelsOnComputer(services).catch(() => [])).find((m) => m.path.replace(/\\/g, "/").endsWith(`/${config.cpuPool.chatModel}`))?.path : undefined) ?? (await routerFile()), watchdog: routerFile, translator: () => findTranslationFile(config, paths.models), embeddings: () => config.engines.embedModel },
       // The light profile can hold the pool too ("keep the CPU pool running" off), as a game does.
       games: (() => {
         const watch = new GameWatch();
