@@ -61,6 +61,17 @@ export interface ToolContext {
   web?: import("@kesher/shared").WebPrefs;
   /** Opens a page through Tor, for a page that does not open directly (when Tor is installed and the chat allows it). */
   viaTor?(url: string, signal: AbortSignal): Promise<{ url: string; status: number; type: string; body: string }>;
+  /**
+   * Hands a sign-in, code or robot check to the user: shows the chat's "Sign in needed" card (on the PC and the
+   * phone) and waits. Absent when no one can answer (an unattended run).
+   *
+   * @param question - The card's line for the model's log and notifications.
+   * @param info - The check, the site and the browser.
+   * @param watch - Resolves `true` when the page moved on by itself (the card then closes as `continue:auto`);
+   *   aborted when the card is answered.
+   * @returns `continue`, `continue:auto`, `cancel`, or a note in brackets (Stop, timed out, no one to answer).
+   */
+  handOver?(question: string, info: import("@kesher/shared").SignInInfo, watch?: (signal: AbortSignal) => Promise<boolean>): Promise<string>;
 }
 
 /** What the session tells a tool's gate about the call. */

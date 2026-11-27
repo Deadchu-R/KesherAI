@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, ToolCall } from "@kesher/shared";
 import { AgentSession, sortSpecs, type ModelTurn } from "./session.js";
-import { CODE_TOOLS } from "./tools.js";
+import { CODE_TOOLS, type AgentTool } from "./tools.js";
 import { dangerReason, decide } from "./permissions.js";
 import { globToRegExp, resolveInWorkspace } from "./workspace.js";
 
@@ -151,6 +151,37 @@ test("an unattended session (self-work) answers its own questions and refuses fo
   const msgs = JSON.stringify(seen[1]?.messages ?? []);
   assert.match(msgs, /decide yourself/);
   assert.match(msgs, /Refused: this run is unattended/);
+});
+
+test("a tool's sign-in hand-off shows a signin card, waits for Continue, and closes by itself when the page moves on", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  let moved: () => void = () => undefined;
+  const answers: string[] = [];
+  const signin: AgentTool = {
+    risk: "read",
+    spec: { name: "fake_browser", description: "x", inputSchema: { type: "object", properties: {} } },
+    async run(_input, ctx) {
+      const info = { wall: "login" as const, site: "accounts.example.com", browser: "pane" as const };
+      answers.push(await ctx.handOver!("Sign in to accounts.example.com on the PC, then press Continue.", info));
+      answers.push(await ctx.handOver!("again", info, () => new Promise<boolean>((r) => (moved = () => r(true)))));
+      return { output: answers.join(",") };
+    },
+  };
+  const { model } = scripted([{ calls: [{ name: "fake_browser", arguments: {} }] }, { text: "done" }]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "ask", workspace, tools: [signin], systemPrompt: "sys" });
+  session.send("check my mail");
+  const q = await waitFor(session, (e) => e.type === "question");
+  assert.ok(q.type === "question");
+  if (q.type !== "question") return;
+  assert.equal(q.kind, "signin");
+  assert.deepEqual(q.signIn, { wall: "login", site: "accounts.example.com", browser: "pane" });
+  assert.equal(session.info().status, "waiting");
+  session.answer(q.questionId, "continue");
+  await waitFor(session, (e) => e.type === "question" && e.questionId !== q.questionId);
+  moved();
+  await waitFor(session, (e) => e.type === "assistant");
+  assert.deepEqual(answers, ["continue", "continue:auto"]);
+  assert.deepEqual(session.events.filter((e) => e.type === "answer").map((e) => e.type === "answer" && e.text), ["continue", "continue:auto"]);
 });
 
 test("auto mode runs safe commands but still asks for dangerous ones", async () => {

@@ -387,6 +387,7 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
 export function QuestionCard({ convId, ev, pending, answer }: { convId: string; ev: Ev<"question">; pending: boolean; answer?: Ev<"answer"> }) {
   const [text, setText] = useState(ev.path ?? "");
   const send = (value: string) => void api(`/api/conversations/${convId}/answers/${ev.questionId}`, { method: "POST", body: { text: value } }).catch(() => undefined);
+  if (ev.kind === "signin" && ev.signIn) return <SignInCard info={ev.signIn} pending={pending} answer={answer} send={send} />;
   if (ev.kind === "access") {
     // The agent asks for a folder or file outside its own: allow it, pick another, or refuse.
     return (
@@ -429,6 +430,44 @@ export function QuestionCard({ convId, ev, pending, answer }: { convId: string; 
         </>
       ) : (
         <p className="muted">{answer?.text}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Sign in needed" (browser-signin.ts): a browser step reached a sign-in, code or robot check. The user does it in the
+ * named browser on the PC (KesherAI never types passwords or codes), then presses Continue here, on the PC or the phone.
+ * The card also closes by itself when the page moves on.
+ */
+export function SignInCard({ info, pending, answer, send }: { info: NonNullable<Ev<"question">["signIn"]>; pending: boolean; answer?: Ev<"answer"> | undefined; send: (text: string) => void }) {
+  const where = info.browser === "pane" ? L("בדפדפן של KesherAI", "in KesherAI's browser") : L("ב-Chrome שלך", "in your Chrome");
+  const title = info.wall === "captcha" ? L("צריך לאשר שאתה לא רובוט", "Check that you're human") : info.wall === "code" ? L("צריך קוד אימות", "Verification code needed") : L("צריך להתחבר", "Sign in needed");
+  const what = info.wall === "captcha" ? L("עשה את הבדיקה", "Do the check") : info.wall === "code" ? L("הזן את הקוד", "Enter the code") : L("התחבר", "Sign in");
+  const done = answer?.text ?? "";
+  const result = done.startsWith("continue")
+    ? done === "continue:auto" ? L("✓ ההתחברות הסתיימה, ממשיך", "✓ Signed in, continuing") : L("✓ ממשיך", "✓ Continued")
+    : done === "(timed out)" ? L("הזמן עבר, העבודה נעצרה", "Timed out; the work stopped") : L("בוטל", "Canceled");
+  return (
+    <div className={`card question signin ${pending ? "" : "done"}`} role="group" aria-label={title} data-guard="">
+      <div className="row signin-top">
+        <span className="signin-icon" aria-hidden="true">{info.wall === "captcha" ? "🤖" : "🔒"}</span>
+        <strong className="grow">{title}</strong>
+        <span className="q-chip" dir="ltr">{info.site}</span>
+      </div>
+      {pending ? (
+        <>
+          <p dir="auto">
+            {what} {L("ב-", "on ")}<b dir="ltr">{info.site}</b> {where} {L("במחשב, ואז לחץ המשך.", "on the PC, then press Continue.")}
+          </p>
+          <p className="muted small">{L("KesherAI לא מקליד סיסמאות או קודים. ממשיך לבד כשהדף עובר הלאה.", "KesherAI never types passwords or codes. It goes on by itself when the page moves on.")}</p>
+          <div className="row">
+            <button type="button" className="primary" onClick={() => send("continue")}>{L("המשך", "Continue")}</button>
+            <button type="button" onClick={() => send("cancel")}>{L("ביטול", "Cancel")}</button>
+          </div>
+        </>
+      ) : (
+        <p className="muted small">{result}</p>
       )}
     </div>
   );

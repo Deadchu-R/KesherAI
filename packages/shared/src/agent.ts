@@ -247,6 +247,15 @@ export interface HelperPlanRef {
   rev?: number;
 }
 
+/** What a "Sign in needed" card says: the check, the site and the browser (KesherAI's pane or the user's Chrome). */
+export interface SignInInfo {
+  /** `login`: a password page; `code`: a one-time or two-step code; `captcha`: a robot check. */
+  wall: "login" | "code" | "captcha";
+  /** The site's host, e.g. `accounts.example.com`. */
+  site: string;
+  browser: "pane" | "chrome";
+}
+
 /**
  * Everything that happens in a session, in order. Clients replay the list
  * to draw the conversation and follow new events live over SSE.
@@ -301,10 +310,16 @@ export type AgentEvent = EventBase &
         options?: string[];
         /** Several questions in one card (up to 4), each with options that may carry a line of explanation. */
         items?: AskItem[];
-        /** `access`: the agent asks for a folder or file outside its own; the answer is a path, or empty to refuse. */
-        kind?: "access";
+        /**
+         * `access`: the agent asks for a folder or file outside its own; the answer is a path, or empty to refuse.
+         * `signin`: a browser step reached a sign-in, code or robot check; the user does it on the PC, then answers
+         * `continue` (or `continue:auto` when KesherAI saw the page move on by itself) or `cancel`.
+         */
+        kind?: "access" | "signin";
         /** For `access`: the path the agent suggested. */
         path?: string;
+        /** For `signin`: what kind of check, the site's host and which browser it is in. */
+        signIn?: SignInInfo;
       }
     /**
      * Older messages (before index `upTo` of the model messages) were too long

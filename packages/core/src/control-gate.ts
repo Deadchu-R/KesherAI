@@ -23,6 +23,8 @@ export interface ControlTarget {
   granted?: boolean;
   /** For typing: how many characters (the reviewer never sees the text). */
   typedChars?: number;
+  /** Typing into a password or code field: the tool refuses it and shows the sign-in card, so no approval card first. */
+  secretField?: boolean;
   /** A PNG of the target cut from a screenshot, for the card (only made when the card is shown). */
   crop?: () => Promise<Buffer | undefined>;
 }
@@ -76,6 +78,7 @@ export function gateControlTools(tools: AgentTool[], d: ControlGateDeps): AgentT
     const info = (t as WithInfo)[INFO];
     const gate = async (input: Record<string, unknown>, ctx: ToolContext, gi: Parameters<NonNullable<AgentTool["gate"]>>[2]): Promise<GateResult> => {
       const where: ControlTarget = (await info?.(input, ctx).catch(() => undefined)) ?? {};
+      if (where.secretField) return { action: "allow", reason: "Nothing is typed: the tool refuses password and code fields and asks the user to sign in." };
       const site = where.site ?? (gi.scope?.startsWith("site:") ? gi.scope.slice(5) : undefined);
       const app = where.app;
       const s = d.settings();

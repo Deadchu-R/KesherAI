@@ -15,6 +15,7 @@ import type {
   TeamRole,
   ToolSpec,
   QueuedMessage,
+  SignInInfo,
 } from "@kesher/shared";
 import { takeSteers } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
@@ -226,6 +227,8 @@ const toolOutputSpec: ToolSpec = {
  * while the conversation is this short (characters), since the small model reads it all without a warm cache.
  */
 const SMALL_TURN_CHARS = 16_000;
+/** How long a "Sign in needed" card waits for the user before the browser step gives up (10 minutes). */
+const SIGN_IN_WAIT_MS = 10 * 60_000;
 
 /** The tool that loads the others when tool search is on (the per-turn cap's overflow is listed in it too). */
 export const FIND_TOOLS_TOOL = "more_tools";
@@ -655,6 +658,37 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.questions.delete(questionId);
     resolve(text);
     return true;
+  }
+
+  /**
+   * Shows a "Sign in needed" card (a `question` of kind `signin`) and waits for Continue or Cancel; the card closes
+   * by itself as `continue:auto` when `watch` sees the page move on, and as `(timed out)` after 10 minutes.
+   *
+   * @param question - The card's line (notifications, the log).
+   * @param signIn - The check, the site and the browser.
+   * @param signal - The tool call's abort (Stop).
+   * @param watch - Optional: resolves `true` when the user finished signing in.
+   * @returns The answer: `continue`, `continue:auto`, `cancel` or a note in brackets.
+   */
+  private async handOver(question: string, signIn: SignInInfo, signal: AbortSignal, watch?: (s: AbortSignal) => Promise<boolean>): Promise<string> {
+    const questionId = randomUUID();
+    const watching = new AbortController();
+    const onAbort = () => this.answer(questionId, "(The user pressed Stop.)");
+    const timer = setTimeout(() => this.answer(questionId, "(timed out)"), SIGN_IN_WAIT_MS);
+    const answer = await new Promise<string>((resolve) => {
+      this.questions.set(questionId, resolve);
+      this.push({ type: "question", questionId, question, kind: "signin", signIn });
+      this.setStatus("waiting");
+      if (signal.aborted) return onAbort();
+      signal.addEventListener("abort", onAbort, { once: true });
+      watch?.(watching.signal).then((done) => done && this.answer(questionId, "continue:auto"), () => undefined);
+    });
+    clearTimeout(timer);
+    watching.abort();
+    signal.removeEventListener("abort", onAbort);
+    this.push({ type: "answer", questionId, text: answer });
+    if (!signal.aborted) this.setStatus("running");
+    return answer;
   }
 
   /** Stops the current work: aborts the model and the running tool, denies open requests. */
@@ -1761,6 +1795,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       ...(this.envOf ? { env: this.envOf() } : {}),
       ...(this.webOf?.() ? { web: this.webOf()! } : {}),
       ...(this.torOf?.() ? { viaTor: this.torOf()! } : {}),
+      ...(this.unattended ? {} : { handOver: (question: string, info: SignInInfo, watch?: (s: AbortSignal) => Promise<boolean>) => this.handOver(question, info, signal, watch) }),
     };
     // A scoped tool (the browser) is "always allowed" per site, not as a whole.
     let scope: string | undefined;

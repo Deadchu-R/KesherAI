@@ -238,3 +238,40 @@ test("browser bridge: inspect, emulate, Try my change and record are tools; the 
   assert.deepEqual(out.assetIds, ["a1", "a2"]);
   await assert.rejects(tools.browser_emulate!.run({}, ctx), /Give device/);
 });
+
+test("browser bridge: a sign-in page shows the card, Continue reads it again; typing into a password field is refused", async () => {
+  const b = new BrowserBridge();
+  const sent: string[] = [];
+  let signedIn = false;
+  const login = { url: "https://accounts.example.com/signin", title: "Sign in", text: "Sign in", elements: ['1: textbox "Email"', '2: textbox "Password"'] };
+  const inbox = { url: "https://mail.example.com/inbox", title: "Inbox", text: "3 new", elements: ['1: button "Compose"'] };
+  b.attach(
+    fakeSocket((m) => {
+      sent.push(m.action);
+      if (m.action === "tabs") return [{ id: 7, title: "x", url: signedIn ? inbox.url : login.url, active: true }];
+      return signedIn ? inbox : login;
+    }),
+    { browser: "Chrome" },
+  );
+  const tools = Object.fromEntries(browserTools(b).map((t) => [t.spec.name, t]));
+  const cards: unknown[] = [];
+  const ctx = {
+    signal: new AbortController().signal,
+    handOver: async (_q: string, info: unknown) => {
+      cards.push(info);
+      signedIn = true;
+      return "continue";
+    },
+  } as never;
+  const out = await tools.browser_read!.run({}, ctx);
+  assert.deepEqual(cards, [{ wall: "login", site: "accounts.example.com", browser: "chrome" }]);
+  assert.match(out.output, /The user finished signing in[\s\S]*Compose/);
+
+  // Back on the sign-in page: the model's typing into "Password" never reaches the browser.
+  signedIn = false;
+  await tools.browser_read!.run({}, { signal: new AbortController().signal } as never);
+  sent.length = 0;
+  const refused = await tools.browser_type!.run({ ref: "2", text: "hunter2" }, { signal: new AbortController().signal } as never);
+  assert.equal(sent.includes("type"), false);
+  assert.match(refused.output, /never types passwords[\s\S]*SIGN-IN NEEDED: accounts\.example\.com/);
+});

@@ -1,0 +1,149 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-27T10:00:00Z",
+ "boards": [
+  {
+   "id": "ChatSignInCard",
+   "title": "צ'אט: צריך להתחבר — הדפדפן הגיע לדף כניסה; KesherAI לא מקליד סיסמה. התחבר במחשב, ואז המשך / ביטול (גם בטלפון)",
+   "titleEn": "Chat: Sign in needed — the browser reached a sign-in page; KesherAI never types the password. Sign in on the PC, then Continue / Cancel (phone too)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 800,
+    "phone": 1100
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "חשבונית במייל",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "waiting",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [
+        "q-signin"
+       ],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "user",
+        "text": "תיכנס לחשבון המייל שלי ותבדוק אם הגיעה החשבונית מהחנות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "170s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "b1",
+        "name": "browser_open",
+        "input": {
+         "url": "https://mail.example.com"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "164s"
+        },
+        "type": "tool_result",
+        "callId": "b1",
+        "name": "browser_open",
+        "ok": true,
+        "output": "Sign in - Mail\nhttps://accounts.example.com/signin\n\n- textbox \"Email\" [ref=e1]\n- textbox \"Password\" [ref=e2]"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "20s"
+        },
+        "type": "question",
+        "questionId": "q-signin",
+        "question": "Sign in to accounts.example.com on the PC, then press Continue.",
+        "kind": "signin",
+        "signIn": {
+         "wall": "login",
+         "site": "accounts.example.com",
+         "browser": "pane"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    },
+    {
+     "url": "**/api/assets/shot-1*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720'><rect width='1280' height='720' fill='#f4f5f8'/><rect width='1280' height='64' fill='#2b2f3a'/><rect x='24' y='16' width='620' height='32' rx='16' fill='#454b5a'/><text x='44' y='39' font-size='18' fill='#cfd3dc' font-family='sans-serif'>shop.example/headphones/aurora-x2</text><rect x='80' y='120' width='520' height='360' rx='12' fill='#dfe3ea'/><rect x='660' y='130' width='480' height='36' rx='6' fill='#c9ced8'/><rect x='660' y='190' width='380' height='24' rx='6' fill='#d6dae2'/><rect x='660' y='400' width='260' height='64' rx='10' fill='#2d6cdf'/><text x='790' y='441' font-size='24' text-anchor='middle' fill='#fff' font-family='sans-serif'>Add to cart</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/shot-2*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720'><rect width='1280' height='720' fill='#f4f5f8'/><rect width='1280' height='64' fill='#2b2f3a'/><rect x='24' y='16' width='620' height='32' rx='16' fill='#454b5a'/><text x='44' y='39' font-size='18' fill='#cfd3dc' font-family='sans-serif'>shop.example/cart</text><rect x='80' y='120' width='520' height='360' rx='12' fill='#dfe3ea'/><rect x='660' y='130' width='480' height='36' rx='6' fill='#c9ced8'/><rect x='660' y='190' width='380' height='24' rx='6' fill='#d6dae2'/><rect x='660' y='400' width='260' height='64' rx='10' fill='#1f9d55'/><text x='790' y='441' font-size='24' text-anchor='middle' fill='#fff' font-family='sans-serif'>Add to cart</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/shot-3*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720'><rect width='1280' height='720' fill='#f4f5f8'/><rect width='1280' height='64' fill='#2b2f3a'/><rect x='24' y='16' width='620' height='32' rx='16' fill='#454b5a'/><text x='44' y='39' font-size='18' fill='#cfd3dc' font-family='sans-serif'>shop.example/cart</text><rect x='80' y='120' width='520' height='360' rx='12' fill='#dfe3ea'/><rect x='660' y='130' width='480' height='36' rx='6' fill='#c9ced8'/><rect x='660' y='190' width='380' height='24' rx='6' fill='#d6dae2'/><rect x='660' y='400' width='260' height='64' rx='10' fill='#1f9d55'/><text x='790' y='441' font-size='24' text-anchor='middle' fill='#fff' font-family='sans-serif'>Add to cart</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".card.signin"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".card.signin"
+    }
+   ]
+  }
+ ]
+}

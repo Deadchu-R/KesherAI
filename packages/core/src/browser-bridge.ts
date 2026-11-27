@@ -5,6 +5,7 @@ import { ControlLog } from "./control-policy.js";
 import { withControlInfo } from "./control-gate.js";
 import { CdpPage, type CdpTransport } from "./cdp.js";
 import { cdpBrowserTools, isCdpRef, snapshotText } from "./browser-cdp-tools.js";
+import { resolveSignIn, SecretFieldError, secretFieldKind } from "./browser-signin.js";
 import { ExtensionCdp, extensionHasCdp } from "./browser-ext-cdp.js";
 import { browserFindTool, matchSnapshot } from "./vision-find-tools.js";
 import type { Grounding } from "./vision-service.js";
@@ -452,6 +453,9 @@ export class BrowserBridge {
 }
 
 /** A page as the pane or the extension reads it. */
+/** Browser tools whose result is the page: a sign-in, code or robot check there shows the sign-in card. */
+const PAGE_TOOLS = new Set(["browser_read", "browser_open", "browser_click", "browser_type", "browser_snapshot", "browser_hover", "browser_select", "browser_press_key", "browser_click_at", "browser_wait", "browser_navigate"]);
+
 interface PageRead {
   url: string;
   title: string;
@@ -639,11 +643,14 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       risk: "exec",
       spec: {
         name: "browser_type",
-        description: "Type text into a field on a page by its ref (from browser_snapshot or browser_read), replacing what is in it; submit: true presses Enter. Never for passwords or card numbers: ask the user to type those.",
+        description: "Type text into a field on a page by its ref (from browser_snapshot or browser_read), replacing what is in it; submit: true presses Enter. Never for passwords, codes or card numbers: a sign-in or code page shows the user a \"Sign in needed\" card and the step waits for them.",
         inputSchema: { type: "object", properties: { ref: { type: "string", description: "e12 from browser_snapshot, or a number from browser_read." }, text: { type: "string" }, submit: { type: "boolean" }, ...tabArg }, required: ["ref", "text"] },
       },
       preview: async (input, ctx) => `Type "${String(input.text).slice(0, 200)}" into ${await labelOf(input, ctx.signal)}${await onSite(input, ctx.signal)}${input.submit ? " and press Enter" : ""}`,
       async run(input, ctx) {
+        // A password or code field: nothing is typed, the sign-in card takes over (signInChecked below).
+        const secret = secretFieldKind(await labelOf(input, ctx.signal));
+        if (secret) throw new SecretFieldError(secret);
         if (viaCdp(input)) return { output: await b.withCdp(input, async (p) => (await p.type(String(input.ref), String(input.text ?? ""), !!input.submit), snapshotText(p)), ctx.signal) };
         return { output: pageText(await b.call("type", { ref: Number(input.ref), text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
       },
@@ -665,6 +672,45 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
         around: async (input, x, y, signal) => (await b.withCdp(input, (p) => p.screenshot({ area: { x: x - 120, y: y - 75, width: 240, height: 150 } }), signal)).data,
       }),
     );
+  /** The tab's address now (the sign-in card's auto-continue watch). */
+  const tabUrl = async (input: Record<string, unknown>) => {
+    const tabs = await b.call<BrowserTab[]>("tabs", { browser: input.browser });
+    return (typeof input.tabId === "number" ? tabs.find((x) => x.id === input.tabId) : tabs.find((x) => x.active))?.url;
+  };
+  /**
+   * Sign-in hand-off (browser-signin.ts): after a step that returns the page, a password, code or robot-check page
+   * shows the chat's "Sign in needed" card instead of going on; browser_type into such a field is refused the same way.
+   */
+  const signInChecked = (t: AgentTool): AgentTool =>
+    !PAGE_TOOLS.has(t.spec.name)
+      ? t
+      : {
+          ...t,
+          run: async (input, ctx) => {
+            let out: Awaited<ReturnType<AgentTool["run"]>>;
+            let forced: SecretFieldError["wall"] | undefined;
+            try {
+              out = await t.run(input, ctx);
+            } catch (e) {
+              if (!(e instanceof SecretFieldError)) throw e;
+              forced = e.wall;
+              out = { output: e.message };
+            }
+            const cdp = b.canCdp(input);
+            const output = await resolveSignIn(
+              out.output,
+              {
+                markers: () => (cdp ? b.withCdp(input, (p) => p.signInMarkers(), ctx.signal) : Promise.resolve(undefined)),
+                reread: async () => (cdp ? b.withCdp(input, (p) => snapshotText(p), ctx.signal) : pageText(await b.call("read", { tabId: input.tabId, browser: input.browser }, ctx.signal), input)),
+                url: () => tabUrl(input),
+                handOver: ctx.handOver?.bind(ctx),
+                browser: target(input),
+              },
+              forced,
+            );
+            return { ...out, output };
+          },
+        };
   /** Where a call acts, for safety v2's gate and approval card v2: the site, the element and a picture of it. */
   const where = async (input: Record<string, unknown>, ctx: { signal: AbortSignal }) => {
     let url = typeof input.url === "string" ? input.url : undefined;
@@ -674,10 +720,13 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     }
     const site = url ? hostOf(url) : undefined;
     const ref = input.ref !== undefined ? String(input.ref) : "";
+    const label = ref ? await labelOf(input, ctx.signal) : undefined;
     return {
       ...(site ? { site } : {}),
       ...(url ? { url } : {}),
-      ...(ref ? { target: await labelOf(input, ctx.signal) } : {}),
+      ...(label ? { target: label } : {}),
+      // Typing into a password or code field is refused inside the tool (the sign-in card): no approval card first.
+      ...(typeof input.text === "string" && secretFieldKind(label) ? { secretField: true } : {}),
       ...(typeof input.text === "string" ? { typedChars: input.text.length } : {}),
       // The element's own picture over CDP (a snapshot ref): only made when a card is shown; at most 1.5 MB.
       ...(ref && viaCdp(input)
@@ -688,5 +737,5 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
           : {}),
     };
   };
-  return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(t)), where));
+  return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(signInChecked(t))), where));
 }

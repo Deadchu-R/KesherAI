@@ -15,6 +15,7 @@
  * Everything here talks CDP only, so it is tested with a fake transport and with a real Chromium.
  */
 import { redactBody, redactHeaders, redactUrl } from "./browser-safety.js";
+import { SecretFieldError, SIGN_IN_PROBE, type SignInMarkers } from "./browser-signin.js";
 
 /** A CDP connection to one page: commands, and every event. */
 export interface CdpTransport {
@@ -475,8 +476,11 @@ export class CdpPage {
     await this.onNode(ref, async (id) => {
       const { attrs } = await this.attributes(id);
       const auto = (attrs.autocomplete ?? "").toLowerCase();
-      if (attrs.type?.toLowerCase() === "password" || /^cc-|one-time-code|current-password|new-password/.test(auto) || /card.?num|cvv|cvc|security.?code/i.test(`${attrs.name ?? ""} ${attrs.id ?? ""}`))
-        throw new Error("This is a password, card or code field: KesherAI never types there. Ask the user to type it themselves.");
+      // Passwords and codes: the sign-in card takes over (browser-signin.ts). Card fields: refused.
+      if (attrs.type?.toLowerCase() === "password" || /current-password|new-password/.test(auto)) throw new SecretFieldError("login");
+      if (/one-time-code/.test(auto)) throw new SecretFieldError("code");
+      if (/^cc-/.test(auto) || /card.?num|cvv|cvc|security.?code/i.test(`${attrs.name ?? ""} ${attrs.id ?? ""}`))
+        throw new Error("This is a card or security-code field: KesherAI never types there. Ask the user to type it themselves.");
       await this.t.send("DOM.focus", { backendNodeId: id }).catch(() => undefined);
       // Select what is there, so the typing replaces it.
       await this.callOn(id, "function () { this.focus(); if (typeof this.select === 'function') this.select(); else if (this.isContentEditable) { const r = document.createRange(); r.selectNodeContents(this); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } }");
@@ -619,6 +623,19 @@ export class CdpPage {
     await this.t.send("Page.handleJavaScriptDialog", { accept, ...(text !== undefined ? { promptText: text } : {}) });
     this.dialog = undefined;
     return `${accept ? "Accepted" : "Dismissed"} the ${d.type} "${d.message.slice(0, 200)}".`;
+  }
+
+  /**
+   * Whether the page shows a password field, a one-time-code field or a robot check (for the sign-in card). Reads
+   * element types only, never values; no user gesture.
+   *
+   * @returns The markers, or `undefined` while a pop-up blocks the page or the read fails.
+   */
+  async signInMarkers(): Promise<SignInMarkers | undefined> {
+    if (this.dialog) return undefined;
+    const r = (await this.t.send("Runtime.evaluate", { expression: SIGN_IN_PROBE, returnByValue: true, timeout: 3000 }).catch(() => undefined)) as { result?: { value?: unknown } } | undefined;
+    const v = r?.result?.value as Partial<SignInMarkers> | undefined;
+    return v && typeof v === "object" ? { password: v.password === true, otp: v.otp === true, captcha: v.captcha === true } : undefined;
   }
 
   /**
