@@ -111,6 +111,8 @@ export function ControlLive() {
   const setMode = (mode: "manual" | "auto") => run(() => api<{ mode: LiveState["mode"] }>("/api/control/settings", { method: "PUT", body: { mode } }).then((r) => setSt((s) => (s ? { ...s, mode: r.mode } : s))));
   const setPause = (on: boolean) => run(() => api<{ paused: boolean }>("/api/control/pause", { method: "POST", body: { on } }).then((r) => setSt((s) => (s ? { ...s, paused: r.paused } : s))));
 
+  const giveBack = () => run(() => api<{ takenOver: boolean }>("/api/browser/takeover", { method: "POST", body: { on: false } }).then((r) => setSt((s) => (s ? { ...s, takenOver: r.takenOver } : s))));
+
   if (!st) return <section className="stack">{error ? <p className="error small">{error}</p> : <p className="muted">{L("טוען…", "Loading…")}</p>}</section>;
   const sources = liveSources(st);
   return (
@@ -139,6 +141,14 @@ export function ControlLive() {
             ? L("אוטומטי: בודק מקומי מאשר פעולות רגילות, והשאר מגיע אליך.", "Auto: a local reviewer lets ordinary actions run; the rest come to you.")
             : L("ידני: כל פעולה מחכה לאישור שלך.", "Manual: every action waits for your yes.")}
       </p>
+
+      {st.takenOver && (
+        <p className="cl-now on taken" role="status" dir="auto">
+          <span className="cl-k">✋ {L("השתלטתם", "You took over")}</span>{" "}
+          {L("המודל מחכה בזמן שאתם עובדים בדפדפן. כשתסיימו, החזירו לו.", "The model is waiting while you work in the browser. When you are done, give it back.")}{" "}
+          <button type="button" className="primary" disabled={busy} onClick={() => void giveBack()}>↩ {L("החזרה למודל", "Give back")}</button>
+        </p>
+      )}
 
       <p className={`cl-now${active ? " on" : ""}${st.paused ? " paused" : ""}`} role="status" dir="auto">
         <span className="cl-k">{st.paused ? L("מושהה", "Paused") : active ? L("עכשיו", "Now") : L("אחרון", "Last")}</span>{" "}

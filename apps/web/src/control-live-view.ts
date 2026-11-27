@@ -9,6 +9,8 @@ export type LiveSource = "pane" | "chrome" | "computer";
 /** What the live view reads from `/api/control/live` (routes/browser.ts). */
 export interface LiveState {
   paused: boolean;
+  /** The user has taken over KesherAI's browser pane; the model waits for "Give back". */
+  takenOver?: boolean;
   mode: "manual" | "auto" | "skip";
   skipAllowed: boolean;
   browser: { active: boolean; pane: boolean; chrome?: string };

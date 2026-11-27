@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AgentTool } from "@kesher/agent";
+import type { AgentTool, ToolContext } from "@kesher/agent";
+import { chooseBrowser, type PreferredBrowser } from "./browser-choice.js";
 import { BrowserLog, hostOf, PAUSED_MESSAGE, redactUrl, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
 import { ControlLog } from "./control-policy.js";
 import { withControlInfo } from "./control-gate.js";
@@ -71,6 +72,8 @@ export class BrowserBridge {
    */
   stop(): void {
     this.stoppedAt = Date.now();
+    this.takenAt = 0;
+    for (const g of [...this.givers]) g();
     for (const c of this.running) c.abort();
     this.running.clear();
     // The user's Chrome: let go of every tab, so Chrome's "debugging" bar goes away too.
@@ -97,16 +100,57 @@ export class BrowserBridge {
     this.log.add({ tool: on ? "pause" : "resume", ok: true, note: on ? "Paused by the user" : "Resumed by the user" });
   }
 
+  /** Since when the user has taken over KesherAI's browser pane (0: not), and who waits for them to give it back. */
+  private takenAt = 0;
+  private givers = new Set<() => void>();
+  /** The user's setting: which browser the tools use when the model does not say (Settings → Browser and computer). */
+  preferred: () => PreferredBrowser = () => "auto";
+
+  /**
+   * Take over (the pane's button): the model's next browser command waits while the user clicks and types
+   * themselves, until {@link giveBack}. The chat is not ended; it just waits.
+   *
+   * @param on - Take over, or give back.
+   */
+  setTakeOver(on: boolean): void {
+    if (on === this.takenOver()) return;
+    this.takenAt = on ? Date.now() : 0;
+    this.log.add({ tool: on ? "takeover" : "giveback", ok: true, note: on ? "The user took over" : "The user gave back" });
+    if (!on) for (const g of [...this.givers]) g();
+  }
+
+  /** @returns Whether the user has taken over the pane now. */
+  takenOver(): boolean {
+    return this.takenAt > 0;
+  }
+
+  /**
+   * Waits while the user has the pane (resolves at once when they do not).
+   *
+   * @param signal - Abort to stop waiting (the chat's Stop).
+   * @returns `true` when it had to wait, so the caller gives the model a fresh look instead of running a stale command.
+   */
+  async waitForGiveBack(signal?: AbortSignal): Promise<boolean> {
+    if (!this.takenOver()) return false;
+    await new Promise<void>((resolve, reject) => {
+      const done = () => { this.givers.delete(done); signal?.removeEventListener("abort", stop); resolve(); };
+      const stop = () => { this.givers.delete(done); reject(new Error("Stopped.")); };
+      this.givers.add(done);
+      signal?.addEventListener("abort", stop, { once: true });
+    });
+    return true;
+  }
+
   /** @returns Whether browser and computer control are paused. */
   paused(): boolean {
     return this.pausedAt > 0;
   }
 
   /** @returns Whether the browser tools acted in the last 15 seconds, and the last actions. */
-  activity(n = 30): { active: boolean; stoppedAt: number; log: ReturnType<BrowserLog["last"]> } {
+  activity(n = 30): { active: boolean; stoppedAt: number; takenOver: boolean; log: ReturnType<BrowserLog["last"]> } {
     // Calls ended by a Stop are logged just after it; they are not activity.
     const last = this.log.lastAt();
-    return { active: Date.now() - last < 15_000 && last - this.stoppedAt > 2000, stoppedAt: this.stoppedAt, log: this.log.last(n) };
+    return { active: Date.now() - last < 15_000 && last - this.stoppedAt > 2000, stoppedAt: this.stoppedAt, takenOver: this.takenOver(), log: this.log.last(n) };
   }
 
   /** @throws Error while a Stop is fresh (10 seconds). */
@@ -492,7 +536,7 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
   const cdpAny = b.status().pane || b.status().extensionCdp;
   const tabArg = {
     tabId: { type: "number", description: "The tab's id from browser_tabs. Leave out for the tab in front." },
-    ...(both ? { browser: { type: "string", enum: ["pane", "chrome"], description: "pane (default): KesherAI's own browser, which the user watches. chrome: the user's own browser, for sites where they are signed in." } } : {}),
+    ...(both ? { browser: { type: "string", enum: ["pane", "chrome"], description: "pane: KesherAI's own browser, which the user watches. chrome: the user's own browser, for sites where they are signed in. Leave out to use the user's setting." } } : {}),
   };
   /** Which browser a call goes to: the pane unless the user's own was asked for (and is there). */
   const target = (input: Record<string, unknown>) => b.cdpTarget(input);
@@ -551,7 +595,16 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
   const logged = (t: AgentTool): AgentTool => ({
     ...t,
     ...(ALWAYS_ASK[t.spec.name] ? { askFirst: () => ALWAYS_ASK[t.spec.name] } : {}),
-    run: async (input, ctx) => {
+    run: async (input0, ctx) => {
+      // The user has the pane: wait, then give the model a fresh look instead of a command that may be stale.
+      if (await b.waitForGiveBack(ctx.signal)) return gaveBack(ctx);
+      // Which browser, when the model did not say: the user's setting, what is connected, what they named.
+      let input = input0;
+      if (both && input0.browser === undefined) {
+        const c = chooseBrowser({ preferred: b.preferred(), pane: b.status().pane, chrome: b.status().extension, lastUser: ctx.lastUser });
+        if ("ask" in c) throw new Error(c.ask);
+        input = { ...input0, browser: c.browser };
+      }
       const what = input.url ? String(input.url) : input.ref !== undefined ? await labelOf(input, ctx.signal) : undefined;
       try {
         const out = await t.run(input, ctx);
@@ -564,6 +617,13 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       }
     },
   });
+  /** What a command gets back when the user took over and gave back: where they are now, and a fresh snapshot. */
+  const gaveBack = async (ctx: ToolContext) => {
+    const tabs = await b.call<BrowserTab[]>("tabs", { browser: "pane" }, ctx.signal).catch(() => [] as BrowserTab[]);
+    const url = (tabs.find((x) => x.active) ?? tabs[0])?.url ?? "";
+    const look = await b.call<PageRead>("read", { browser: "pane" }, ctx.signal).then((r) => pageText(r, { browser: "pane" }), () => "");
+    return { output: `[KesherAI] The user took over and gave back: ${url}\nYour last command did not run: look at the page below and go on from here.\n${look}` };
+  };
   const tools: AgentTool[] = [
     {
       risk: "read",

@@ -6,6 +6,7 @@ import "../control-card.css";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface ControlSettings {
+  browserPreferred?: "pane" | "chrome" | "auto";
   mode: "manual" | "auto" | "skip";
   helperMode: "manual" | "auto";
   skipAllowed: boolean;
@@ -66,6 +67,19 @@ export function ControlSafetySection() {
         "איך מאשרים פעולות של המודל בדפדפן ובמחשב. בכל מצב: אתרים רגישים (בנקים, תשלומים, דואר, הגדרות חשבון, אתרים ממשלתיים) שואלים על כל פעולה, סיסמאות לא מוקלדות אף פעם, וכרטיס שלא נענה 5 דקות נחשב כדחייה.",
         "How the model's actions in the browser and on the computer are approved. In every mode: sensitive sites (banks, payments, email, account settings, government) ask before every action, passwords are never typed, and a card unanswered for 5 minutes counts as denied.",
       )}</p>
+
+      <h3>{L("איזה דפדפן", "Which browser")}</h3>
+      <Radios
+        name="cs-browser"
+        value={s.browserPreferred ?? "auto"}
+        choices={[
+          ["auto", L("אוטומטי (ברירת מחדל)", "Automatic (default)"), L("הדפדפן של KesherAI, אלא אם המשימה צריכה את ההתחברות שלך (\"בחשבון שלי\", Gmail, Drive, אתר שאתה מחובר אליו): אז Chrome שלך.", "KesherAI's browser, unless the task needs your own sign-in (\"my account\", Gmail, Drive, a site you are signed in to): then your Chrome.")],
+          ["pane", L("הדפדפן של KesherAI", "KesherAI's browser"), L("החלון המובנה, עם התחברויות נפרדות משלך. אתה רואה אותו ויכול להשתלט עליו.", "The built-in pane, with sign-ins separate from yours. You watch it and can take over.")],
+          ["chrome", L("ה-Chrome שלך", "Your Chrome"), L("דרך התוסף, עם ההתחברויות שלך. אם לא מחובר, משתמשים בדפדפן של KesherAI.", "Through the extension, with your sign-ins. If it is not connected, KesherAI's browser is used.")],
+        ]}
+        onPick={(browserPreferred) => save({ browserPreferred })}
+      />
+      <p className="muted small" dir="auto">{L("אם ביקשת בהודעה דפדפן מסוים והוא לא זמין, המודל ישאל אותך במקום להחליף.", "If you name a browser in your message and it is not available, the model asks you instead of switching.")}</p>
 
       <h3>{L("בצ'אט", "In the chat")}</h3>
       <Radios

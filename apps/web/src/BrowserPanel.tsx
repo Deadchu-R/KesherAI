@@ -105,11 +105,11 @@ export function BrowserPanel() {
   const ticks = useRef(0);
   const active = st.tabs.find((t) => t.active);
   // The model's actions here (the "doing now" strip, its log and the one Stop), read every 2 seconds.
-  const [act, setAct] = useState<{ active: boolean; log: BrowserAction[] }>({ active: false, log: [] });
+  const [act, setAct] = useState<{ active: boolean; takenOver?: boolean; log: BrowserAction[] }>({ active: false, log: [] });
   const [logOpen, setLogOpen] = useState(false);
   useEffect(() => {
     let stop = false;
-    const read = () => void api<{ active: boolean; log: BrowserAction[] }>("/api/browser/activity").then((a) => !stop && setAct(a), () => undefined);
+    const read = () => void api<{ active: boolean; takenOver?: boolean; log: BrowserAction[] }>("/api/browser/activity").then((a) => !stop && setAct(a), () => undefined);
     read();
     const tm = setInterval(() => !document.hidden && read(), 2000);
     return () => {
@@ -118,6 +118,8 @@ export function BrowserPanel() {
     };
   }, []);
   const lastAct = act.log.at(-1);
+  /** Take over the pane (the model waits) or give it back (the model gets a fresh look and goes on). */
+  const takeOver = (on: boolean) => void api("/api/browser/takeover", { method: "POST", body: { on } }).then(() => setAct((a) => ({ ...a, takenOver: on })), (e: Error) => setError(e.message));
   const stopModel = () => void api("/api/browser/stop", { method: "POST" }).then(() => setAct((a) => ({ ...a, active: false })), (e: Error) => setError(e.message));
 
   // The tabs: pushed by the app on the computer, read every 2 seconds elsewhere.
@@ -254,15 +256,21 @@ export function BrowserPanel() {
           {st.notice} <button type="button" className="link" onClick={() => void cmd("dismiss")}>{L("הבנתי", "OK")}</button>
         </p>
       )}
-      {(act.active || logOpen) && lastAct && (
-        <div className={`browser-activity${act.active ? " on" : ""}`} role="status">
+      {(act.active || logOpen || act.takenOver) && lastAct && (
+        <div className={`browser-activity${act.active || act.takenOver ? " on" : ""}${act.takenOver ? " taken" : ""}`} role="status">
           <span className="grow" dir="auto">
+            {act.takenOver ? `✋ ${L("אתם שולטים בדפדפן. המודל מחכה.", "You have the browser. The model is waiting.")}` : <>
             {act.active ? "🤖 " : ""}
             {actionWord(lastAct.tool)}
             {lastAct.target ? `: ${lastAct.target}` : ""}
-            {lastAct.site ? ` · ${lastAct.site}` : ""}
+            {lastAct.site ? ` · ${lastAct.site}` : ""}</>}
           </span>
-          {act.active && (
+          {act.takenOver ? (
+            <button type="button" className="primary" onClick={() => takeOver(false)} title={L("המודל מקבל תמונה עדכנית של הדף וממשיך", "The model gets a fresh look at the page and goes on")}>↩ {L("החזרה למודל", "Give back")}</button>
+          ) : act.active && (
+            <button type="button" onClick={() => takeOver(true)} title={L("עוצר את המודל כדי שתלחצו ותקלידו בעצמכם", "Pauses the model so you can click and type yourself")}>✋ {L("השתלטות", "Take over")}</button>
+          )}
+          {act.active && !act.takenOver && (
             <button type="button" className="danger" onClick={stopModel} title={L("עוצר את כל מה שהמודל וסוכני העזר עושים בדפדפן (גם Ctrl+Alt+Esc)", "Stops everything the model and its helpers do in the browser (also Ctrl+Alt+Esc)")}>
               ⏹ {L("עצור", "Stop")}
             </button>

@@ -174,6 +174,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Stops conversations through a late-bound reference: the manager is created below.
   let stopConversation: (id: string) => void = () => undefined;
   const browser = new BrowserBridge();
+  browser.preferred = () => config.browserPreferred;
   const controlWatchers = new ControlWatchers();
   // One Stop for the browser and the computer: either button (or Ctrl+Alt+Esc) ends both.
   const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)), undefined, {

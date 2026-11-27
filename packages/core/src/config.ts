@@ -651,6 +651,8 @@ export const KesherConfigSchema = z.object({
    * (manual: ask each action; auto: a local reviewer first; skip: no asking, only with `controlSkipAllowed`), the
    * helpers' mode (never skip), the JavaScript policy, the user's sensitive sites (always asked) and blocked sites.
    */
+  /** Which browser the tools use when the model does not say: KesherAI's pane, the user's Chrome, or by task (browser-choice.ts). */
+  browserPreferred: z.enum(["pane", "chrome", "auto"]).default("auto"),
   controlMode: z.enum(["manual", "auto", "skip"]).default("manual"),
   controlHelperMode: z.enum(["manual", "auto"]).default("manual"),
   /** The owner's explicit yes for Skip mode, given after a warning; without it Skip works as Manual. */

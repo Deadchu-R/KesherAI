@@ -109,15 +109,18 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     sensitive: s.config.controlSensitive ?? [],
     blocked: s.config.controlBlocked ?? [],
     helperAlways: s.config.browserHelperAlways === true,
+    browserPreferred: s.config.browserPreferred,
   });
   app.get("/api/control/settings", async () => controlSettings());
-  app.put<{ Body: { mode?: string; helperMode?: string; skipAllowed?: boolean; js?: string; sensitive?: unknown; blocked?: unknown } }>("/api/control/settings", async (req, reply) => {
+  app.put<{ Body: { browserPreferred?: string; mode?: string; helperMode?: string; skipAllowed?: boolean; js?: string; sensitive?: unknown; blocked?: unknown } }>("/api/control/settings", async (req, reply) => {
     const b = req.body ?? {};
     const sites = (v: unknown) =>
       Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]!).filter((x) => /^[a-z0-9.*:-]{1,253}$/.test(x)))].slice(0, 200) : undefined;
     if (b.mode !== undefined && !["manual", "auto", "skip"].includes(b.mode)) return reply.code(400).send({ error: "mode is manual, auto or skip" });
     if (b.helperMode !== undefined && !["manual", "auto"].includes(b.helperMode)) return reply.code(400).send({ error: "helperMode is manual or auto" });
     if (b.js !== undefined && !["ask", "local", "off"].includes(b.js)) return reply.code(400).send({ error: "js is ask, local or off" });
+    if (b.browserPreferred !== undefined && !["pane", "chrome", "auto"].includes(b.browserPreferred)) return reply.code(400).send({ error: "browserPreferred is pane, chrome or auto" });
+    if (b.browserPreferred) s.config.browserPreferred = b.browserPreferred as "pane" | "chrome" | "auto";
     if (typeof b.skipAllowed === "boolean") s.config.controlSkipAllowed = b.skipAllowed;
     // Skip only after the owner's yes: asking for it without that yes is refused, not silently kept.
     if (b.mode === "skip" && !s.config.controlSkipAllowed) return reply.code(400).send({ error: "Turn on 'Allow Skip' first (it shows the warning)." });
@@ -151,6 +154,7 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     const st = s.browser.status();
     return {
       paused: s.browser.paused(),
+      takenOver: s.browser.takenOver(),
       mode: s.config.controlMode,
       skipAllowed: s.config.controlSkipAllowed === true,
       browser: { active: b.active, pane: st.pane, chrome: s.browser.chromeDriving() },
@@ -178,6 +182,12 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "Send { on: true | false }" });
     s.browser.setPaused(req.body.on);
     return { paused: s.browser.paused() };
+  });
+  /** Take over KesherAI's browser pane (`{ on: true }`): the model waits while the user works; `{ on: false }` gives it back. */
+  app.post<{ Body: { on?: boolean } }>("/api/browser/takeover", async (req, reply) => {
+    if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "Send { on: true | false }" });
+    s.browser.setTakeOver(req.body.on);
+    return { takenOver: s.browser.takenOver() };
   });
   /** A picture of the user's Chrome tab KesherAI drives now (only an attached tab), for the live view. */
   app.get<{ Querystring: { w?: string } }>("/api/browser/chrome/shot", async (req, reply) => {

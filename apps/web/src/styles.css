@@ -2415,6 +2415,7 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 /* The model's browser actions: the "doing now" strip with Stop, and its log (wraps on a 390 px phone, never cut). */
 .browser-activity { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; background: var(--panel-2, rgba(127,127,127,.12)); font-size: .85em; }
 .browser-activity.on { outline: 1px solid var(--accent, #4a8); }
+.browser-activity.taken { outline-color: var(--warn, #d9a21b); }
 .browser-activity .grow { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
 .browser-log { margin: 0; padding-inline-start: 18px; max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
 .browser-log-open { align-self: flex-start; }
