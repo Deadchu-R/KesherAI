@@ -523,3 +523,14 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
 - Antigravity line set to Claude: r-20261123-09, -08 Opus 4.6; -11, r-20261122-40 Sonnet 4.6; -12 Sonnet (may not have saved). Antigravity quota at 19:12: Gemini 99%/100%, Claude+GPT 70% (5h) / 44% (weekly).
 - ⬜ When the PC is back: version, the model button, the line runs on Claude, agQuota or agQuotaWhy shown.
 - ⬜ GPT-OSS 120B refused by setModel ("Antigravity does not offer that model") although listed: check pickableModels / saved.models.
+
+## Idea: travel skill — flights and stays, local and private (Roee, 27.11)
+Like Skyscanner, but on the PC and private ("like incognito"): the sites should not learn who searches, so prices do not climb.
+- ⬜ Research first (Gemini, with a "Language and weight" part): how Skyscanner, Google Flights, Kayak, Hopper, Kiwi search and show results; which open sources / APIs / scraping are allowed (Amadeus self-service, Kiwi Tequila, Duffel, fast-flights, SerpAPI, Booking/Hostelworld/Airbnb affiliate APIs); terms; how to stay private (no login, fresh browser profile, no cookies, no tracking; whether price tracking by cookies is real).
+- ⬜ Flights search with all of Skyscanner's parameters: from/to (incl. "anywhere", nearby airports), dates or flexible (whole month, cheapest day calendar), one way / return / multi-city, passengers and ages, cabin, stops, times, duration, airlines/alliances, bags, price; sort by price/time/best.
+- ⬜ Stays: Booking, Hostelworld (and Airbnb, Agoda, Hotels.com if possible): dates, guests, area on a map, price, rating, dorm/private, cancellation.
+- ⬜ A full view to compare and book: results list + price calendar + map + filters + search tools; booking happens on the site itself (KesherAI never pays or types card details).
+- ⬜ Private by design: runs locally on the PC, a fresh isolated browser profile per search, no cookies kept, no account, nothing sent to KesherAI's cloud.
+- ⬜ Automation: a watch that searches every X time (route, dates, max price) and notifies when a cheaper option appears (price history per watch).
+- ⬜ In chat: takes context from the conversation ("a week in Rome in March, under 300€") and shows the whole view inside the chat itself (cards, calendar, map), plus "open in the travel page".
+- ⬜ Design-doc boards first (desktop + phone), then build.
