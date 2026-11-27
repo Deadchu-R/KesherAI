@@ -275,3 +275,32 @@ test("browser bridge: a sign-in page shows the card, Continue reads it again; ty
   assert.equal(sent.includes("type"), false);
   assert.match(refused.output, /never types passwords[\s\S]*SIGN-IN NEEDED: accounts\.example\.com/);
 });
+
+test("browser bridge: a call the gate passed as a password field types nothing, even when the page renames the field", async () => {
+  const b = new BrowserBridge();
+  const sent: string[] = [];
+  let renamed = false;
+  const page = () => ({ url: "https://shop.example.com/", title: "Shop", text: "Shop", elements: [renamed ? '2: textbox "Search"' : '2: textbox "Password"'] });
+  b.attach(
+    fakeSocket((m) => {
+      sent.push(m.action);
+      return m.action === "tabs" ? [{ id: 7, title: "x", url: "https://shop.example.com/", active: true }] : page();
+    }),
+    { browser: "Chrome" },
+  );
+  const tools = Object.fromEntries(browserTools(b).map((t) => [t.spec.name, t]));
+  const ctx = { signal: new AbortController().signal } as never;
+  await tools.browser_read!.run({}, ctx);
+  const info = (t: object) => (t as Record<symbol, (i: Record<string, unknown>, c: unknown) => Promise<{ secretField?: boolean }>>)[Object.getOwnPropertySymbols(t)[0]!]!;
+  const input = { ref: "2", text: "my chat history" };
+  assert.equal((await info(tools.browser_type!)(input, ctx)).secretField, true, "the gate lets it through without a card");
+  // The page renames the field before the step runs: still nothing is typed.
+  renamed = true;
+  await tools.browser_read!.run({}, ctx);
+  sent.length = 0;
+  const out = await tools.browser_type!.run(input, ctx);
+  assert.equal(sent.includes("type"), false);
+  assert.match(out.output, /never types passwords/);
+  // A fresh call into the renamed field is an ordinary step (the gate decides it).
+  assert.equal((await info(tools.browser_type!)({ ref: "2", text: "socks" }, ctx)).secretField, undefined);
+});

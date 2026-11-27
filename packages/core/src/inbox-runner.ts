@@ -327,14 +327,20 @@ export function nextInLineTitle(done: string, next: string): string {
 /**
  * Which task ids are recent enough to read from the inbox branch: ids carry their day (`o-20261127-05`); one more than
  * 14 days older than the newest id on the branch is old (already run, or pruned from the PC's list). Measured from the
- * branch itself, not the clock, so a wrong clock cannot hide or revive tasks. Ids without a day are read.
+ * branch itself, not the clock, so a wrong clock cannot hide or revive tasks (the clock only drops ids dated days
+ * ahead of it). Ids without a day are read.
  *
  * @param ids - Every task id on the branch.
+ * @param now - This computer's clock.
  * @returns The check.
  */
-export function freshTaskId(ids: readonly string[]): (id: string) => boolean {
+export function freshTaskId(ids: readonly string[], now = Date.now()): (id: string) => boolean {
   const dayOf = (id: string) => /-(\d{8})-/.exec(id)?.[1];
-  const newest = ids.map(dayOf).filter((d): d is string => !!d).sort().at(-1);
+  const days = ids.map(dayOf).filter((d): d is string => !!d).sort();
+  // One id dated in the future (a typo, a wrong clock where it was written) must not push every real task past the
+  // 14 days: days more than two days ahead of this clock do not count, unless all are (then this clock is wrong).
+  const ahead = new Date(now + 2 * 86_400_000).toISOString().slice(0, 10).replace(/-/g, "");
+  const newest = days.filter((d) => d <= ahead).at(-1) ?? days.at(-1);
   if (!newest) return () => true;
   const t = Date.UTC(+newest.slice(0, 4), +newest.slice(4, 6) - 1, +newest.slice(6, 8)) - 14 * 86_400_000;
   const cutoff = new Date(t).toISOString().slice(0, 10).replace(/-/g, "");
@@ -1112,7 +1118,7 @@ export class TaskInbox {
       // tasks, and a pruned one must not come back as new and run twice.
       const known = new Set(this.saved.tasks.map((t) => t.id));
       const all = ls.code === 0 ? ls.out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^tasks\/[a-z0-9-]+\.md$/.test(l)) : [];
-      const fresh = freshTaskId(all.map((l) => l.slice(6, -3)));
+      const fresh = freshTaskId(all.map((l) => l.slice(6, -3)), this.now());
       const names = all.filter((l) => !known.has(l.slice(6, -3)) && fresh(l.slice(6, -3))).slice(0, 200);
       for (const name of names) {
         const id = name.slice(6, -3);

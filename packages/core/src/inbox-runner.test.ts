@@ -1016,4 +1016,9 @@ test("freshTaskId: tasks within 14 days of the newest on the branch are read, ol
   assert.equal(fresh("o-20261101-03"), false);
   assert.ok(fresh("weird-id"), "no day: read");
   assert.ok(freshTaskId([])("x-20200101-01"), "an empty branch reads everything");
+  // A task dated years ahead does not hide the real ones; a clock far behind every id still measures from the branch.
+  const now = Date.UTC(2026, 10, 27);
+  const typo = freshTaskId(["o-20261120-01", "o-29991231-01"], now);
+  assert.ok(typo("o-20261120-01"));
+  assert.equal(freshTaskId(["o-20261101-03", "r-20261127-14"], Date.UTC(2020, 0, 1))("o-20261101-03"), false);
 });

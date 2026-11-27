@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allowsForWhile, answerFromHub, isDangerousReason, withTimedRule, type WaitingRequest } from "./hub-approvals.js";
+import { allowsForWhile, answerFromHub, isDangerousReason, userOnlyApproval, withTimedRule, type WaitingRequest } from "./hub-approvals.js";
 
 const NOW = Date.parse("2026-11-20T12:00:00Z");
 
@@ -58,4 +58,12 @@ test("answers from the hub: once, deny, for a while (a sub-agent's rule is helpe
   await answerFromHub(danger.deps, "c1", "r1", "allow", 60);
   assert.deepEqual(danger.answers, ["allow"], "answered once, no rule");
   assert.equal(danger.cfg.permissions.length, 0);
+});
+
+test("userOnlyApproval: dangerous commands, screen control and every-time browser asks stay the user's", () => {
+  assert.equal(userOnlyApproval({ tool: "run_command", reason: "This command deletes files, so it always needs your approval." }), true);
+  assert.equal(userOnlyApproval({ tool: "computer_use_app", reason: "Wants Unity." }), true);
+  for (const w of ["sensitive", "always-ask", "js"]) assert.equal(userOnlyApproval({ tool: "browser_click", reason: "x", why: ["origin", w] }), true, w);
+  assert.equal(userOnlyApproval({ tool: "browser_click", reason: "Manual mode: every action is asked.", why: ["manual"] }), false);
+  assert.equal(userOnlyApproval({ tool: "run_command", reason: "Runs a command." }), false);
 });

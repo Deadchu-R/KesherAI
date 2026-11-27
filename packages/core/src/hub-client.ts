@@ -110,6 +110,8 @@ export interface PendingApproval {
   kind?: "tool" | "run";
   /** Whether the hub page may offer "Allow for a while" (the PC checks again when the answer comes). */
   forWhile?: boolean;
+  /** Only the user may allow it, never a connected app (hub-approvals.ts `userOnlyApproval`); stays on this PC. */
+  userOnly?: boolean;
   /** When it was asked (ISO time). */
   at?: string;
   /** When the ask ends (ISO time); otherwise 30 minutes after `at` (the life of a sealed answer). */

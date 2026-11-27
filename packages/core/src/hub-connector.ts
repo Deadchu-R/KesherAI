@@ -168,7 +168,7 @@ export class ConnectorDesk {
         if (!this.deps.approvals || !found) return { ok: false, text: "That card is no longer waiting." };
         if (q.decision === "allow") {
           if (!this.canAnswer()) return { ok: false, text: "The user has not let connected apps answer KesherAI's approval cards (KesherAI › Settings › Use KesherAI from other apps). Ask them to approve it in KesherAI." };
-          if (lockedToUser(found)) return { ok: false, text: "This one needs the user's own approval in KesherAI (a dangerous command or screen control)." };
+          if (lockedToUser(found)) return { ok: false, text: "This one needs the user's own approval in KesherAI (a dangerous command, screen control, or a step on a sensitive site)." };
         }
         const minutes = q.decision === "allow" && found.forWhile !== false ? q.forMinutes : undefined;
         const done = await this.deps.approvals.answer(found.conversationId, found.requestId, q.decision === "allow" ? "allow" : "deny", FROM, minutes);
@@ -231,8 +231,8 @@ function asReported(t: InboxTaskView): InboxTaskView {
 }
 
 /** Whether only the user may allow this card (a dangerous command, screen control). */
-function lockedToUser(a: Pick<PendingApproval, "tool" | "reason">): boolean {
-  return DANGER.test(a.reason) || USER_ONLY_TOOLS.test(a.tool);
+function lockedToUser(a: Pick<PendingApproval, "tool" | "reason" | "userOnly">): boolean {
+  return a.userOnly === true || DANGER.test(a.reason) || USER_ONLY_TOOLS.test(a.tool);
 }
 
 /** An approval card as the connector lists it (cut short; the PC's own card keeps the whole text). */

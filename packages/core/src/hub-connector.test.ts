@@ -172,6 +172,8 @@ function waitingCards() {
     { ...base, conversationId: "c-2", requestId: "q-3", tool: "computer_use_app", reason: "Wants to see your screen.", forWhile: true },
     { ...base, conversationId: "task-inbox", requestId: "q-4", tool: "antigravity", reason: "Run it?", kind: "run" as const },
     { ...base, conversationId: "helper-asks", requestId: "q-5", tool: "x", reason: "y" },
+    // A browser step on a bank's site (asked every time): the server marks it userOnly.
+    { ...base, conversationId: "c-3", requestId: "q-6", tool: "browser_click", reason: "bank.example is a bank, so every action there is asked.", forWhile: true, userOnly: true },
   ];
 }
 
@@ -188,8 +190,8 @@ test("connector desk: lists chat approval cards only (not Antigravity asks), scr
   const { d } = approvalsDesk(false);
   const a = await d.answer({ queryId: "q", op: "approvals" }, true);
   assert.equal(a.ok, true);
-  assert.deepEqual(a.approvals!.map((x) => x.requestId), ["q-1", "q-2", "q-3"]);
-  assert.deepEqual(a.approvals!.map((x) => !!x.locked), [false, true, true]);
+  assert.deepEqual(a.approvals!.map((x) => x.requestId), ["q-1", "q-2", "q-3", "q-6"]);
+  assert.deepEqual(a.approvals!.map((x) => !!x.locked), [false, true, true, true]);
   assert.equal(a.canAnswer, false);
   assert.ok(!JSON.stringify(a).includes(HOME), "home folder hidden");
   assert.equal((await d.answer({ queryId: "q", op: "approvals" }, false)).ok, false, "the opt-in gates it");
@@ -205,7 +207,7 @@ test("connector desk: approve answers only when the user allows connected apps, 
   assert.equal((await off.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-2", decision: "deny" }, true)).ok, true);
   assert.deepEqual(off.answered, ["c-1/q-2 deny connector -"]);
   const on = approvalsDesk(true);
-  for (const id of [["c-1", "q-2"], ["c-2", "q-3"]] as const) {
+  for (const id of [["c-1", "q-2"], ["c-2", "q-3"], ["c-3", "q-6"]] as const) {
     const r = await on.d.answer({ queryId: "q", op: "approve", conversationId: id[0], requestId: id[1], decision: "allow" }, true);
     assert.equal(r.ok, false, id.join("/"));
     assert.match(r.text!, /own approval in KesherAI/);

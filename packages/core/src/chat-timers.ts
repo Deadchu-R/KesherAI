@@ -27,6 +27,11 @@ export interface ChatTimer {
 export const CHECKBACKS_PER_CHAT = 5;
 /** A check-back is 1 minute to 12 hours ahead. */
 export const CHECKBACK_MAX_MINUTES = 720;
+/**
+ * At most this many check-backs set per chat in a day: each check-back's turn may set the next one, so a model that
+ * keeps waiting would otherwise wake the chat (and the phone) every minute for ever (security scan 2026-11-27 night).
+ */
+export const CHECKBACKS_PER_DAY = 48;
 
 /** At most this many waiting timers per chat. */
 export const TIMERS_PER_CHAT = 10;
@@ -76,6 +81,8 @@ export interface TimerDeps {
 /** Keeps the waiting timers and fires them on time. */
 export class ChatTimers {
   private list_: ChatTimer[] = [];
+  /** When each chat's recent check-backs were set (in memory; the last day only). */
+  private checkbackLog = new Map<string, number[]>();
   private loaded?: Promise<void>;
   private clock?: NodeJS.Timeout;
   private saving = Promise.resolve();
@@ -124,6 +131,13 @@ export class ChatTimers {
     const mine = this.list(convId);
     if (kind === "checkback" ? mine.filter((x) => x.kind === "checkback").length >= CHECKBACKS_PER_CHAT : mine.length >= TIMERS_PER_CHAT) {
       return kind ? `This chat already has ${CHECKBACKS_PER_CHAT} check-backs waiting. Cancel one first.` : `This chat already has ${TIMERS_PER_CHAT} timers waiting. Cancel one first.`;
+    }
+    if (kind === "checkback") {
+      const day = this.now() - 24 * 3_600_000;
+      const recent = (this.checkbackLog.get(convId) ?? []).filter((at) => at > day);
+      if (recent.length >= CHECKBACKS_PER_DAY) return `This chat already set ${CHECKBACKS_PER_DAY} check-backs today. Stop waiting: tell the user where things stand.`;
+      recent.push(this.now());
+      this.checkbackLog.set(convId, recent);
     }
     const t: ChatTimer = { id: randomUUID().slice(0, 8), convId, prompt: prompt.trim().slice(0, 2000), due, setAt: this.now(), ...(kind ? { kind } : {}) };
     this.list_.push(t);

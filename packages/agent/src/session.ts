@@ -375,7 +375,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.queued = rest;
     for (const m of steer) this.push({ type: "user", text: m.text, steered: true });
     const said = steer.map((m) => m.text).join("\n\n");
-    this.messages.push({ role: "user", content: `[KesherAI] The user wrote this while you were working. Take it into account from now on (it may change what to do next):\n${said}` });
+    this.messages.push({ role: "user", content: `${STEER_PREFIX}${said}` });
     this.queueChanged();
     return steer.length;
   }
@@ -640,9 +640,20 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     });
   }
 
-  /** The user's last three messages as they typed them (without attached files), oldest first. */
+  /**
+   * The owner's last three messages as they typed them (without attached files), oldest first. Messages KesherAI
+   * adds in the user's role (a helper's report, a teammate's plan or review, nudges) and a guest's messages in a
+   * shared chat are left out: the safety gate opens sites named here without asking, so page or tool text must not
+   * get in (security scan 2026-11-27 night).
+   */
   private askedLately(): string[] {
-    return this.messages.filter((m) => m.role === "user" && typeof m.content === "string").slice(-3).map((m) => String(m.content).split("\n\n---\n")[0]!.trim());
+    const out: string[] = [];
+    for (const m of this.messages) {
+      if (m.role !== "user" || typeof m.content !== "string" || this.untrustedUser?.(m.content) !== undefined) continue;
+      const typed = typedByUser(m.content);
+      if (typed !== undefined) out.push(typed.split("\n\n---\n")[0]!.trim());
+    }
+    return out.slice(-3);
   }
 
   /**
@@ -1922,6 +1933,23 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return fail(err instanceof Error ? err.message : String(err));
     }
   }
+}
+
+/** How a message the user wrote while the agent worked goes to the model (their words follow it). */
+const STEER_PREFIX = "[KesherAI] The user wrote this while you were working. Take it into account from now on (it may change what to do next):\n";
+
+/** Starts of the messages KesherAI itself adds in the user's role (none of them is the user's own words). */
+const SYNTHETIC_USER = ["[KesherAI]", "(A plan from your teammate ", "Your teammate ", "(The user undid "];
+
+/**
+ * The words the user typed in a user-role message, or undefined when KesherAI wrote it (a helper's report, a nudge,
+ * a teammate's plan or review). A message the user wrote while the agent worked counts, without KesherAI's lead-in.
+ *
+ * @param content - A user-role message's text.
+ */
+export function typedByUser(content: string): string | undefined {
+  if (content.startsWith(STEER_PREFIX)) return content.slice(STEER_PREFIX.length);
+  return SYNTHETIC_USER.some((p) => content.startsWith(p)) ? undefined : content;
 }
 
 /**

@@ -509,6 +509,12 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     const body = `${r.title}\n${r.url}\n\n${r.text}\n\nElements you can use (ref: what it is):\n${r.elements?.join("\n") || "(none)"}`;
     return untrusted(hostOf(r.url) ?? r.url, body);
   };
+  /**
+   * Calls the safety gate let through without a card because they type into a password or code field (the tool
+   * refuses those). The refusal is bound to the call itself: a page that renames the field between the gate and the
+   * step, or a tool other than browser_type given a ref and text, still types nothing (security scan 2026-11-27 night).
+   */
+  const secretCalls = new WeakMap<object, SecretFieldError["wall"]>();
   /** Whether a call goes over CDP: a snapshot ref ("e12") in KesherAI's own pane or in Chrome (extension 0.3.0+). */
   const viaCdp = (input: Record<string, unknown>) => isCdpRef(input.ref) && b.canCdp(input);
   /** What a ref is, from the last read or snapshot of that tab: `button "Send"`, or "element 7" when unknown. */
@@ -649,7 +655,7 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       preview: async (input, ctx) => `Type "${String(input.text).slice(0, 200)}" into ${await labelOf(input, ctx.signal)}${await onSite(input, ctx.signal)}${input.submit ? " and press Enter" : ""}`,
       async run(input, ctx) {
         // A password or code field: nothing is typed, the sign-in card takes over (signInChecked below).
-        const secret = secretFieldKind(await labelOf(input, ctx.signal));
+        const secret = secretFieldKind(await labelOf(input, ctx.signal)) ?? secretCalls.get(input);
         if (secret) throw new SecretFieldError(secret);
         if (viaCdp(input)) return { output: await b.withCdp(input, async (p) => (await p.type(String(input.ref), String(input.text ?? ""), !!input.submit), snapshotText(p)), ctx.signal) };
         return { output: pageText(await b.call("type", { ref: Number(input.ref), text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
@@ -681,6 +687,15 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
    * Sign-in hand-off (browser-signin.ts): after a step that returns the page, a password, code or robot-check page
    * shows the chat's "Sign in needed" card instead of going on; browser_type into such a field is refused the same way.
    */
+  /** A call the gate let through as a password or code field never runs as anything else (`secretCalls`). */
+  const heldToSecret = (t: AgentTool): AgentTool => ({
+    ...t,
+    run: async (input, ctx) => {
+      const wall = secretCalls.get(input);
+      if (wall) throw new SecretFieldError(wall);
+      return t.run(input, ctx);
+    },
+  });
   const signInChecked = (t: AgentTool): AgentTool =>
     !PAGE_TOOLS.has(t.spec.name)
       ? t
@@ -721,12 +736,14 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     const site = url ? hostOf(url) : undefined;
     const ref = input.ref !== undefined ? String(input.ref) : "";
     const label = ref ? await labelOf(input, ctx.signal) : undefined;
+    const secret = typeof input.text === "string" ? secretFieldKind(label) : undefined;
+    if (secret) secretCalls.set(input, secret);
     return {
       ...(site ? { site } : {}),
       ...(url ? { url } : {}),
       ...(label ? { target: label } : {}),
       // Typing into a password or code field is refused inside the tool (the sign-in card): no approval card first.
-      ...(typeof input.text === "string" && secretFieldKind(label) ? { secretField: true } : {}),
+      ...(secret ? { secretField: true } : {}),
       ...(typeof input.text === "string" ? { typedChars: input.text.length } : {}),
       // The element's own picture over CDP (a snapshot ref): only made when a card is shown; at most 1.5 MB.
       ...(ref && viaCdp(input)
@@ -737,5 +754,5 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
           : {}),
     };
   };
-  return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(signInChecked(t))), where));
+  return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(signInChecked(heldToSecret(t)))), where));
 }

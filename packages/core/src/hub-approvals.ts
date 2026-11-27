@@ -24,6 +24,22 @@ export function isDangerousReason(reason: string): boolean {
   return DANGER.test(reason);
 }
 
+/** Why-codes of browser/computer asks that are asked every time, in every mode (control-policy.ts). */
+const USER_ONLY_WHY = new Set(["sensitive", "always-ask", "js"]);
+
+/**
+ * Whether only the user may allow this card, never a connected app (Claude through the hub or the local MCP server):
+ * a dangerous command, letting the model use an app on screen, or a browser/computer step that is asked every time
+ * (a bank, mail or payment site, an upload, the clipboard, deleting, running JavaScript). A connected app reads the
+ * card's text, which can come from a web page, so these stay with the person (security scan 2026-11-27 night).
+ *
+ * @param a - The card's tool, reason and, for a browser/computer step, its why-codes.
+ * @returns True when a connected app may only deny it.
+ */
+export function userOnlyApproval(a: { tool: string; reason: string; why?: readonly string[] }): boolean {
+  return /always needs your approval/i.test(a.reason) || a.tool === "computer_use_app" || !!a.why?.some((w) => USER_ONLY_WHY.has(w));
+}
+
 /**
  * The rules after "Allow for a while": a rule for this tool in this chat until `now + minutes`, replacing the same
  * rule (e.g. "for an hour" after "for good"), with rules that already ended dropped. Same as the chat card's route.

@@ -80,7 +80,7 @@ import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFact
 import { FREE_PROVIDER_IDS, freeProvider } from "./free-cloud-catalog.js";
 import { freeCloudFileStore } from "./routes/free-cloud.js";
 import { nextInLineTitle } from "./inbox-runner.js";
-import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
+import { answerFromHub, isDangerousReason, userOnlyApproval } from "./hub-approvals.js";
 import { boardCommand } from "./hub-board.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
 import { ExternalAgents, gitIn } from "./external-agents.js";
@@ -904,7 +904,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         // A chat's own steps and its sub-agents' steps (`helper` names who asks; the hub page shows it as "who").
         ...services.conversations.pendingApprovals().map((a) => {
           const helper = a.helper;
-          return { conversationId: a.conversationId, requestId: a.requestId, title: helper ? `${helper} (sub-agent) · ${a.title}`.slice(0, 200) : a.title, tool: a.tool, preview: a.preview, reason: a.purpose ? `${a.reason} ${a.purpose}`.trim() : a.reason, ...(helper ? { who: helper } : {}), forWhile: !isDangerousReason(a.reason), at: a.at };
+          return { conversationId: a.conversationId, requestId: a.requestId, title: helper ? `${helper} (sub-agent) · ${a.title}`.slice(0, 200) : a.title, tool: a.tool, preview: a.preview, reason: a.purpose ? `${a.reason} ${a.purpose}`.trim() : a.reason, ...(helper ? { who: helper } : {}), forWhile: !isDangerousReason(a.reason), ...(userOnlyApproval(a) ? { userOnly: true } : {}), at: a.at };
         }),
         // The PC's "Run this task in Antigravity?" asks, so the phone can answer away from home.
         ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: ask.next ? nextInLineTitle(ask.next.done, title) : `Run in Antigravity? ${title}`.slice(0, 200), ...(ask.next ? { next: true as const } : {}), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes.", who: "Antigravity", kind: "run" as const, at: new Date(ask.at).toISOString(), until: new Date(ask.until).toISOString() })),

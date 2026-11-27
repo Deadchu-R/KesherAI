@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ChatTimers, parseWhen, TIMERS_PER_CHAT, timerTools } from "./chat-timers.js";
+import { CHECKBACKS_PER_DAY, ChatTimers, parseWhen, TIMERS_PER_CHAT, timerTools } from "./chat-timers.js";
 
 const T0 = Date.parse("2026-11-15T01:00:00Z");
 
@@ -109,4 +109,20 @@ test("check_back_later: 1..720 minutes, 5 waiting per chat, kept on disk, fires 
   await again.tick();
   assert.ok(sent.some(([, t]) => /^\[KesherAI\] Check-back \(late: KesherAI was closed when it was due\): Build 5$/.test(t)));
   assert.equal(again.list("c1").length, 0);
+});
+
+test("check_back_later: at most CHECKBACKS_PER_DAY set per chat in a day, so a waiting model cannot wake the chat for ever", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-checkback-day-"));
+  let now = T0;
+  const timers = new ChatTimers(join(dir, "timers.json"), { send: async () => undefined, exists: async () => true }, () => now);
+  for (let i = 0; i < CHECKBACKS_PER_DAY; i++) {
+    const t = await timers.add("c1", "build?", now + 60_000, "checkback");
+    assert.ok(typeof t !== "string", `check-back ${i}`);
+    await timers.cancel(t.id);
+    now += 60_000;
+  }
+  assert.match(String(await timers.add("c1", "build?", now + 60_000, "checkback")), /check-backs today/);
+  assert.ok(typeof (await timers.add("c2", "x", now + 60_000, "checkback")) !== "string", "other chats are not counted");
+  now += 24 * 3_600_000;
+  assert.ok(typeof (await timers.add("c1", "build?", now + 60_000, "checkback")) !== "string", "a day later it may wait again");
 });

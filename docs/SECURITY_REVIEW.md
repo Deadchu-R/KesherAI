@@ -2057,3 +2057,53 @@ Scope: `git diff 7fcea8b..719aac9` (0.6.488–0.6.497 and the Claude connector c
   from the (trusted, own) GitHub remote could name a ref; the removal is still limited to a damaged file under
   `.git/refs/remotes` (kept out of inbox-runner.ts while another helper works there). A DNS answer can change between
   the check and the fetch (rebinding within the TTL); the redirect and name checks close the simple forms.
+
+## 2026-11-27 night: scan after 0.6.502 (0.6.498–0.6.502)
+
+Scope: `git diff 7aa64eb..main` (26 commits after the 0.6.497 release commit): the hub's OAuth for Gemini, the hub
+connector/MCP tools and views, the browser sign-in hand-off, the "named" navigation rule, the backup relays' Ably
+client ID, the CPU pool, the Claude Desktop extension, check_back_later and todo, and the inbox fetch.
+
+- `pnpm audit --prod`: no known vulnerabilities. No personal e-mail, Windows user name or personal path in the diff
+  (only fake `/home/someone` paths in tests); no new `eval` / `new Function`; `innerHTML` appears only in tests and a
+  comment saying the connector views never use it.
+- **Fixed (medium): page text could open a site without asking.** The new "named" rule lets `browser_navigate` go to
+  a site the user named, and also feeds the origin gate and the local reviewer, from the session's "last three user
+  messages". Those included messages KesherAI itself writes in the user's role: a helper's report, a teammate's plan
+  or review, nudges, a check_back_later note (all model text that can quote a web page), and a guest's message in a
+  shared chat. Now `askedLately` keeps only the owner's own words (`typedByUser` in `packages/agent/src/session.ts`;
+  a message typed while the agent worked still counts). Test in `session.test.ts`.
+- **Fixed (medium): a connected app could allow every-time browser steps.** `kesher_approve` (hub connector and the
+  local MCP server) refused only dangerous commands and `computer_use_app`; a card for a bank, mail or payment site, an
+  upload, the clipboard, deleting or JavaScript (asked every time, in every mode) could be allowed by Claude, which
+  reads the card's text (page-derived). New `userOnlyApproval` (`hub-approvals.ts`) from the card's why-codes; the PC
+  marks such cards `userOnly` (not sent to the phone), and both approve paths refuse "allow" for them (deny still
+  works). Tests in `hub-approvals.test.ts` and `hub-connector.test.ts`.
+- **Fixed (low): the secret-field shortcut was not bound to the call.** The gate lets `browser_type` into a field
+  labelled password/code through without a card because the tool refuses it, but the tool read the label again: a
+  page that renamed the field in between got the text typed with no card, and any tool given a `ref` and `text`
+  (e.g. `browser_dialog`) skipped the card the same way. The gate's finding is now kept per call (`secretCalls` in
+  `browser-bridge.ts`) and such a call never runs. Test in `browser-bridge.test.ts`.
+- **Fixed (performance): check_back_later could wake a chat for ever.** Each check-back's turn may set the next one
+  (5 waiting, 1 minute apart), so a waiting model could run a turn and notify the phone every minute indefinitely. At
+  most 48 check-backs set per chat per day (`CHECKBACKS_PER_DAY`, in memory). Test in `chat-timers.test.ts`.
+- **Fixed (low, robustness): one future-dated task id hid the whole inbox.** `freshTaskId` measured 14 days back from
+  the newest id on the branch, so `x-29991231-01` made every real task "old". Ids dated more than two days ahead of the
+  PC's clock no longer count (unless all are: then the clock is wrong and the branch decides, as before). Test in
+  `inbox-runner.test.ts`.
+- **Checked, fine:** OAuth: Gemini relays only on the three `oauth-redirect*.googleusercontent.com` hosts, https, no
+  port/query/fragment/user, path `/r|a/<id>`, and the URI must equal its own normal form; loopback now matches host and
+  path (`/callback` or `/oauth/callback`), so a client registered for one cannot use the other; 8 URIs, 50 clients
+  with the stranger-flood pruning; error redirects only to a registered URI; the consent page shows the return host.
+  A Gemini relay id belongs to whoever made the Gemini app, so approving a stranger's link on the hub page connects
+  their Gemini, as it already did for a stranger's Claude: the owner's approval with the host shown is the guard.
+  Sign-in hand-off: never reads field values, the probe reads only types/attributes; the auto-continue watch polls
+  every 3 s and stops when the card is answered, stopped or times out. Relays: Ably's fixed, non-personal client ID;
+  a failed publish keeps only the provider's numeric/short error code, never its message. CPU pool: llama.cpp on
+  127.0.0.1 with a random per-run key, spawned with an argument list; the game poll runs every 30 s and does nothing
+  while nothing is loaded; `/sys` is read once and cached; the route clamps every number. Claude Desktop extension:
+  nothing secret packed; `/mcp` refuses other sites' origins and DNS-rebinding hosts. todo: 12 items, 120 characters.
+  Task handoff: at most 4 per task, the note through the leak guard. Connector/MCP: as in the 2026-11-27 scan.
+- **Left (low, listed):** `sitesInText` treats `user named example.com` as every `*.example.com` (navigation only;
+  clicking and typing still follow the mode). The inbox's task goals (written by the user, Claude or a research split)
+  count as "the user's words" in a task's chat, as before.
