@@ -1795,7 +1795,12 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .resume-icon { flex: none; display: inline-flex; opacity: .8; }
 .resume-text { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .resume-actions { display: flex; gap: 6px; flex: none; margin-inline-start: auto; }
-@media (max-width: 600px) { .resume-all { margin: 8px 10px 0; } .resume-actions button { min-height: 36px; } }
+.resume-all { padding: 8px 12px; }
+.resume-pull { display: flex; align-items: center; gap: 8px; min-width: 0; background: none; border: 0; padding: 4px 0; color: inherit; font: inherit; cursor: pointer; text-align: start; }
+.resume-pull > b, .resume-pull > .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resume-chev { margin-inline-start: auto; opacity: .7; }
+.resume-body { max-height: min(50vh, 420px); overflow-y: auto; overscroll-behavior: contain; gap: 8px; }
+@media (max-width: 600px) { .resume-all { margin: 8px 10px 0; } .resume-actions button { min-height: 36px; } .resume-pull .muted { display: none; } }
 .error.row { gap: 8px; align-items: center; flex-wrap: wrap; }
 .retry-btn { flex: none; font-size: 0.85em; padding: 3px 10px; }
 .ue-bubble-link { gap: 6px; align-items: center; padding: 0 10px 6px; }

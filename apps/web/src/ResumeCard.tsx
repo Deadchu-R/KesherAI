@@ -46,13 +46,22 @@ export function resumeLine(i: Pick<ResumeItem, "kind" | "detail" | "auto">): str
  * After a restart or an update, once: "Continue what was running", every piece of work the close cut off with
  * Continue and Drop per item (the ones that continue by themselves offer Drop only). The same card on the computer
  * and on the phone in remote; it reads the server, so acting on one side clears it on the other. Hidden until the
- * next start with "Later".
+ * next start with "Later". A curtain (Roee 27.11, the phone had no way to get it off the screen): one line, folded by
+ * default; tapping it opens the list, which scrolls inside a capped height so it never covers the page.
  */
 export function ResumeCard() {
   const [items, setItems] = useState<ResumeItem[]>([]);
   const [reason, setReason] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  const [open, setOpen] = useState(() => {
+    try { return sessionStorage.getItem("kesherai-resume-open") === "1"; } catch { return false; }
+  });
+  const toggle = () => {
+    const next = !open;
+    try { sessionStorage.setItem("kesherai-resume-open", next ? "1" : "0"); } catch { /* storage off: only for now */ }
+    setOpen(next);
+  };
   const [later, setLater] = useState(() => {
     try { return sessionStorage.getItem("kesherai-resume-later") === "1"; } catch { return false; }
   });
@@ -90,12 +99,17 @@ export function ResumeCard() {
   const why = reason === "update" ? L("העדכון", "The update") : reason === "restart" ? L("ההפעלה מחדש", "The restart") : L("הסגירה", "The close");
   const waiting = items.filter((i) => !i.auto).length;
   return (
-    <section className="card stack resume-all" role="region" aria-label={L("המשך את מה שרץ", "Continue what was running")}>
+    <section className={`card stack resume-all${open ? " open" : ""}`} role="region" aria-label={L("המשך את מה שרץ", "Continue what was running")}>
       <div className="row resume-all-head">
-        <LineIcon name="refresh" size={18} />
-        <b className="grow">{L("המשך את מה שרץ", "Continue what was running")}</b>
+        <button type="button" className="resume-pull grow" aria-expanded={open} onClick={toggle}>
+          <LineIcon name="refresh" size={18} />
+          <b>{L("המשך את מה שרץ", "Continue what was running")}</b>
+          <span className="small muted">{L(`${items.length} נעצרו באמצע`, `${items.length} stopped midway`)}</span>
+          <span aria-hidden className="resume-chev">{open ? "▴" : "▾"}</span>
+        </button>
         <button type="button" className="ghost small" onClick={hide}>{L("אחר כך", "Later")}</button>
       </div>
+      {open && <div className="resume-body stack">
       <p className="small muted">{L(`${why} עצר${reason === "update" ? "" : "ה"} את אלה באמצע. שום דבר שלא אתה התחלת לא ירוץ שוב לבד.`, `${why} stopped these in the middle. Nothing you did not start runs again by itself.`)}</p>
       <ul className="resume-list">
         {items.map((i) => (
@@ -114,6 +128,7 @@ export function ResumeCard() {
       </ul>
       {error && <p className="error small" dir="auto">{error}</p>}
       {waiting > 1 && <div className="row"><button type="button" className="ghost small" disabled={!!busy} onClick={() => void dropWaiting()}>{L("לא צריך אף אחד מהממתינים", "Drop all waiting")}</button></div>}
+      </div>}
     </section>
   );
 }
