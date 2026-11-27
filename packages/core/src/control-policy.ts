@@ -61,6 +61,8 @@ export interface PolicyCall {
   always: boolean;
   /** The task's sites (origin gate); empty means no gate yet. */
   taskSites: readonly string[];
+  /** The sites the user named in their own messages (not ones approved later): opening one is what they asked for. */
+  namedSites?: readonly string[];
   /** The tool's own always-ask reason (uploads, clipboard, deleting…). */
   mustAsk?: string;
   /** The chat is in plan mode: only reading. */
@@ -255,6 +257,10 @@ export function decideControl(c: PolicyCall, s: PolicySettings): PolicyDecision 
   if (c.action === "eval" && (s.js === "ask" || !isLocalSite(c.site)))
     return { action: "ask", reason: `Runs JavaScript on ${where}, so it is asked every time.`, why: ["js"], noAlways: true };
   if (c.action === "read") return { action: "allow", reason: "Only looks.", why: ["read"], noAlways: helperNoAlways };
+  // Opening a site the user named themselves is what they asked for (Claude does not ask for it either). Only
+  // navigation: clicking and typing there still follow the mode. Blocked and sensitive sites were handled above.
+  if (c.action === "navigate" && c.kind === "browser" && !c.helper && c.site && (c.namedSites ?? []).some((t) => hostMatches(c.site!, t)))
+    return { action: "allow", reason: `You asked to open ${c.site}.`, why: ["named"], noAlways: false };
   const outside = c.kind === "browser" && !!c.site && c.taskSites.length > 0 && !isLocalSite(c.site) && !c.taskSites.some((t) => hostMatches(c.site!, t));
   if (outside && !c.always)
     return { action: "ask", reason: `${c.site} is outside this task's sites (${c.taskSites.slice(0, 3).join(", ")}), so leaving them is asked.`, why: ["origin"], noAlways: helperNoAlways };

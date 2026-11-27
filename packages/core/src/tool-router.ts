@@ -13,7 +13,7 @@
  * model, a video model), so it offers the Install button (offer_install) instead of a workaround.
  */
 import { llamaCppFields } from "@kesher/providers";
-import { asksForMusic, asksToCreate, CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
+import { asksForMusic, asksToBrowse, asksToCreate, CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
 
 /**
  * Asks a model for JSON held to a schema.
@@ -174,8 +174,9 @@ export class ToolRouter {
     // A flow request routes to its tools by itself (the Unity tools too when it names the selection or Unity).
     const music = asksForMusic(text);
     // A song, a picture, a document or code to make, with no lookup asked for: no web search (even in the groups by words).
-    const noSearch = music || asksToCreate(text);
-    const wanted = [...(intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : []), ...(music ? ["audio"] : [])];
+    const browse = asksToBrowse(text);
+    const noSearch = music || asksToCreate(text) || browse;
+    const wanted = [...(intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : []), ...(music ? ["audio"] : []), ...(browse ? ["browser"] : [])];
     // A song is not a web search or a picture: the groups a weak model would grab instead stay out (a local model
     // searched for the song's name and drew covers; make_music was never called).
     const picked = (await this.groups(text, useModel, signal)).filter((g) => !music || (g !== "images" && g !== "web")).filter((g) => !noSearch || g !== "web");

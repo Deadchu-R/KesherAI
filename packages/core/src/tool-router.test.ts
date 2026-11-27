@@ -122,3 +122,11 @@ test("a pure create request holds web_search back; asking to look something up k
   assert.equal(look.noSearch, undefined);
   assert.equal(look.tools.includes("web_search"), true);
 });
+
+test("asking to open an address in the browser routes to the browser and holds web search back", async () => {
+  const { asksToBrowse } = await import("./chat-tool-groups.js");
+  assert.ok(asksToBrowse("פתח בדפדפן של KesherAI את https://ably.com/docs/platform/errors/codes , מצא את שגיאה 40161"));
+  assert.ok(asksToBrowse("open example.com/pricing and tell me the cheapest plan"));
+  assert.equal(asksToBrowse("מה השגיאה 40161 של Ably?"), false, "no address: search stays");
+  assert.equal(asksToBrowse("summarise https://example.com/a for me"), false, "an address without an open verb is left to the router");
+});

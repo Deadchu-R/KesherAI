@@ -140,6 +140,22 @@ export function asksToCreate(text: string): boolean {
   return CREATE_VERBS.test(text) && CREATE_OBJECTS.test(text) && !LOOKUP_WORDS.test(text);
 }
 
+/** An address in the message (http(s) or a bare domain with a path). */
+const URL_IN_TEXT = /\bhttps?:\/\/\S+|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\/\S*/i;
+/** Asking to open or go to a page: Hebrew stems anywhere, English verbs at a word's start. */
+const BROWSE_VERBS = /(פתח|תפתח|פתחי|כנס ל|היכנס|תיכנס|גלוש|נווט|בדפדפן|(^|[^\p{L}])(open|go to|visit|navigate|browse)\b|in (the|my|kesherai'?s) browser)/iu;
+
+/**
+ * Whether a message asks to open a given address (a URL plus an open/go-to verb or "in the browser"). Then the page
+ * is the source: web_search is held back (a local model searched with the whole sentence instead of opening the
+ * address it was given, and the search refused the long query).
+ *
+ * @param text - The user's message.
+ */
+export function asksToBrowse(text: string): boolean {
+  return URL_IN_TEXT.test(text) && BROWSE_VERBS.test(text);
+}
+
 /**
  * The groups a message points at by its words (cheap, no model): Hebrew stems anywhere in a word, English words at a
  * word's start.

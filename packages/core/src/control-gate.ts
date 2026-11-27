@@ -80,10 +80,11 @@ export function gateControlTools(tools: AgentTool[], d: ControlGateDeps): AgentT
       const app = where.app;
       const s = d.settings();
       const action = actionClassOf(t.spec.name, input);
-      const taskSites = [...new Set([...sitesInText(gi.asked), ...d.sites])];
+      const namedSites = sitesInText(gi.asked);
+      const taskSites = [...new Set([...namedSites, ...d.sites])];
       const mustAsk = t.askFirst?.(input);
       const always = gi.always || where.granted === true;
-      const dec = decideControl({ kind, tool: t.spec.name, action, ...(site ? { site } : {}), ...(where.url ? { url: where.url } : {}), ...(app ? { app } : {}), ...(gi.helper ? { helper: gi.helper } : {}), always, taskSites, ...(mustAsk ? { mustAsk } : {}), plan: gi.plan }, s);
+      const dec = decideControl({ kind, tool: t.spec.name, action, ...(site ? { site } : {}), ...(where.url ? { url: where.url } : {}), ...(app ? { app } : {}), ...(gi.helper ? { helper: gi.helper } : {}), always, taskSites, namedSites, ...(mustAsk ? { mustAsk } : {}), plan: gi.plan }, s);
       const entry = { chatId: d.chatId, ...(gi.helper ? { helper: gi.helper } : {}), kind, tool: t.spec.name, ...(site ? { site } : {}), ...(app ? { app } : {}), ...(where.target ? { target: where.target } : {}) };
       // Reading is not logged as a decision (the activity strip has it); everything else is.
       if (dec.action === "allow") {

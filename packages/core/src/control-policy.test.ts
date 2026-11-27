@@ -84,3 +84,12 @@ test("control policy: the decision log keeps the newest 500 and filters by chat"
   assert.equal(log.last(1000).length, 500);
   assert.ok(log.last(1000, "a").every((d) => d.chatId === "a"));
 });
+
+test("a site the user named is opened without asking; clicking there still follows the mode; sensitive still asks", () => {
+  const s = { ...base };
+  const call = { kind: "browser" as const, always: false, taskSites: ["ably.com"], namedSites: ["ably.com"] };
+  assert.equal(decideControl({ ...call, tool: "browser_open", action: "navigate", site: "ably.com", url: "https://ably.com/docs" }, s).action, "allow");
+  assert.equal(decideControl({ ...call, tool: "browser_open", action: "navigate", site: "evil.example", url: "https://evil.example/" }, s).action, "ask");
+  assert.notEqual(decideControl({ ...call, tool: "browser_click", action: "act", site: "ably.com" }, s).action, "allow");
+  assert.equal(decideControl({ ...call, tool: "browser_open", action: "navigate", site: "ably.com", helper: "Helper 1" }, s).action === "allow", false, "helpers still ask");
+});
