@@ -82,6 +82,47 @@ export function LogsPage() {
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [addPath, setAddPath] = useState("");
+  const [include, setInclude] = useState<string[]>([]);
+  const [exclude, setExclude] = useState<string[]>([]);
+  const [savedFilters, setSavedFilters] = useState<{ name: string; include: string[]; exclude: string[] }[]>([]);
+
+  /** Load saved filters from localStorage (safe against quota/parse errors). */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("logs-saved-filters");
+      if (raw) setSavedFilters(JSON.parse(raw));
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }, []);
+
+  /** Persist saved filters to localStorage (safe against quota errors). */
+  const persistSaved = (next: { name: string; include: string[]; exclude: string[] }[]) => {
+    setSavedFilters(next);
+    try {
+      localStorage.setItem("logs-saved-filters", JSON.stringify(next));
+    } catch {
+      toast(L("לא ניתן לשמור מסננים בדפדפן.", "Could not save filters in the browser."));
+    }
+  };
+
+  /** Save the current include/exclude as a named chip. */
+  const saveCurrentFilter = () => {
+    if (!include.length && !exclude.length) return;
+    const name = prompt(L("שם למסנן:", "Filter name:"));
+    if (!name) return;
+    const next = [...savedFilters.filter((f) => f.name !== name), { name, include, exclude }];
+    persistSaved(next);
+  };
+
+  /** Apply a saved filter chip. */
+  const applySaved = (f: { include: string[]; exclude: string[] }) => {
+    setInclude(f.include);
+    setExclude(f.exclude);
+  };
+
+  /** Remove a saved filter chip. */
+  const removeSaved = (name: string) => persistSaved(savedFilters.filter((f) => f.name !== name));
 
   const loadSources = () =>
     void api<{ sources: Source[] }>("/api/logs/sources").then((r) => {
@@ -116,7 +157,14 @@ export function LogsPage() {
   const shown = useMemo(() => {
     const list = patterns?.patterns ?? [];
     const q = f.q.trim().toLowerCase();
-    return list.filter((p) => (showIgnored || p.label !== "ignore") && (!f.cat || p.cat === f.cat) && (!q || p.template.toLowerCase().includes(q) || p.sample.toLowerCase().includes(q)));
+    return list.filter(
+      (p) =>
+        (showIgnored || p.label !== "ignore") &&
+        (!f.cat || p.cat === f.cat) &&
+        (!q || p.template.toLowerCase().includes(q) || p.sample.toLowerCase().includes(q)) &&
+        (!include.length || include.includes(p.id)) &&
+        !exclude.includes(p.id),
+    );
   }, [patterns, showIgnored, f.q, f.cat]);
   const ignored = (patterns?.patterns ?? []).filter((p) => p.label === "ignore").length;
   const cats = useMemo(() => [...new Set([...(found?.cats ?? []), ...(patterns?.patterns ?? []).map((p) => p.cat).filter((c): c is string => !!c)])].sort(), [found, patterns]);
@@ -275,8 +323,24 @@ export function LogsPage() {
                   </>
                 )}
               </p>
-              {!shown.length && <p className="muted">{L("אין שורות שמתאימות לסינון.", "No lines match the filters.")}</p>}
-              <ul className="logs-patterns">
+              {(include.length || exclude.length || savedFilters.length) && (
+                                <div className="row logs-saved-filters" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                                  {savedFilters.map((sf) => (
+                                    <span key={sf.name} className="chip">
+                                      <button type="button" className="chip-text" onClick={() => applySaved(sf)}>{sf.name}</button>
+                                      <button type="button" className="chip-x" aria-label={L("הסר מסנן שמור", "Remove saved filter")} onClick={() => removeSaved(sf.name)}>✕</button>
+                                    </span>
+                                  ))}
+                                  {(include.length || exclude.length) && (
+                                    <>
+                                      <button type="button" className="chip-text" onClick={saveCurrentFilter}>{L("💾 שמור סינון", "💾 Save filter")}</button>
+                                      <button type="button" className="chip-text" onClick={() => { setInclude([]); setExclude([]); }}>{L("נקה", "Clear")}</button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                              {!shown.length && <p className="muted">{L("אין שורות שמתאימות לסינון.", "No lines match the filters.")}</p>}
+                              <ul className="logs-patterns">
                 {shown.map((p) => {
                   const lines = open[p.id];
                   const ex = explained[p.id];
@@ -295,6 +359,8 @@ export function LogsPage() {
                       <div className="row log-actions">
                         <button type="button" className="chip-text" aria-expanded={!!lines} onClick={() => showLines(p)}>{lines ? L("הסתר שורות", "Hide lines") : L("השורות", "Lines")}</button>
                         <button type="button" className="chip-text" disabled={ex === "loading"} onClick={() => explain(p)}>{ex === "loading" ? L("מסביר…", "Explaining…") : L("✨ הסבר", "✨ Explain")}</button>
+                        <button type="button" className="chip-text" aria-pressed={include.includes(p.id)} onClick={() => setInclude((x) => (x.includes(p.id) ? [] : [p.id]))} title={L("רק זה", "Only this")}>{L("＋ רק זה", "＋ Only this")}</button>
+                        <button type="button" className="chip-text" aria-pressed={exclude.includes(p.id)} onClick={() => setExclude((x) => (x.includes(p.id) ? x.filter((y) => y !== p.id) : [...x, p.id]))} title={L("הסתר", "Hide")}>{L("－ הסתר", "－ Hide")}</button>
                         <select className="log-label" value={p.label ?? ""} onChange={(e) => setLabel(p, (e.target.value || null) as Label | null)} aria-label={L("תווית", "Label")}>
                           <option value="">{L("בלי תווית", "No label")}</option>
                           {(Object.keys(LABEL_TEXT) as Label[]).map((k) => <option key={k} value={k}>{L(...LABEL_TEXT[k])}</option>)}

@@ -50,6 +50,11 @@
 .log-extra { flex-basis: 100%; }
 .log-extra summary { cursor: pointer; color: var(--muted); }
 .log-extra pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }
+.logs-saved-filters { align-items: center; }
+.logs-saved-filters .chip { display: inline-flex; align-items: center; gap: 2px; padding-inline-end: 2px; }
+.logs-saved-filters .chip-x { border: none; background: transparent; cursor: pointer; padding: 0 4px; font-size: 12px; line-height: 1; opacity: .7; }
+.logs-saved-filters .chip-x:hover { opacity: 1; }
+.log-pattern-head button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
 @media (max-width: 760px) {
   .logs-body { grid-template-columns: minmax(0, 1fr); }
   .logs-sources { display: none; }
