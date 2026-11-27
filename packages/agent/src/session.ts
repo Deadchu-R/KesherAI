@@ -536,6 +536,14 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return [...this.tools.keys()].sort();
   }
 
+  /**
+   * @param name - A tool's name.
+   * @returns That tool's spec (name, description, input schema), or undefined when the session lacks it.
+   */
+  toolSpec(name: string): ToolSpec | undefined {
+    return this.tools.get(name)?.spec;
+  }
+
   /** @param mode - New permission mode; applies to the next tool call. */
   setMode(mode: PermissionMode): void {
     this.mode = mode;

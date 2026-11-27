@@ -87,6 +87,8 @@ import { journalRoutes } from "../routes/journal.js";
 import { gameRoutes } from "../routes/game.js";
 import { timerRoutes } from "../routes/timers.js";
 import { backgroundRoutes } from "../routes/background.js";
+import { chatCheckRoutes, conversationHost } from "../routes/chat-checks.js";
+import { ChatChecks } from "../chat-checks/runner.js";
 import { studyRoutes } from "../routes/study.js";
 import { appLinkRoutes, focusRoomRoutes, liveQuizRoutes, projectRoutes } from "../routes/live-quiz.js";
 import { moodleRoutes } from "../routes/moodle.js";
@@ -174,6 +176,8 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await textHelperRoutes(app, services);
   await timerRoutes(app, chatTimers, (id) => library.summary(id)?.title);
   await backgroundRoutes(app, background);
+  // Chat checks (Settings › For developers): "behaves like Claude" scenarios run here, in temporary chats.
+  await chatCheckRoutes(app, new ChatChecks(conversationHost(services.conversations, chatTimers, () => services.config.activeModels.chat), join(paths.root, "chat-checks.json")));
   await studyRoutes(app, services);
   await liveQuizRoutes(app, services.study);
   await focusRoomRoutes(app);

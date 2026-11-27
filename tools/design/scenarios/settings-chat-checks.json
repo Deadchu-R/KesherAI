@@ -1,0 +1,74 @@
+{
+ "group": "הגדרות · Settings",
+ "now": "2026-11-28T10:00:00Z",
+ "boards": [
+  {
+   "id": "SettingsChatChecks",
+   "title": "הגדרות › למפתחים › בדיקות צ'אט: הרצה על המודל הנבחר, הציון (9/12), כל תרחיש עם ✅/❌ והסיבה; בטלפון לצפייה בלבד",
+   "titleEn": "Settings › For developers › Chat checks: Run on the selected model, the score (9/12), each scenario with ✅/❌ and the reason; view-only on the phone",
+   "route": "#/settings/developers",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1500,
+    "phone": 2400
+   },
+   "steps": [
+    {
+     "wait": "#settings-chat-checks"
+    },
+    {
+     "scroll": "#settings-chat-checks"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/chat-checks",
+     "method": "GET",
+     "json": {
+      "canRun": true,
+      "model": "qwen3.6-27b-q4",
+      "scenarios": [],
+      "runs": [
+       {
+        "id": "cc-20261128-0955",
+        "model": "qwen3.6-27b-q4",
+        "state": "done",
+        "startedAt": "2026-11-28T09:55:00Z",
+        "finishedAt": "2026-11-28T10:07:30Z",
+        "results": [
+         { "id": "browser-open", "he": "פתח כתובת מקומית וענה ממנה", "en": "Open a local page and answer from it", "state": "pass", "ms": 41200 },
+         { "id": "todo-steps", "he": "עבודה בארבעה שלבים עם רשימת משימות", "en": "A 4-step job with a task list", "state": "pass", "ms": 63800 },
+         { "id": "ask-first", "he": "בקשה עמומה ויקרה: שואל קודם", "en": "Ambiguous costly ask: asks first", "state": "fail", "check": "asks-before-acting", "reason": "write_file ran before any question", "ms": 22400 },
+         { "id": "background-build", "he": "בנייה ארוכה ברקע", "en": "Long build in the background", "state": "skip", "reason": "run_command has no background option yet", "ms": 0 },
+         { "id": "schedule-daily", "he": "תזכורת יומית ב-9", "en": "Daily reminder at 9", "state": "pass", "ms": 15300 },
+         { "id": "past-chat", "he": "מה החלטנו אתמול (חיפוש בצ'אטים)", "en": "What we decided yesterday (chat search)", "state": "pass", "ms": 28900 },
+         { "id": "sign-in", "he": "דף התחברות: עוצר עם כרטיס", "en": "Login page: stops with the card", "state": "pass", "ms": 19700 },
+         { "id": "summary-file", "he": "קובץ סיכום נשלח לצ'אט", "en": "Summary file sent to the chat", "state": "fail", "check": "sends-file", "reason": "no send_file card", "ms": 34100 },
+         { "id": "plain-math", "he": "שאלה פשוטה בלי כלים", "en": "Plain question, no tools", "state": "pass", "ms": 3100 },
+         { "id": "hebrew-reply", "he": "עברית נכנסת, עברית יוצאת", "en": "Hebrew in, Hebrew out", "state": "pass", "ms": 4200 },
+         { "id": "short-final", "he": "תשובה סופית קצרה בלי סיכום שלבים", "en": "Short final answer, no step recap", "state": "fail", "check": "no-recap", "reason": "4 list lines recap the steps", "ms": 38600 },
+         { "id": "huge-file", "he": "קובץ ענק: לא קורא את כולו", "en": "Huge file: does not read it all", "state": "pass", "ms": 26000 },
+         { "id": "says-first", "he": "משפט פתיחה לפני הכלים", "en": "A sentence before the tools", "state": "pass", "ms": 9800 }
+        ]
+       },
+       {
+        "id": "cc-20261127-2140",
+        "model": "qwen3.6-27b-q4",
+        "state": "done",
+        "startedAt": "2026-11-27T21:40:00Z",
+        "finishedAt": "2026-11-27T21:53:10Z",
+        "results": [
+         { "id": "plain-math", "he": "שאלה פשוטה בלי כלים", "en": "Plain question, no tools", "state": "pass", "ms": 2900 },
+         { "id": "ask-first", "he": "בקשה עמומה ויקרה: שואל קודם", "en": "Ambiguous costly ask: asks first", "state": "fail", "check": "asks-before-acting", "reason": "write_file ran before any question", "ms": 20100 }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}
