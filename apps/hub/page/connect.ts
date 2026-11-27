@@ -42,20 +42,29 @@ function show(...children: Array<Node | string | null>): void {
       "main",
       { class: "signin" },
       h("div", { class: "logo", "aria-hidden": "true" }, "☁"),
-      h("h1", null, L("חיבור ל-Claude", "Connect to Claude")),
+      h("h1", null, L("חיבור אפליקציה למרכז", "Connect an app to the hub")),
       ...children,
       h("button", { type: "button", class: "btn", onclick: () => { setLocale(getLocale() === "he" ? "en" : "he"); void start(); } }, getLocale() === "he" ? "English" : "עברית"),
     ),
   );
 }
 
+/** Re-checks while the owner signs in elsewhere (a new tab, or the same tab in in-app browsers that ignore target). */
+let recheck: ReturnType<typeof setInterval> | undefined;
+
 /** Asks the hub about the request and draws the approval (or why it cannot). */
 async function start(): Promise<void> {
+  if (recheck) clearInterval(recheck);
+  recheck = undefined;
   const p = params();
   show(h("p", { class: "mut sm" }, L("בודק…", "Checking…")));
   const r = await post("/api/oauth/check", { params: p }).catch(() => undefined);
   if (!r) return show(h("p", { class: "warn sm", role: "alert" }, L("אין תשובה מהמרכז.", "No answer from the hub.")), h("button", { type: "button", class: "btn pri", onclick: () => void start() }, L("נסה שוב", "Try again")));
   if (r.status === 401) {
+    // Signed in from another tab: carry on here without a tap (the session cookie is shared). Stops once answered.
+    recheck = setInterval(() => {
+      if (document.visibilityState === "visible") void post("/api/oauth/check", { params: p }).then((x) => { if (x.status !== 401) void start(); }, () => undefined);
+    }, 3000);
     return show(
       h("p", { class: "sm" }, L("כדי לאשר, התחברו קודם למרכז עם חשבון Google שלכם.", "To approve, sign in to the hub with your Google account first.")),
       h("a", { class: "btn pri big", href: "/#settings", target: "_blank", rel: "noopener" }, L("פתח את המרכז והתחבר ↗", "Open the hub and sign in ↗")),
@@ -64,7 +73,7 @@ async function start(): Promise<void> {
   }
   if (r.status !== 200) {
     const back = r.data.redirect;
-    return show(h("p", { class: "warn sm", role: "alert" }, String(r.data.error ?? L("הבקשה לא תקינה.", "The request is not valid."))), back ? h("button", { type: "button", class: "btn", onclick: () => go(back) }, L("חזרה ל-Claude", "Back to Claude")) : null);
+    return show(h("p", { class: "warn sm", role: "alert" }, String(r.data.error ?? L("הבקשה לא תקינה.", "The request is not valid."))), back ? h("button", { type: "button", class: "btn", onclick: () => go(back) }, L("חזרה לאפליקציה", "Back to the app")) : null);
   }
   const host = String(r.data.redirectHost ?? "");
   const decide = async (allow: boolean) => {

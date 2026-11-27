@@ -3,8 +3,10 @@
  * and resource server, on one origin, as Claude's custom connectors expect (docs/RESEARCH_LOG.md, "The hub as a Claude
  * custom connector"):
  *
- * - Clients register themselves (RFC 7591, public clients, no secret), but only with Claude's redirect URIs: the hosted
- *   apps' `https://claude.ai/api/mcp/auth_callback`, or Claude Code's loopback `http://localhost|127.0.0.1:<port>/callback`.
+ * - Clients register themselves (RFC 7591, public clients, no secret), but only with known apps' redirect URIs: Claude's
+ *   hosted `https://claude.ai/api/mcp/auth_callback`, Gemini's custom apps (`https://oauth-redirect[-sandbox|-test]
+ *   .googleusercontent.com/r|a/<id>`, the list Google's "OAuth 2.1 implementation guide" gives), or a CLI's loopback
+ *   `http://localhost|127.0.0.1:<port>/callback` (Claude Code) or `/oauth/callback` (Gemini CLI).
  * - Authorization code + PKCE S256 only. The code is approved on the hub page by the signed-in owner (the one Google
  *   account in `ALLOWED_EMAIL`, pinned on first sign-in), so nobody else can connect, whatever client they register.
  * - Access tokens live 1 hour; refresh tokens rotate on each use, live 30 days, and a connection ends after 90 days. A
@@ -39,6 +41,19 @@ export const CONNECTOR = {
 /** The hosted Claude apps' callback (claude.ai, Desktop, mobile, Cowork). */
 const CLAUDE_CALLBACKS = new Set(["https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"]);
 
+/** Gemini's custom-app OAuth relays (Gemini app and Developer Mode register all six on DCR). */
+const GEMINI_HOSTS = new Set(["oauth-redirect.googleusercontent.com", "oauth-redirect-sandbox.googleusercontent.com", "oauth-redirect-test.googleusercontent.com"]);
+
+/** Whether a URI is one of Gemini's relays: https, a Google relay host, path `/r/<id>` or `/a/<id>`, nothing else. */
+function geminiCallback(uri: string): boolean {
+  try {
+    const u = new URL(uri);
+    return u.href === uri && u.protocol === "https:" && GEMINI_HOSTS.has(u.hostname) && !u.port && /^\/[ra]\/[\w.~-]{1,120}$/.test(u.pathname) && !u.search && !u.hash && !u.username && !u.password;
+  } catch {
+    return false;
+  }
+}
+
 /** An OAuth error answer (RFC 6749 §5.2 names). */
 export interface OauthError {
   status: 400 | 401 | 403 | 404 | 429;
@@ -53,12 +68,12 @@ export function isOauthError(x: unknown): x is OauthError {
   return !!x && typeof x === "object" && "error" in x && "status" in x && "error_description" in x;
 }
 
-/** A loopback redirect (Claude Code): http, localhost or 127.0.0.1, any port, path `/callback`, nothing else. */
+/** A loopback redirect (Claude Code, Gemini CLI): http, localhost or 127.0.0.1, any port, path `/callback` or `/oauth/callback`. */
 function loopback(uri: string): URL | undefined {
   try {
     const u = new URL(uri);
     if (u.protocol !== "http:" || (u.hostname !== "localhost" && u.hostname !== "127.0.0.1")) return undefined;
-    if (u.pathname !== "/callback" || u.search || u.hash || u.username || u.password) return undefined;
+    if ((u.pathname !== "/callback" && u.pathname !== "/oauth/callback") || u.search || u.hash || u.username || u.password) return undefined;
     return u;
   } catch {
     return undefined;
@@ -66,13 +81,13 @@ function loopback(uri: string): URL | undefined {
 }
 
 /**
- * Whether a client may register this redirect URI: Claude's hosted callback or Claude Code's loopback only.
+ * Whether a client may register this redirect URI: Claude's or Gemini's hosted callback, or a CLI's loopback.
  *
  * @param uri - The redirect URI.
  * @returns True when allowed.
  */
 export function allowedRedirect(uri: unknown): uri is string {
-  return typeof uri === "string" && uri.length <= 200 && (CLAUDE_CALLBACKS.has(uri) || !!loopback(uri));
+  return typeof uri === "string" && uri.length <= 200 && (CLAUDE_CALLBACKS.has(uri) || geminiCallback(uri) || !!loopback(uri));
 }
 
 /**
@@ -86,7 +101,7 @@ export function allowedRedirect(uri: unknown): uri is string {
 export function redirectMatches(registered: string[], uri: string): boolean {
   if (registered.includes(uri)) return true;
   const u = loopback(uri);
-  return !!u && registered.some((r) => loopback(r)?.hostname === u.hostname);
+  return !!u && registered.some((r) => { const l = loopback(r); return l?.hostname === u.hostname && l.pathname === u.pathname; });
 }
 
 /**
@@ -178,7 +193,7 @@ export class ConnectorAuth {
   register(body: Record<string, unknown> | undefined): Record<string, unknown> | OauthError {
     if (!body) return oerr(400, "invalid_client_metadata", "A JSON body is needed.");
     const uris = body.redirect_uris;
-    if (!Array.isArray(uris) || !uris.length || uris.length > 5 || !uris.every(allowedRedirect)) return oerr(400, "invalid_redirect_uri", "Only Claude's redirect URIs can be registered with this hub.");
+    if (!Array.isArray(uris) || !uris.length || uris.length > 8 || !uris.every(allowedRedirect)) return oerr(400, "invalid_redirect_uri", "Only Claude's or Gemini's redirect URIs can be registered with this hub.");
     const method = body.token_endpoint_auth_method ?? "none";
     if (method !== "none") return oerr(400, "invalid_client_metadata", "Only public clients (token_endpoint_auth_method none) are supported.");
     const grants = Array.isArray(body.grant_types) ? body.grant_types : ["authorization_code", "refresh_token"];

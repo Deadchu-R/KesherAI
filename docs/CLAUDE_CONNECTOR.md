@@ -62,3 +62,12 @@ Tools: all of the local MCP server's (chat, models, knowledge, images, speech) p
 `packages/core/src/mcp-connector-tools.ts`. They go through the same desk as the hub's (`hub-connector.ts`): same allow-list,
 30 a minute, scrub and the same opt-in (off: they say how to turn it on). Approvals on the local server stay `kesher_approve`
 behind its own switch. Not signed and no auto-update (re-download after an update that changes tools). Unchecked against Claude Desktop itself: run `mcpb validate` on the file once.
+
+## Gemini (27.11)
+
+The same `/mcp` address works as a Gemini custom app (gemini.google.com › Settings › Connected Apps › Add a custom app,
+or gemini.google.com/devmode; web app in English, then it shows on the phone too) and in Gemini CLI (`mcpServers` with
+`httpUrl`). The hub's dynamic registration accepts Google's relay callbacks (`https://oauth-redirect[-sandbox|-test]
+.googleusercontent.com/r|a/<id>`, exact, normalized, no query) and the CLI loopback `/oauth/callback`; approval is still
+only by the signed-in owner on `/connect`, which now carries on by itself once the owner signs in elsewhere. MCP Apps
+views (ui://kesher/*) may not render in Gemini; every tool also answers in text.

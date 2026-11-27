@@ -133,6 +133,13 @@ test("discovery: protected resource and authorization server metadata; /mcp with
   assert.equal(await connectorRoute(new Request(`${ORIGIN}/api/state`), hub, "x"), undefined, "other paths are not the connector's");
 });
 
+test("registration: Gemini's relays and Gemini CLI's loopback are allowed, look-alikes are not", () => {
+  for (const ok of ["https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-abc_hub", "https://oauth-redirect-sandbox.googleusercontent.com/a/x1", "https://oauth-redirect-test.googleusercontent.com/r/y", "http://localhost:7777/oauth/callback"]) assert.ok(allowedRedirect(ok), ok);
+  for (const bad of ["http://oauth-redirect.googleusercontent.com/r/x", "https://oauth-redirect.googleusercontent.com/x/y", "https://oauth-redirect.googleusercontent.com/r/x?next=evil", "https://oauth-redirect.googleusercontent.com.evil.example/r/x", "https://evil.googleusercontent.com/r/x", "https://oauth-redirect.googleusercontent.com:8443/r/x", "https://oauth-redirect.googleusercontent.com/r/x/../y"]) assert.equal(allowedRedirect(bad), false, bad);
+  assert.ok(redirectMatches(["http://localhost/oauth/callback"], "http://localhost:7777/oauth/callback"));
+  assert.equal(redirectMatches(["http://localhost/callback"], "http://localhost:7777/oauth/callback"), false, "loopback path must match");
+});
+
 test("registration: only Claude's callback or Claude Code's loopback; public clients only", async () => {
   const { hub } = setup();
   assert.ok(allowedRedirect(CALLBACK) && allowedRedirect("http://localhost:3118/callback") && allowedRedirect("http://127.0.0.1/callback"));
