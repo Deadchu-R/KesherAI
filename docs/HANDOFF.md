@@ -53,7 +53,7 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
   remote (phone ↔ PC); editors are independent plugins.
 - Tests: only for what changed while working; the full suite AND `pnpm -s lint` before each build (lint broke CI twice).
   Security/performance scan every 5 builds (last: 26.11 after 0.6.486 → in 0.6.487; next after 0.6.492+5 = 0.6.497).
-- Research: never on Claude. Every research of a new feature has a "Language and weight" part and covers EVERY
+- Research: never on Claude (Roee's subscription). Gemini first; GhostCLI and other providers are allowed too (Roee 27.11) as long as no private data leaves: the leak guard and safeForRelay apply, nothing personal or secret in the task text. Every research of a new feature has a "Language and weight" part and covers EVERY
   platform (Windows/macOS/Linux/Android, NVIDIA/AMD/Apple/CPU-only): KesherAI is for all users (Roee 25–26.11).
   Keep Gemini reports short ("under 1,200 words"): long ones came back cut off or empty.
 - Screens: design-doc board first (cloud doc for inbox/hub). Every report ends with what's next, then start it.
