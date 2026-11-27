@@ -270,6 +270,25 @@ export const opencodeModelName = (id) => id.replace(new RegExp(`^(${OPENCODE_PRO
  * own Hebrew and English text for it instead of the raw system message (on Windows, cmd.exe's "is not recognized").
  */
 export const INBOX_GIT_MISSING = "Git for Windows is not installed / not found: install it from git-scm.com (or `winget install Git.Git`) and restart KesherAI.";
+/** Relay task runs in a row that must fail before the 15-minute availability checks start again (Roee, 27.11). */
+export const RELAY_FAILS_BEFORE_PROBE = 3;
+/**
+ * Whether the relay's small availability check should run (Roee, 27.11: GhostCLI answers reliably now, so stop
+ * checking it all the time and check again only after it failed several times in a row). It runs when nothing is
+ * known yet, while the last check said it does not answer (until it answers again), or after
+ * {@link RELAY_FAILS_BEFORE_PROBE} task runs in a row ended failed or rate-limited.
+ *
+ * @param log - The attempts, oldest first.
+ * @param health - The last check, if any.
+ * @returns True when a check should run (the caller still spaces checks 15 minutes apart).
+ */
+export function relayNeedsProbe(log, health) {
+    if (!health || !health.ok)
+        return true;
+    const runs = log.filter((r) => r.status !== "probe-ok" && r.status !== "probe-failed" && r.at > health.at);
+    const tail = runs.slice(-RELAY_FAILS_BEFORE_PROBE);
+    return tail.length === RELAY_FAILS_BEFORE_PROBE && tail.every((r) => r.status === "failed" || r.status === "rate-limited");
+}
 /**
  * Sums relay attempts into the trial report.
  *
