@@ -22,7 +22,7 @@ export async function externalAgentRoutes(app: FastifyInstance, s: KesherService
   });
 
   /** What Claude's helper agents did in the last 7 days, from the commits on main with a `Claude-Session:` trailer (claude-work.ts). */
-  app.get("/api/agents/claude-work", async () => (s.claudeWork ? s.claudeWork.read() : { sessions: [], at: Date.now(), days: 7 }));
+  app.get("/api/agents/claude-work", async () => ({ ...(s.claudeWork ? await s.claudeWork.read() : { sessions: [], at: Date.now(), days: 7 }), running: (await s.claudeStatus?.read())?.agents.filter((a) => a.state === "running") ?? [] }));
 
   /** The outside runs (newest first). */
   app.get("/api/agents/external", async () => ({ runs: (s.externalAgents?.list() ?? []).map((r) => ({ id: r.id, title: r.title, status: r.status, steps: r.steps, ...(r.of ? { of: r.of } : {}), ...(r.result ? { result: r.result } : {}), startedAt: r.startedAt, ...(r.endedAt ? { endedAt: r.endedAt } : {}) })) }));

@@ -430,7 +430,7 @@ export function parseSealedBody(x, kind) {
         case "quotas":
             return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
         case "claude_work":
-            return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x) => !!x), at: num(b.at) } : null;
+            return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x) => !!x), running: cleanClaudeRunning(b.running), at: num(b.at) } : null;
         case "connector_query": {
             const q = parseConnectorQuery(b);
             return q ? { type: "connector_query", ...q } : null;
@@ -600,6 +600,23 @@ const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "pa
 const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS = ["read", "edit", "create", "delete"];
+/** The running agents, cleaned (at most 10); anything that is not one is dropped. */
+function cleanClaudeRunning(v) {
+    if (!Array.isArray(v))
+        return [];
+    const out = [];
+    for (const x of v.slice(0, 10)) {
+        if (!x || typeof x !== "object")
+            continue;
+        const a = x;
+        const title = oneLine(a.title);
+        if (typeof a.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(a.id) || !title || !num(a.startedAt))
+            continue;
+        const note = oneLine(a.lastNote);
+        out.push({ id: a.id, title: title.slice(0, 120), model: (oneLine(a.model) ?? "").slice(0, 40), startedAt: num(a.startedAt), ...optNum("updatedAt", a.updatedAt), ...(note ? { lastNote: note.slice(0, 200) } : {}) });
+    }
+    return out;
+}
 /** A commit of a session, cleaned; null when it is not one. */
 function cleanClaudeCommit(x) {
     if (!x || typeof x !== "object")

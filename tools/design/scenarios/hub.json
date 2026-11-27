@@ -2176,8 +2176,8 @@
   },
   {
    "id": "HubAgentsWork",
-   "title": "ענן Kesher: סוכנים › העבודה של הסוכנים — מה עוזרי Claude עשו בשבוע, מהקומיטים ב-main: סשן לכרטיס, קומיט לשורה, בגרסה או עוד לא",
-   "titleEn": "Kesher cloud: Agents › Agents' work — what Claude's helpers did this week, from the commits on main: a card per session, a row per commit, released or not",
+   "title": "ענן Kesher: סוכנים › העבודה של הסוכנים — למעלה \"רצים עכשיו\" (מודל, דקות, ⚠ אולי תקוע), ומתחת השבוע מהקומיטים ב-main",
+   "titleEn": "Kesher cloud: Agents › Agents' work — \"Running now\" on top (model, minutes, ⚠ maybe stuck), then the week from the commits on main",
    "route": "#agents",
    "hub": {
     "device": {
@@ -2298,6 +2298,31 @@
           "release": "0.6.502"
          }
         ]
+       }
+      ],
+      "running": [
+       {
+        "id": "r-hubui",
+        "title": "🔨 לוח \"רצים עכשיו\" בהאב",
+        "model": "opus",
+        "startedAt": {
+         "$agoMs": "12m"
+        },
+        "updatedAt": {
+         "$agoMs": "3m"
+        },
+        "lastNote": "typecheck"
+       },
+       {
+        "id": "r-research",
+        "title": "🔎 מחקר: שליחת קבצים מהטלפון",
+        "model": "sonnet",
+        "startedAt": {
+         "$agoMs": "58m"
+        },
+        "updatedAt": {
+         "$agoMs": "52m"
+        }
        }
       ]
      }
@@ -2797,7 +2822,215 @@
     ]
    }
   },
-  {"id": "ConnectWhyHub", "title": "ענן Kesher בטלפון: המחשב מופעל מחדש לעדכון 0.6.498 · נראה לאחרונה · \"למה?\" פותח באפליקציה את גיליון הבדיקות", "titleEn": "Kesher Cloud on the phone: the PC is restarting for update 0.6.498 · last seen · \"Why?\" opens the checks sheet in the app", "route": "#", "viewports": ["phone"], "hub": {"device": {"name": "הטלפון"}, "pcs": [{"id": "pc-home", "name": "PC-Haifa", "online": false, "away": {"update": "0.6.498"}}]}, "height": {"phone": 900}, "steps": [{"wait": ".off-banner"}, {"waitMs": 300}]},
- {"id": "HubTaskChat", "title": "ענן Kesher: משימות — צ'אט משימות: מודל קטן במחשב מארגן את הלוח; כל שינוי הוא כרטיס הצעה עם החל / בטל, ושום דבר לא משתנה לפני ההחלה", "titleEn": "Kesher Cloud: Tasks — Task chat: a small model on the PC organises the board; every change is a proposal card with Apply / Cancel, nothing changes before Apply", "route": "#tasks", "height": {"desktop": 1500, "phone": 2600}, "steps": [{"wait": ".tchat .tc-prop"}], "hub": {"device": {"name": "הטלפון"}, "pcs": [{"id": "pc-studio", "name": "PC-Studio"}], "tasks": [{"title": "לתקן את מסך ההתחברות", "status": "waiting-run", "route": "pc", "to": "pc-studio", "toName": "PC-Studio", "createdAt": {"$agoMs": "50m"}, "inbox": {"from": "claude", "executor": "antigravity", "deviceId": "pc-studio", "at": {"$agoMs": "2m"}, "kind": "code", "estSteps": 8}}, {"title": "לתקן את מסך ההתחברות (כפילות)", "status": "waiting-run", "route": "pc", "to": "pc-studio", "toName": "PC-Studio", "createdAt": {"$agoMs": "45m"}, "inbox": {"from": "claude", "executor": "antigravity", "deviceId": "pc-studio", "at": {"$agoMs": "2m"}, "kind": "code"}}, {"title": "להוסיף חיפוש להגדרות", "status": "waiting-run", "route": "pc", "to": "pc-studio", "toName": "PC-Studio", "createdAt": {"$agoMs": "30m"}, "inbox": {"from": "claude", "executor": "antigravity", "deviceId": "pc-studio", "at": {"$agoMs": "2m"}, "kind": "code", "estSteps": 8}}, {"title": "להשוות כלי ציור לעורך התמונות", "status": "waiting-run", "route": "pc", "to": "pc-studio", "toName": "PC-Studio", "createdAt": {"$agoMs": "25m"}, "inbox": {"from": "claude", "executor": "antigravity", "deviceId": "pc-studio", "at": {"$agoMs": "2m"}, "kind": "research"}}], "taskChat": [{"who": "me", "text": "פצל את המשימה על חיפוש בהגדרות לשלוש משימות קטנות, וסגור את הכפילות של מסך ההתחברות"}, {"who": "pc", "text": "פיצלתי לשלוש משימות וסימנתי את הכפילות לדילוג.", "proposal": {"id": "p1", "state": "applied", "result": "2/2", "actions": [{"op": "split", "taskId": "in-t3", "title": "להוסיף חיפוש להגדרות", "executor": "auto", "parts": [{"title": "שדה חיפוש בראש ההגדרות"}, {"title": "סינון הסעיפים לפי הטקסט"}, {"title": "הדגשת התוצאה ושמירת החיפוש האחרון"}]}, {"op": "skip", "taskId": "in-t5", "title": "לתקן את מסך ההתחברות (כפילות)"}]}}, {"who": "me", "text": "את ההשוואה של כלי הציור תן ל-Gemini, ואת החיפוש הוסף לתור"}, {"who": "pc", "text": "ההשוואה היא מחקר, אז Gemini מתאים לה. החיפוש נכנס לתור של Antigravity.", "proposal": {"id": "p2", "state": "open", "actions": [{"op": "assign", "taskId": "in-t4", "title": "להשוות כלי ציור לעורך התמונות", "to": "gemini"}, {"op": "queue", "taskId": "in-t3", "title": "להוסיף חיפוש להגדרות"}]}}, {"who": "me", "text": "ומה עם המשימה על ההורדות?", "pending": true}]}}
+  {
+   "id": "ConnectWhyHub",
+   "title": "ענן Kesher בטלפון: המחשב מופעל מחדש לעדכון 0.6.498 · נראה לאחרונה · \"למה?\" פותח באפליקציה את גיליון הבדיקות",
+   "titleEn": "Kesher Cloud on the phone: the PC is restarting for update 0.6.498 · last seen · \"Why?\" opens the checks sheet in the app",
+   "route": "#",
+   "viewports": [
+    "phone"
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-home",
+      "name": "PC-Haifa",
+      "online": false,
+      "away": {
+       "update": "0.6.498"
+      }
+     }
+    ]
+   },
+   "height": {
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".off-banner"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "HubTaskChat",
+   "title": "ענן Kesher: משימות — צ'אט משימות: מודל קטן במחשב מארגן את הלוח; כל שינוי הוא כרטיס הצעה עם החל / בטל, ושום דבר לא משתנה לפני ההחלה",
+   "titleEn": "Kesher Cloud: Tasks — Task chat: a small model on the PC organises the board; every change is a proposal card with Apply / Cancel, nothing changes before Apply",
+   "route": "#tasks",
+   "height": {
+    "desktop": 1500,
+    "phone": 2600
+   },
+   "steps": [
+    {
+     "wait": ".tchat .tc-prop"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code",
+       "estSteps": 8
+      }
+     },
+     {
+      "title": "לתקן את מסך ההתחברות (כפילות)",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "45m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code"
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code",
+       "estSteps": 8
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "research"
+      }
+     }
+    ],
+    "taskChat": [
+     {
+      "who": "me",
+      "text": "פצל את המשימה על חיפוש בהגדרות לשלוש משימות קטנות, וסגור את הכפילות של מסך ההתחברות"
+     },
+     {
+      "who": "pc",
+      "text": "פיצלתי לשלוש משימות וסימנתי את הכפילות לדילוג.",
+      "proposal": {
+       "id": "p1",
+       "state": "applied",
+       "result": "2/2",
+       "actions": [
+        {
+         "op": "split",
+         "taskId": "in-t3",
+         "title": "להוסיף חיפוש להגדרות",
+         "executor": "auto",
+         "parts": [
+          {
+           "title": "שדה חיפוש בראש ההגדרות"
+          },
+          {
+           "title": "סינון הסעיפים לפי הטקסט"
+          },
+          {
+           "title": "הדגשת התוצאה ושמירת החיפוש האחרון"
+          }
+         ]
+        },
+        {
+         "op": "skip",
+         "taskId": "in-t5",
+         "title": "לתקן את מסך ההתחברות (כפילות)"
+        }
+       ]
+      }
+     },
+     {
+      "who": "me",
+      "text": "את ההשוואה של כלי הציור תן ל-Gemini, ואת החיפוש הוסף לתור"
+     },
+     {
+      "who": "pc",
+      "text": "ההשוואה היא מחקר, אז Gemini מתאים לה. החיפוש נכנס לתור של Antigravity.",
+      "proposal": {
+       "id": "p2",
+       "state": "open",
+       "actions": [
+        {
+         "op": "assign",
+         "taskId": "in-t4",
+         "title": "להשוות כלי ציור לעורך התמונות",
+         "to": "gemini"
+        },
+        {
+         "op": "queue",
+         "taskId": "in-t3",
+         "title": "להוסיף חיפוש להגדרות"
+        }
+       ]
+      }
+     },
+     {
+      "who": "me",
+      "text": "ומה עם המשימה על ההורדות?",
+      "pending": true
+     }
+    ]
+   }
+  }
  ]
 }

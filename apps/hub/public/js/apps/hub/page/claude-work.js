@@ -6,6 +6,7 @@
  * commit on GitHub. Nothing is stored here.
  */
 import { splitToday } from "../../../packages/shared/src/claude-work.js";
+import { isMaybeStuck, minutesSince } from "../../../packages/shared/src/claude-status.js";
 import { h, L } from "./dom.js";
 /** The clock today, the weekday and clock on another day. */
 function clock(t, now) {
@@ -27,6 +28,11 @@ function sessionCard(s, now) {
     const pending = s.commits.filter((c) => !c.release).length;
     return h("div", { class: "cw-session" }, h("div", { class: "trow" }, h("b", { dir: "auto" }, s.title), h("span", { class: "mut sm" }, L(`${s.commits.length} קומיטים`, `${s.commits.length} commits`) + " · " + (pending ? L(`${pending} עוד לא בגרסה`, `${pending} not released yet`) : L("כולם בגרסה", "all released")))), ...s.commits.map((c) => commitRow(c, now)));
 }
+/** One running helper as a row: title, model, minutes, and the "maybe stuck" chip when it has been quiet too long. */
+function runningRow(a, now) {
+    const stuck = isMaybeStuck({ ...a, state: "running" }, now);
+    return h("div", { class: "trow cw-row cw-run" }, h("span", { class: "cw-title", dir: "auto" }, a.title), h("span", { class: "mut sm" }, `${a.model ? a.model + " · " : ""}${L(`${minutesSince(a.startedAt, now)} דק׳`, `${minutesSince(a.startedAt, now)} min`)}${a.lastNote ? " · " + a.lastNote : ""}`), stuck ? h("span", { class: "chip cw-stuck" }, "⚠ " + L("אולי תקוע", "maybe stuck")) : null);
+}
 /**
  * The section for the Agents tab, or null while no PC has reported a list (an older PC) .
  *
@@ -41,8 +47,11 @@ export function claudeWorkSection(device) {
     for (const w of [...device.claudeWork.values()].sort((a, b) => a.at - b.at))
         for (const s of w.sessions)
             all.set(s.id, s);
+    // The newest snapshot's running list wins (the lead's file is the same for every PC of the project).
+    const runSnap = [...device.claudeWork.values()].sort((a, b) => b.at - a.at).find((w) => w.running.length);
+    const running = (runSnap?.running ?? []).slice().sort((a, b) => a.startedAt - b.startedAt);
     const asSessions = [...all.values()].sort((a, b) => b.at - a.at);
     const { today, week } = splitToday(asSessions, now);
     const group = (title, list) => (list.length ? [h("div", { class: "trow cw-day mut sm" }, title), ...list.map((s) => sessionCard(s, now))] : []);
-    return h("section", { class: "card clip claude-work" }, h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "🧾"), h("b", null, L("העבודה של הסוכנים", "Agents' work")), h("span", { class: "grow" }), h("span", { class: "mut sm" }, L("7 ימים · מהקומיטים ב-main", "7 days · from the commits on main"))), ...(asSessions.length ? [...group(L("היום", "Today"), today), ...group(L("השבוע", "This week"), week)] : [h("div", { class: "trow mut sm" }, L("עוד אין עבודה של סוכנים השבוע.", "No agent work this week yet."))]));
+    return h("section", { class: "card clip claude-work" }, h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "🧾"), h("b", null, L("העבודה של הסוכנים", "Agents' work")), h("span", { class: "grow" }), h("span", { class: "mut sm" }, L("7 ימים · מהקומיטים ב-main", "7 days · from the commits on main"))), ...(running.length ? [h("div", { class: "trow cw-day cw-running-head" }, h("b", null, L(`רצים עכשיו: ${running.length}`, `Running now: ${running.length}`))), ...running.map((a) => runningRow(a, now))] : []), ...(asSessions.length ? [...group(L("היום", "Today"), today), ...group(L("השבוע", "This week"), week)] : [...(running.length ? [] : [h("div", { class: "trow mut sm" }, L("עוד אין עבודה של סוכנים השבוע.", "No agent work this week yet."))])]));
 }

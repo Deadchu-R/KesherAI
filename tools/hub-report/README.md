@@ -44,3 +44,10 @@ approvals). It has no heartbeat, so a viewer shows its running agent as stale on
 `node --conditions=source --import tsx --test --test-force-exit tools/hub-report/report.test.ts` (state and events,
 scrubbing, arguments, sealing as the viewer reads it, file modes) and `apps/hub/src/hub.test.ts` (the hub accepts
 the kind and keeps it to activity only). Typecheck: `tsc -p tools/hub-report/tsconfig.json` (part of `pnpm typecheck`).
+
+## agents-status.mjs: the "Running now" list in KesherAI
+`node tools/hub-report/agents-status.mjs set|done|fail <id> [title] [model] [--note "text"]` updates `claude/agents.json`
+on the `claude-status` branch and pushes it in one command (git plumbing only: the working tree and branch stay as
+they are; the branch is not main, so no CI and no release). The PC reads it from `origin/claude-status` after the task
+inbox's fetch and shows it on top of Settings > Agents' work and the hub (minutes running; "maybe stuck" after 45
+minutes without a `set`). At most 10 entries; finished ones go after a day. Ids: letters, digits, `_`, `-`.

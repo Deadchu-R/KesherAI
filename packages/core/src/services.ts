@@ -204,6 +204,8 @@ export interface KesherServices {
   externalAgents?: import("./external-agents.js").ExternalAgents;
   /** Claude's helper agents' commits of the last week (the Agents' work list). */
   claudeWork?: import("./claude-work.js").ClaudeWorkReader;
+  /** The helpers running now, from the claude-status branch (claude-status.ts). */
+  claudeStatus?: import("./claude-status.js").ClaudeStatusReader;
   /** Set in worker mode: its version, and "move to the newer version after the current item". */
   worker?: { version: string; upgrade: () => void };
   /** Set in the main desktop app: starts the worker and says where it is. */

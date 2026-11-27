@@ -217,6 +217,16 @@ test("quotas: a PC's snapshot is cleaned strictly, kept 30 minutes at most, and 
   assert.equal(parseSealedBody({ type: "quotas", items: [], at: 7 }, "board"), null);
 });
 
+test("claude_work: running agents are cleaned (bad id, no title or no start dropped, at most 10)", () => {
+  const ok = { id: "a1", title: " My  agent ", model: "opus", startedAt: 5, updatedAt: 9, lastNote: "x" };
+  const many = Array.from({ length: 14 }, (_, i) => ({ ...ok, id: `r${i}` }));
+  const b = parseSealedBody({ type: "claude_work", sessions: [], running: [ok, { ...ok, id: "bad id" }, { ...ok, title: "" }, { ...ok, startedAt: 0 }], at: 1 }, "claude_work") as Extract<NonNullable<ReturnType<typeof parseSealedBody>>, { type: "claude_work" }>;
+  assert.equal(b.running?.[0]?.title, "My agent");
+  assert.equal(b.running?.length, 1);
+  assert.equal((parseSealedBody({ type: "claude_work", sessions: [], running: many, at: 1 }, "claude_work") as typeof b).running?.length, 10);
+  assert.deepEqual((parseSealedBody({ type: "claude_work", sessions: [], at: 1 }, "claude_work") as typeof b).running, []);
+});
+
 test("claude_work: sessions are cleaned (links only to github commits, bad commits dropped), the kind must match the body", () => {
   const sha = "a".repeat(40);
   const ok = { id: "session_1", title: "Agents' work", at: 5, commits: [{ sha, title: "One", files: 3, at: 4, release: "0.6.504", url: `https://github.com/o/r/commit/${sha}` }, { sha: "nope", title: "Bad", files: 1, at: 1 }, { sha, title: "Two", files: 2, at: 3, release: "x", url: "https://evil.example/x" }] };

@@ -75,7 +75,7 @@ const hubSeedSchema = z.object({
   /** The quotas snapshots the PCs report (items as in `ProviderQuota`, provider-quotas.ts; times as `{ "$inMs": "40m" }`; sent at the render's time). */
   quotas: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(24).default([]) })).max(4).default([]),
   /** The agents' work lists the PCs report (sessions as in `HubClaudeSession`, hub-protocol.ts; times as `{ "$agoMs": "5m" }`). */
-  claudeWork: z.array(z.object({ pc: z.string(), sessions: z.array(z.record(z.string(), z.unknown())).max(30).default([]) })).max(2).default([]),
+  claudeWork: z.array(z.object({ pc: z.string(), sessions: z.array(z.record(z.string(), z.unknown())).max(30).default([]), running: z.array(z.record(z.string(), z.unknown())).max(10).default([]) })).max(2).default([]),
   /** The Task chat's saved transcript (messages as in apps/hub/page/task-chat.ts `ChatMsg`; times as `{ "$agoMs": "5m" }`). */
   taskChat: z.array(z.record(z.string(), z.unknown())).max(30).default([]),
   /** The browser is subscribed to Web Push (Settings › Notifications shows its switch on). */

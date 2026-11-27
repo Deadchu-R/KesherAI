@@ -15,6 +15,7 @@ import {
   type ProviderQuota,
   cleanOptIn,
   connectorQueryStale,
+  type HubClaudeRunning,
   type HubClaudeSession,
   type ConnectorAnswer,
   type ConnectorQuery,
@@ -174,7 +175,7 @@ export interface HubClientDeps {
   /** What is left of each provider this PC's agents use (provider-quotas.ts), for the hub page's Quotas section. */
   quotas?: () => Promise<ProviderQuota[]>;
   /** What Claude's helper agents did this week, from git (claude-work.ts), for the hub page's Agents' work list. */
-  claudeWork?: () => Promise<{ sessions: HubClaudeSession[] }>;
+  claudeWork?: () => Promise<{ sessions: HubClaudeSession[]; running?: HubClaudeRunning[] }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
   /**
@@ -1655,8 +1656,8 @@ export class HubClient {
     const online = new Set(phones.map((p) => p.id));
     for (const id of this.workTo) if (!online.has(id)) this.workTo.delete(id);
     if (!phones.length) return;
-    const { sessions } = await this.deps.claudeWork();
-    const key = createHash("sha256").update(JSON.stringify(sessions)).digest("base64url").slice(0, 16);
+    const { sessions, running = [] } = await this.deps.claudeWork();
+    const key = createHash("sha256").update(JSON.stringify([sessions, running])).digest("base64url").slice(0, 16);
     const now = Date.now();
     const all = key !== this.workKey || now - this.workSentAt >= 2 * CLAUDE_WORK_MS;
     const to = all ? phones : phones.filter((p) => !this.workTo.has(p.id));
@@ -1666,7 +1667,7 @@ export class HubClient {
       this.workSentAt = now;
       this.workTo = new Set(online);
     } else for (const p of to) this.workTo.add(p.id);
-    for (const p of to) await this.sendSealed(p.id, "claude_work", { type: "claude_work", sessions, at: now }, HUB_LIMITS.approvalTtl);
+    for (const p of to) await this.sendSealed(p.id, "claude_work", { type: "claude_work", sessions, running, at: now }, HUB_LIMITS.approvalTtl);
   }
 
   private async reportQuotasOnce(): Promise<void> {

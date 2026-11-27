@@ -2,10 +2,11 @@
  * Settings > Agents: "Agents' work" (design board HubAgentsWork). What Claude's helper agents did in the last 7 days,
  * read from the commits on main that carry a `Claude-Session:` trailer (GET /api/agents/claude-work; no GitHub token,
  * no tokens spent). One card per session, its commits as rows: title, files, time and an "in 0.6.NNN" chip or "not
- * released yet"; a row opens the commit on GitHub. Works in remote too (the same route through the phone link).
+ * released yet"; a row opens the commit on GitHub. On top, "Running now" (claude-status.ts: the helpers the lead lists in
+ * `claude/agents.json` on the claude-status branch) with minutes and a "maybe stuck" chip after 45 minutes without an update. Works in remote too (the same route through the phone link).
  */
 import { useEffect, useState } from "react";
-import { splitToday, type ClaudeSession } from "@kesher/shared";
+import { isMaybeStuck, minutesSince, splitToday, type ClaudeAgentStatus, type ClaudeSession } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 
@@ -20,6 +21,23 @@ function when(at: number, now: number): string {
   const lang = getLocale() === "he" ? "he-IL" : "en-GB";
   const clock = d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
   return now - at < 86_400_000 && d.getDate() === new Date(now).getDate() ? clock : `${d.toLocaleDateString(lang, { weekday: "short" })} ${clock}`;
+}
+
+/** The helpers running now, at the top of the list: title, model, minutes, and the "maybe stuck" chip. */
+function RunningNow({ agents, now }: { agents: ClaudeAgentStatus[]; now: number }) {
+  if (agents.length === 0) return null;
+  return (
+    <div className="cw-group cw-running">
+      <h3>{L(`רצים עכשיו: ${agents.length}`, `Running now: ${agents.length}`)}</h3>
+      {agents.map((a) => (
+        <div key={a.id} className="cw-row cw-run">
+          <span className="cw-title" dir="auto">{a.title}</span>
+          <span className="muted small cw-meta">{a.model ? `${a.model} · ` : ""}{L(`${minutesSince(a.startedAt, now)} דק׳`, `${minutesSince(a.startedAt, now)} min`)}{a.lastNote ? ` · ${a.lastNote}` : ""}</span>
+          {isMaybeStuck(a, now) && <span className="chip cw-stuck">⚠ {L("אולי תקוע", "maybe stuck")}</span>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** One session: its title, how many commits, and the commits as rows. */
@@ -48,9 +66,10 @@ function SessionCard({ s, now }: { s: Session; now: number }) {
 /** The section. */
 export function ClaudeWorkSection() {
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [running, setRunning] = useState<ClaudeAgentStatus[]>([]);
   const [err, setErr] = useState("");
   useEffect(() => {
-    void api<{ sessions: Session[] }>("/api/agents/claude-work").then((r) => setSessions(r.sessions), (e: Error) => setErr(e.message));
+    void api<{ sessions: Session[]; running?: ClaudeAgentStatus[] }>("/api/agents/claude-work").then((r) => { setSessions(r.sessions); setRunning(r.running ?? []); }, (e: Error) => setErr(e.message));
   }, []);
   const now = Date.now();
   const { today, week } = splitToday(sessions ?? [], now);
@@ -64,8 +83,9 @@ export function ClaudeWorkSection() {
     <section className="card stack claude-work" id="claude-work">
       <h2>🧾 {L("העבודה של הסוכנים", "Agents' work")}</h2>
       <p className="muted small">{L("מה עוזרי Claude עשו ב-7 הימים האחרונים, לפי הקומיטים ב-main. בלי טוקנים ובלי מפתח GitHub.", "What Claude's helper agents did in the last 7 days, from the commits on main. No tokens and no GitHub key.")}</p>
-      {err ? <p className="error small">{err}</p> : sessions === null ? <p className="muted small">…</p> : sessions.length === 0 ? <p className="muted small">{L("עוד אין עבודה של סוכנים השבוע (או שלא הוגדרה תיקיית פרויקט בתיבת המשימות).", "No agent work this week yet (or no project folder is set in the task inbox).")}</p> : (
+      {err ? <p className="error small">{err}</p> : sessions === null ? <p className="muted small">…</p> : sessions.length === 0 && running.length === 0 ? <p className="muted small">{L("עוד אין עבודה של סוכנים השבוע (או שלא הוגדרה תיקיית פרויקט בתיבת המשימות).", "No agent work this week yet (or no project folder is set in the task inbox).")}</p> : (
         <>
+          <RunningNow agents={running} now={now} />
           {group(L("היום", "Today"), today)}
           {group(L("השבוע", "This week"), week)}
         </>

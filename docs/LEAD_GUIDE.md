@@ -43,6 +43,7 @@ Run from /home/claude/kesher; each call is one short connection and exits at onc
 - Optional while it runs: `… step <runId> "<short label>"`.
 - When its notification arrives: `… done <runId> "<summary ≤300 chars>"` or `… failed <runId> "<reason>"`.
 Labels only: no prompts, no file contents (paths, keys and tokens are scrubbed anyway).
+Also (KesherAI's own "Running now" list, via the `claude-status` branch, no CI): `node tools/hub-report/agents-status.mjs set <id> "<title>" <model>` when an agent starts (run it again to refresh = "still alive"; stuck after 45 min without), `done <id>` / `fail <id>` when it ends; `--note "text"` optional. Max 10 entries.
 
 ## Design doc (artifact https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U)
 Roee watches it live: every new or changed screen goes in before the build, no approval needed.

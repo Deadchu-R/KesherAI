@@ -802,7 +802,7 @@ export class HubDevice {
         if (body.type === "quotas")
             return this.onQuotas(env.from, body.items, body.at);
         if (body.type === "claude_work")
-            return this.onClaudeWork(env.from, body.sessions, body.at);
+            return this.onClaudeWork(env.from, body.sessions, body.running ?? [], body.at);
         if (body.type === "taskchat_answer")
             return void (env.from && this.chatListener?.(env.from, body));
         if (body.type === "command_result")
@@ -844,11 +844,11 @@ export class HubDevice {
         await this.saveTasks();
     }
     /** A PC's agents' work list: replaces the last one (an older one that arrives late is ignored). */
-    onClaudeWork(from, sessions, at) {
+    onClaudeWork(from, sessions, running, at) {
         const last = this.claudeWork.get(from);
         if (last && last.at > at)
             return;
-        this.claudeWork.set(from, { sessions, at });
+        this.claudeWork.set(from, { sessions, running, at });
         this.changed();
     }
     /** A PC's quotas snapshot: replaces the last one (an older one that arrives late is ignored). */

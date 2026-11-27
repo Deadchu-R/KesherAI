@@ -349,3 +349,5 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .claude-work .cw-title { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .claude-work a.cw-row:hover .cw-title { text-decoration: underline; }
 .claude-work .cw-pending { opacity: .8; }
+.claude-work .cw-run { flex-wrap: wrap; row-gap: 2px; }
+.claude-work .cw-stuck { border-color: #8a6a1a; color: #f0c05a; }

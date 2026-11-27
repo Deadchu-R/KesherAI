@@ -169,7 +169,7 @@ export interface HubPlan {
   /** The PCs' shared task boards, whole (sealed to this device and delivered after the welcome). */
   boards: Array<{ pc: string; rev: number; items: Array<Record<string, unknown>>; doneTotal: number; at: number }>;
   /** The PCs' agents' work lists (sealed and delivered after the welcome, like the quotas). */
-  claudeWork: Array<{ pc: string; sessions: unknown[]; at: number }>;
+  claudeWork: Array<{ pc: string; sessions: unknown[]; running: unknown[]; at: number }>;
   /** The PCs' quotas snapshots, cleaned as the page cleans them (sealed and delivered after the welcome, like the boards). */
   quotas: Array<{ pc: string; items: ProviderQuota[]; at: number }>;
   /** The Task chat's saved transcript (written to the page's IndexedDB `taskchat`). */
@@ -200,7 +200,7 @@ export function hubPlan(seed: HubSeed, now: number): HubPlan {
   });
   const claudeWork = seed.claudeWork.map((w) => {
     if (!seed.pcs.some((p) => p.id === w.pc)) throw new Error(`hub seed: the agents' work is on PC "${w.pc}", which is not in "pcs"`);
-    return { pc: w.pc, sessions: w.sessions, at: now };
+    return { pc: w.pc, sessions: w.sessions, running: w.running, at: now };
   });
   return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards, quotas, claudeWork, taskChat: seed.taskChat.map((m, i) => ({ id: `m${i + 1}`, at: now - (seed.taskChat.length - i) * 60_000, ...m })) };
 }
@@ -234,7 +234,7 @@ export const HUB_SEED_JS = `async (plan) => {
   const boardEnvs = [];
   for (const b of plan.boards) boardEnvs.push(await c.sealMessage({ from: b.pc, to: plan.deviceId, kind: "board" }, { type: "board", rev: b.rev, items: b.items, doneTotal: b.doneTotal, at: b.at }, keys[b.pc].privateKey, me.publicKey));
   for (const q of plan.quotas) boardEnvs.push(await c.sealMessage({ from: q.pc, to: plan.deviceId, kind: "quotas" }, { type: "quotas", items: q.items, at: q.at }, keys[q.pc].privateKey, me.publicKey));
-  for (const w of plan.claudeWork) boardEnvs.push(await c.sealMessage({ from: w.pc, to: plan.deviceId, kind: "claude_work" }, { type: "claude_work", sessions: w.sessions, at: w.at }, keys[w.pc].privateKey, me.publicKey));
+  for (const w of plan.claudeWork) boardEnvs.push(await c.sealMessage({ from: w.pc, to: plan.deviceId, kind: "claude_work" }, { type: "claude_work", sessions: w.sessions, running: w.running, at: w.at }, keys[w.pc].privateKey, me.publicKey));
   const db = await new Promise((ok, fail) => {
     const r = indexedDB.open("kesher-hub", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("kv");

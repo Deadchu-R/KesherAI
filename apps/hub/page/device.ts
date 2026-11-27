@@ -9,7 +9,7 @@ import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuar
 import { dropLocalPush } from "./push.js";
 import { get, put, type PcKeys } from "./kv.js";
 import type { TaskChatAnswer } from "../../../packages/shared/src/hub-task-chat.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubClaudeSession, type SealedBody, type HubApproval, type HubBoardCommand, type HubBoardItem, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubClaudeRunning, type HubClaudeSession, type SealedBody, type HubApproval, type HubBoardCommand, type HubBoardItem, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
@@ -185,7 +185,7 @@ export class HubDevice {
   /** Each PC's providers and what is left of them (its newest sealed `quotas` snapshot, in memory; quotas.ts shows it). */
   quotas = new Map<string, { items: ProviderQuota[]; at: number }>();
   /** Each PC's agents' work list (its newest sealed `claude_work` snapshot, in memory; claude-work.ts shows it). */
-  claudeWork = new Map<string, { sessions: HubClaudeSession[]; at: number }>();
+  claudeWork = new Map<string, { sessions: HubClaudeSession[]; running: HubClaudeRunning[]; at: number }>();
   /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
   taskActions = new Map<string, { action: HubCommandAction; commandId: string; left: number; at: number; result?: { ok: boolean; text: string } }>();
   private agentSeq = 0;
@@ -858,7 +858,7 @@ export class HubDevice {
     if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
     if (body.type === "board") return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
     if (body.type === "quotas") return this.onQuotas(env.from, body.items, body.at);
-    if (body.type === "claude_work") return this.onClaudeWork(env.from, body.sessions, body.at);
+    if (body.type === "claude_work") return this.onClaudeWork(env.from, body.sessions, body.running ?? [], body.at);
     if (body.type === "taskchat_answer") return void (env.from && this.chatListener?.(env.from, body));
     if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
@@ -890,10 +890,10 @@ export class HubDevice {
   }
 
   /** A PC's agents' work list: replaces the last one (an older one that arrives late is ignored). */
-  private onClaudeWork(from: string, sessions: HubClaudeSession[], at: number): void {
+  private onClaudeWork(from: string, sessions: HubClaudeSession[], running: HubClaudeRunning[], at: number): void {
     const last = this.claudeWork.get(from);
     if (last && last.at > at) return;
-    this.claudeWork.set(from, { sessions, at });
+    this.claudeWork.set(from, { sessions, running, at });
     this.changed();
   }
 

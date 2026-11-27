@@ -6,7 +6,8 @@
  * commit on GitHub. Nothing is stored here.
  */
 import { splitToday, type ClaudeSession } from "../../../packages/shared/src/claude-work.js";
-import type { HubClaudeCommit, HubClaudeSession } from "../../../packages/shared/src/hub-protocol.js";
+import { isMaybeStuck, minutesSince } from "../../../packages/shared/src/claude-status.js";
+import type { HubClaudeCommit, HubClaudeRunning, HubClaudeSession } from "../../../packages/shared/src/hub-protocol.js";
 import { h, L, type Child } from "./dom.js";
 import type { HubDevice } from "./device.js";
 
@@ -38,6 +39,18 @@ function sessionCard(s: HubClaudeSession, now: number): HTMLElement {
   );
 }
 
+/** One running helper as a row: title, model, minutes, and the "maybe stuck" chip when it has been quiet too long. */
+function runningRow(a: HubClaudeRunning, now: number): HTMLElement {
+  const stuck = isMaybeStuck({ ...a, state: "running" }, now);
+  return h(
+    "div",
+    { class: "trow cw-row cw-run" },
+    h("span", { class: "cw-title", dir: "auto" }, a.title),
+    h("span", { class: "mut sm" }, `${a.model ? a.model + " · " : ""}${L(`${minutesSince(a.startedAt, now)} דק׳`, `${minutesSince(a.startedAt, now)} min`)}${a.lastNote ? " · " + a.lastNote : ""}`),
+    stuck ? h("span", { class: "chip cw-stuck" }, "⚠ " + L("אולי תקוע", "maybe stuck")) : null,
+  );
+}
+
 /**
  * The section for the Agents tab, or null while no PC has reported a list (an older PC) .
  *
@@ -49,6 +62,9 @@ export function claudeWorkSection(device: HubDevice): HTMLElement | null {
   // Two PCs may see the same project: a session is listed once (the newer snapshot's copy).
   const all = new Map<string, HubClaudeSession>();
   for (const w of [...device.claudeWork.values()].sort((a, b) => a.at - b.at)) for (const s of w.sessions) all.set(s.id, s);
+  // The newest snapshot's running list wins (the lead's file is the same for every PC of the project).
+  const runSnap = [...device.claudeWork.values()].sort((a, b) => b.at - a.at).find((w) => w.running.length);
+  const running = (runSnap?.running ?? []).slice().sort((a, b) => a.startedAt - b.startedAt);
   const asSessions = [...all.values()].sort((a, b) => b.at - a.at) as unknown as ClaudeSession[];
   const { today, week } = splitToday(asSessions, now);
   const group = (title: string, list: ClaudeSession[]) => (list.length ? [h("div", { class: "trow cw-day mut sm" }, title), ...(list as unknown as HubClaudeSession[]).map((s) => sessionCard(s, now))] : []);
@@ -56,6 +72,7 @@ export function claudeWorkSection(device: HubDevice): HTMLElement | null {
     "section",
     { class: "card clip claude-work" },
     h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "🧾"), h("b", null, L("העבודה של הסוכנים", "Agents' work")), h("span", { class: "grow" }), h("span", { class: "mut sm" }, L("7 ימים · מהקומיטים ב-main", "7 days · from the commits on main"))),
-    ...(asSessions.length ? [...group(L("היום", "Today"), today), ...group(L("השבוע", "This week"), week)] : [h("div", { class: "trow mut sm" }, L("עוד אין עבודה של סוכנים השבוע.", "No agent work this week yet."))]),
+    ...(running.length ? [h("div", { class: "trow cw-day cw-running-head" }, h("b", null, L(`רצים עכשיו: ${running.length}`, `Running now: ${running.length}`))), ...running.map((a) => runningRow(a, now))] : []),
+    ...(asSessions.length ? [...group(L("היום", "Today"), today), ...group(L("השבוע", "This week"), week)] : [...(running.length ? [] : [h("div", { class: "trow mut sm" }, L("עוד אין עבודה של סוכנים השבוע.", "No agent work this week yet."))])]),
   );
 }

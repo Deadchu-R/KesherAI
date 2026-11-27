@@ -283,7 +283,7 @@ export type SealedBody =
    * a `Claude-Session:` trailer (claude-work.ts). Titles, counts, times, release versions and GitHub commit links; a
    * whole snapshot that replaces the last. `at`: when the PC read it.
    */
-  | { type: "claude_work"; sessions: HubClaudeSession[]; at: number }
+  | { type: "claude_work"; sessions: HubClaudeSession[]; running?: HubClaudeRunning[]; at: number }
   /** Hub to a PC whose `connector` opt-in is on: one question of the Claude connector (hub-connector.ts). Never queued. */
   | ({ type: "connector_query" } & ConnectorQuery)
   /** That PC's answer, sealed to the hub; opened in memory for that one MCP call, never stored or logged. */
@@ -801,7 +801,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     case "quotas":
       return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
     case "claude_work":
-      return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x): x is HubClaudeSession => !!x), at: num(b.at) } : null;
+      return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x): x is HubClaudeSession => !!x), running: cleanClaudeRunning(b.running), at: num(b.at) } : null;
     case "connector_query": {
       const q = parseConnectorQuery(b);
       return q ? { type: "connector_query", ...q } : null;
@@ -1009,6 +1009,32 @@ export interface HubClaudeSession {
   title: string;
   at: number;
   commits: HubClaudeCommit[];
+}
+
+/** A helper agent running now (from the claude-status branch); "maybe stuck" is worked out by the page from the times. */
+export interface HubClaudeRunning {
+  id: string;
+  title: string;
+  model: string;
+  startedAt: number;
+  /** When the lead last updated it (ms); startedAt when missing. */
+  updatedAt?: number;
+  lastNote?: string;
+}
+
+/** The running agents, cleaned (at most 10); anything that is not one is dropped. */
+function cleanClaudeRunning(v: unknown): HubClaudeRunning[] {
+  if (!Array.isArray(v)) return [];
+  const out: HubClaudeRunning[] = [];
+  for (const x of v.slice(0, 10)) {
+    if (!x || typeof x !== "object") continue;
+    const a = x as Record<string, unknown>;
+    const title = oneLine(a.title);
+    if (typeof a.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(a.id) || !title || !num(a.startedAt)) continue;
+    const note = oneLine(a.lastNote);
+    out.push({ id: a.id, title: title.slice(0, 120), model: (oneLine(a.model) ?? "").slice(0, 40), startedAt: num(a.startedAt), ...optNum("updatedAt", a.updatedAt), ...(note ? { lastNote: note.slice(0, 200) } : {}) });
+  }
+  return out;
 }
 
 /** A commit of a session, cleaned; null when it is not one. */

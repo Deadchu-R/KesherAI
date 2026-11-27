@@ -4950,3 +4950,5 @@ a.cw-row:hover .cw-title { text-decoration: underline; }
 .cw-title { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .cw-rel { background: color-mix(in srgb, var(--ok, #2e9d5b) 18%, transparent); }
 .cw-pending { opacity: 0.8; }
+.cw-run { border-top: 0; }
+.cw-stuck { border-color: color-mix(in srgb, #e0a020 70%, transparent); color: #e0a020; }
