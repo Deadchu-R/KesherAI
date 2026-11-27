@@ -50,6 +50,8 @@
 .log-extra { flex-basis: 100%; }
 .log-extra summary { cursor: pointer; color: var(--muted); }
 .log-extra pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }
+.log-file-link { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.log-file-link:hover, .log-file-link:focus-visible { color: var(--accent-strong, var(--accent)); text-decoration-thickness: 2px; }
 @media (max-width: 760px) {
   .logs-body { grid-template-columns: minmax(0, 1fr); }
   .logs-sources { display: none; }

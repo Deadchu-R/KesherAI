@@ -9,6 +9,38 @@ import "./logs-page.css";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
+/** A parsed chunk of a log line: plain text or a clickable file:line link. */
+type LinePart = { kind: "text"; text: string } | { kind: "link"; text: string; file: string; line: number };
+
+/**
+ * Split a log message into text and file:line links.
+ * Matches `path/to/file.ts:123` and `path/to/file.ts(123,45)`; ignores bare words like `error:`.
+ */
+function parseFileLinks(message: string): LinePart[] {
+  const parts: LinePart[] = [];
+  // Capture group 1+2: path(line[,col]) | group 3+4: path:line
+  const re = /((?:[A-Za-z]:\\|\\\\|[./])?[\w./@-]+\.[\w]+)\((\d+)(?:,\d+)?\)|((?:[A-Za-z]:\\|\\\\|[./])?[\w./@-]+\.[\w]+):(\d+)/g;
+  let last = 0;
+  for (let m: RegExpExecArray | null; (m = re.exec(message)); ) {
+    if (m.index > last) parts.push({ kind: "text", text: message.slice(last, m.index) });
+    const file = (m[1] ?? m[3])!;
+    const line = Number(m[2] ?? m[4]);
+    parts.push({ kind: "link", text: m[0], file, line });
+    last = m.index + m[0].length;
+  }
+  if (last < message.length) parts.push({ kind: "text", text: message.slice(last) });
+  return parts.length ? parts : [{ kind: "text", text: message }];
+}
+
+/** Open a file in the user's local IDE via POST /api/ides/open (packages/core/src/routes/ide.ts). */
+async function openInIde(file: string, line: number) {
+  try {
+    await api("/api/ides/open", { method: "POST", body: { file, line } });
+  } catch (e) {
+    toast(L("לא הצלחתי לפתוח בעורך.", "Could not open in editor."));
+  }
+}
+
 /** A source as GET /api/logs/sources gives it (core: log-reader.ts). */
 interface Source { id: string; name: string; nameHe: string; group: "kesher" | "agents" | "engines" | "unreal" | "unity" | "added"; size?: number; modified?: number; removable?: boolean }
 interface Entry { n: number; t?: number; level: LogLevel; cat?: string; msg: string; extra?: string[] }
@@ -33,12 +65,29 @@ const he = () => getLocale() === "he";
 const nameOf = (s: Source) => (he() ? s.nameHe : s.name);
 const timeText = (t?: number) => (t ? new Date(t).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "");
 
+/** Render parsed line parts: plain text or clickable file:line links (desktop only). */
+function LineParts({ msg }: { msg: string }) {
+  const parts = useMemo(() => parseFileLinks(msg), [msg]);
+  const desktop = !isRemote();
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.kind === "link" && desktop ? (
+          <button key={i} type="button" className="log-file-link" title={L("פתח בעורך", "Open in editor")} onClick={() => openInIde(p.file, p.line)}>{p.text}</button>
+        ) : (
+          <span key={i}>{p.kind === "link" ? p.text : p.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 /** One entry: its level, time, category and message, and its stack trace folded. */
 function EntryLine({ e, dim }: { e: Entry; dim?: boolean }) {
   return (
     <div className={`log-line lvl-${e.level}${dim ? " dim" : ""}`}>
       <span className="log-meta" dir="ltr">{e.t ? new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : `#${e.n}`}{e.cat ? ` ${e.cat}` : ""}</span>
-      <span className="log-msg" dir="auto">{e.msg}</span>
+      <span className="log-msg" dir="auto"><LineParts msg={e.msg} /></span>
       {!!e.extra?.length && (
         <details className="log-extra">
           <summary>{L(`${e.extra.length} שורות נוספות`, `${e.extra.length} more lines`)}</summary>
