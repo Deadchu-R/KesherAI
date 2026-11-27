@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { explainCommand, parseScenePreview } from "@kesher/shared";
 import { api } from "./api";
-import { callDuration, errorLine, formatDuration, maskSecrets, paramSummary, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
+import { callDuration, errorLine, formatDuration, maskSecrets, paramSummary, pastChatHits, pastChatTitle, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
 import { FileChips } from "./MediaView";
 import { ShotThumb } from "./chat/ShotView";
 import { stepPreview, type ActedOn } from "./chat/step-fold";
@@ -96,15 +96,18 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
   const info = toolInfo(call.name);
   const param = paramSummary(call.input);
   const hits = call.name === "web_search" && result?.ok ? searchHits(result.output) : [];
-  const out = result && !result.diff && !hits.length ? prettyOutput(result.output) : "";
+  // Past chats: "Searched past chats: 'X' · 3 results", with a link to each chat found.
+  const past = /^(search_chats|recent_chats)$/.test(call.name) && result?.ok ? pastChatHits(result.output) : [];
+  const pastTitle = pastChatTitle(call.name, call.input, result ? (result.ok ? past.length : 0) : undefined, he);
+  const out = result && !result.diff && !hits.length && !past.length ? prettyOutput(result.output) : "";
   const preview = maskSecrets(stepPreview(call.name, result));
   const card = (
     <details className={`tool tool-card ${state}`}>
       <summary>
         <span className="tool-icon" aria-hidden>{info.icon}</span>
-        <span className="tool-label" dir="auto">{toolLabel(call.name, he)}</span>
+        <span className="tool-label" dir="auto">{pastTitle ?? toolLabel(call.name, he)}</span>
         {/* Names and parameters are code, a query or a path: isolated so Hebrew text does not reorder them. */}
-        {param && <bdi className="tool-param" dir="ltr">{param}</bdi>}
+        {param && !pastTitle && <bdi className="tool-param" dir="ltr">{param}</bdi>}
         <span className="tool-state" aria-label={state === "pending" ? L("רץ", "Running") : state === "ok" ? L("הסתיים", "Done") : L("נכשל", "Failed")}>
           {state === "pending" ? <span className="spinner" aria-hidden /> : <span aria-hidden>{state === "ok" ? "✓" : "✕"}</span>}
           <ToolClock call={call} result={result} />
@@ -123,6 +126,16 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
             <li key={h.url}>
               <a href={h.url} target="_blank" rel="noreferrer noopener" dir="auto">{h.title}</a>
               <bdi className="muted small" dir="ltr">{hostOf(h.url)}</bdi>
+            </li>
+          ))}
+        </ol>
+      )}
+      {past.length > 0 && (
+        <ol className="tool-hits">
+          {past.map((h) => (
+            <li key={h.id}>
+              <a href={`#/c/${h.id}`} dir="auto">{h.title}</a>
+              {h.day && <bdi className="muted small" dir="ltr">{h.day}</bdi>}
             </li>
           ))}
         </ol>

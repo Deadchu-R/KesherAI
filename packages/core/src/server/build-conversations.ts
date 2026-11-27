@@ -27,6 +27,7 @@ import { googleTools } from "../google-tools.js";
 import { knowledgeTools } from "../knowledge.js";
 import { appUri, mcpResultText } from "../mcp.js";
 import { memoryTools } from "../memory-tools.js";
+import { pastChatTools } from "../past-chat-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { queueUnityMoves, unitySceneOf, unityScenes } from "../routes/unity-scene.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
@@ -92,6 +93,8 @@ export interface ConversationParts {
   taskBoard: TaskBoard;
   registry: ProviderRegistry;
   library: Library;
+  /** Search by meaning for past chats (the embeddings model), when one is set. */
+  embedder?: () => import("../knowledge.js").Embedder | undefined;
   assets: AssetStore;
   /** The desktop app's PDF printer (ServerOptions.renderPdf), for the document tool's export. */
   renderPdf?: PdfRenderer;
@@ -335,6 +338,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     aboutUser: () => aboutUserNote(config.user),
     userNotes: async () => (config.coach?.learn === false ? [] : (await coach.profile()).notes),
     memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
+    // Past chats: the embeddings role of the CPU pool, when set, ranks by meaning; otherwise keywords.
+    pastChatTools: (convId) => pastChatTools({ library, ...(p.embedder ? { embedder: p.embedder } : {}) }, () => (convId ? library.summary(convId) : undefined)),
     // None in an incognito chat: a timer is written to disk (scan 65).
     // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
     canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? "", { assets, ...(renderPdf ? { renderPdf } : {}) }), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),

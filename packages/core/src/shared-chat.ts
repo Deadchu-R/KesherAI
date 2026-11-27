@@ -229,7 +229,7 @@ export const REMOVED = "(removed by the owner)";
  * left out whole: they act in the owner's own browser (signed in to their accounts) and on their screen, so even one
  * approved screenshot or page read would show a guest what is open there.
  */
-const NEVER_FOR_GUESTS = /^(delegate|offer_install|helper_|ask_member|remember|recall|forget|search_knowledge|analyze_chat|kesher_|gmail_|calendar_|drive_|browser_|computer_|mcp_)/;
+const NEVER_FOR_GUESTS = /^(delegate|offer_install|helper_|ask_member|remember|recall|forget|search_knowledge|search_chats|recent_chats|read_chat|analyze_chat|kesher_|gmail_|calendar_|drive_|browser_|computer_|mcp_)/;
 
 /**
  * The thread a turn a guest started sends to the model: only what the chat shows (the messages and the answers as

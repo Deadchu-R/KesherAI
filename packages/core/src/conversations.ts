@@ -49,6 +49,7 @@ import { isButtonTool, quickActionNames, quickActionProblem, quickTool, type Qui
 import { settingsTool } from "./chat-tools-settings.js";
 import { AutoModel } from "./auto-model.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
+import { PAST_CHATS_NOTE } from "./past-chat-tools.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
 export { ruleAllows } from "./approval-rules.js";
@@ -82,7 +83,7 @@ export interface NewConversation {
  * others are listed by name and loaded with more_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
-const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "code_map", "find_symbol", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
+const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "code_map", "find_symbol", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "search_chats", "recent_chats", "read_chat", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
 
 /** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
 const UNREAL_GRAPH_TOOLS = ["unreal_list_graphs", "unreal_read_graph", "unreal_change_graph", "unreal_test_blueprint", "unreal_play_test"];
@@ -316,7 +317,9 @@ export class ConversationManager {
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
     // Browser and computer tools: safety v2 decides each call (modes, sensitive sites, origin gate, local reviewer).
-    const all = this.gateControl(id, [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
+    const pastChats = id ? this.deps.pastChatTools?.(id) ?? [] : [];
+    if (pastChats.length) media.notes.push(PAST_CHATS_NOTE);
+    const all = this.gateControl(id, [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...pastChats, ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
     // Page text is data, never instructions (browser-safety.ts); said once wherever the browser tools are.
     if (all.some((t) => t.spec.name.startsWith("browser_"))) media.notes.push(UNTRUSTED_RULE);
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.

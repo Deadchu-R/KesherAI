@@ -39,6 +39,9 @@ const TOOLS: Record<string, ToolInfo> = {
   make_3d: { icon: "🧊", he: "יצירת מודל תלת־ממד", en: "Make 3D model" },
   make_pbr_texture: { icon: "🧱", he: "יצירת טקסטורה", en: "Make texture" },
   make_ui_sprite: { icon: "🎨", he: "יצירת ספרייט", en: "Make sprite" },
+  search_chats: { icon: "🕘", he: "חיפוש בשיחות קודמות", en: "Search past chats", hePlural: "{n} חיפושים בשיחות קודמות", enPlural: "{n} past-chat searches" },
+  recent_chats: { icon: "🕘", he: "שיחות אחרונות", en: "Recent chats" },
+  read_chat: { icon: "🕘", he: "קריאת שיחה קודמת", en: "Read a past chat" },
   remember: { icon: "🧠", he: "שמירה בזיכרון", en: "Save to memory" },
   delegate: { icon: "👥", he: "הפניה לעוזרים", en: "Delegate to helpers" },
   deep_research: { icon: "🔬", he: "מחקר מעמיק", en: "Deep research" },
@@ -208,6 +211,48 @@ export function searchHits(output: string): SearchHit[] {
     if (m && url) hits.push({ title: m[1]!.trim(), url });
   }
   return hits;
+}
+
+/** A chat a past-chat tool found: its id, title and day. */
+export interface PastChatHit { id: string; title: string; day: string }
+
+/**
+ * Reads a search_chats / recent_chats result ("1. Title\n   chat:ID · 2026-11-26 · user …") into the chats found,
+ * so the card can link to each one.
+ *
+ * @param output - The tool's output.
+ * @returns The chats, in order; empty for any other text.
+ */
+export function pastChatHits(output: string): PastChatHit[] {
+  const hits: PastChatHit[] = [];
+  const lines = output.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\d+\.\s+(.+)$/.exec(lines[i]!);
+    const c = /^\s+chat:([\w-]+)(?: · (\d{4}-\d{2}-\d{2}))?/.exec(lines[i + 1] ?? "");
+    if (m && c) hits.push({ id: c[1]!, title: m[1]!.trim(), day: c[2] ?? "" });
+  }
+  return hits;
+}
+
+/**
+ * The one-line title of a past-chat tool's card: "Searched past chats: 'X' · 3 results" (while it runs, "Searching…").
+ *
+ * @param name - The tool's name.
+ * @param input - The call's arguments.
+ * @param hits - How many chats it found (undefined while it runs).
+ * @param he - True for Hebrew.
+ * @returns The title, or `undefined` for any other tool.
+ */
+export function pastChatTitle(name: string, input: Record<string, unknown>, hits: number | undefined, he: boolean): string | undefined {
+  if (name === "search_chats") {
+    const q = cut(maskSecrets(String(input.query ?? "")), 30);
+    if (hits === undefined) return he ? `מחפש בשיחות קודמות: '${q}'` : `Searching past chats: '${q}'`;
+    const n = he ? (hits === 1 ? "תוצאה אחת" : `${hits} תוצאות`) : `${hits} result${hits === 1 ? "" : "s"}`;
+    return he ? `חיפוש בשיחות: '${q}' · ${n}` : `Searched past chats: '${q}' · ${n}`;
+  }
+  if (name === "recent_chats") return he ? "עיון בשיחות האחרונות" : "Looked at recent chats";
+  if (name === "read_chat") return he ? "קריאת שיחה קודמת" : "Read a past chat";
+  return undefined;
 }
 
 /**
