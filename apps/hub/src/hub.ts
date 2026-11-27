@@ -81,7 +81,7 @@ export const FREE_ROWS_PER_DAY = 100_000;
  * index). So fast-changing state lives in the Durable Object's memory and only state that must survive is written:
  * - live agent activity: memory only (a ring per run; lost when the hub sleeps, the next batch carries the state again);
  * - busy, agents and last seen from heartbeats: memory, written when the device leaves and at most every 15 minutes;
- * - snapshots (task-inbox reports, approvals, board, command results): memory until acked; the ones a phone needs
+ * - snapshots (task-inbox reports, approvals, board, quotas, command results): memory until acked; the ones a phone needs
  *   after the hub sleeps are saved as one settings row per phone, at most once a minute ({@link WRITE_PACE});
  * - progress notes: delivered to an online phone, never kept;
  * - socket tickets and `kh2_` device tokens: signed (HMAC), checked without storage;
@@ -106,11 +106,11 @@ export const WRITE_PACE = {
 } as const;
 
 /** Kinds kept in memory only, never in the queue table: each one carries a whole state, and the next replaces it. */
-const LIVE_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["progress", "inbox_task", "approvals", "board", "command_result"]);
+const LIVE_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["progress", "inbox_task", "approvals", "board", "quotas", "command_result"]);
 /** Of those, kinds a phone that is off still needs when it comes on, so they are saved (paced) past the hub's sleep. */
 const SAVED_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["inbox_task", "approvals", "command_result"]);
 /** Of those, kinds whose newest message replaces the older one from the same sender (a full snapshot each time). */
-const REPLACING_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["approvals", "board"]);
+const REPLACING_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["approvals", "board", "quotas"]);
 
 /** Sockets of connected devices, as the Durable Object has them. */
 export interface DeviceSockets {
@@ -1081,8 +1081,8 @@ export class Hub {
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
     if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
-    // A task-inbox report, the approvals waiting on a PC and its shared task board go from a PC to the owner's phones (and the hub page) only.
-    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    // A task-inbox report, the approvals waiting on a PC, its shared task board and its providers' quotas go from a PC to the owner's phones (and the hub page) only.
+    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board" || env.kind === "quotas") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     // An approval answer or a command (Run, Cancel) goes from a paired phone (or the hub page) to a PC only, at a human pace.
     if (env.kind === "command_result" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     if (env.kind === "approval_answer" || env.kind === "command") {

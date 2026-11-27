@@ -72,6 +72,8 @@ const hubSeedSchema = z.object({
   agents: z.array(z.object({ pc: z.string(), runId: z.string().regex(/^[\w-]{1,64}$/), state: z.record(z.string(), z.unknown()).default({}), events: z.array(z.record(z.string(), z.unknown())).max(50).default([]) })).max(30).default([]),
   /** The shared task boards the PCs report (items as in `HubBoardItem`; times as `{ "$agoMs": "5m" }`; the rest is filled in). */
   boards: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(80).default([]), doneTotal: z.number().int().min(0).optional() })).max(4).default([]),
+  /** The quotas snapshots the PCs report (items as in `ProviderQuota`, provider-quotas.ts; times as `{ "$inMs": "40m" }`; sent at the render's time). */
+  quotas: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(24).default([]) })).max(4).default([]),
   /** The browser is subscribed to Web Push (Settings › Notifications shows its switch on). */
   push: z.boolean().default(false),
 }).strict();

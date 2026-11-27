@@ -27,6 +27,7 @@ import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type A
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup, type BoardView } from "./board.js";
+import { quotasLink, quotasPage, type QuotasView } from "./quotas.js";
 import { failedBlock, doneLine, foldingRows, leavingRow, loadWorkFilters, nowNextSections, workState, workTabs, type WorkView } from "./work.js";
 import { listOrder, passes, runToWorkTask, toWorkTask, type WorkTask } from "../../../packages/shared/src/hub-work.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
@@ -53,7 +54,7 @@ interface OwnerState {
   audit: Array<{ ts: number; action: string; deviceId?: string }>;
 }
 
-type Tab = "dash" | "agents" | "devices" | "tasks" | "new" | "pair" | "settings";
+type Tab = "dash" | "agents" | "devices" | "tasks" | "new" | "quotas" | "pair" | "settings";
 const TABS: Tab[] = ["dash", "agents", "devices", "tasks", "pair", "settings"];
 
 /** Minimal Google Identity Services types (the script is loaded from accounts.google.com, allowed by the CSP). */
@@ -131,6 +132,9 @@ const agentsView: AgentsView = {
   snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
 
+/** The Quotas page (quotas.ts): each PC's providers and what is left of them. */
+const quotasView: QuotasView = { device, devices: () => devices() };
+
 /** Settings › Notifications (push.ts): this browser's Web Push for "N waiting for you". */
 const pushView: PushView = { device, vapidKey: () => app.vapidKey, inApp: () => app.inApp, externalHref: () => externalHref(), render: () => render() };
 
@@ -145,7 +149,7 @@ const waitingView: WaitingView = { device, render: () => render(), openAgent: (k
 /** The current tab, from the address (#devices…). Anything else, such as #waiting from a notification, is the dashboard, which opens with "Waiting for you". */
 function tab(): Tab {
   const t = location.hash.slice(1) as Tab;
-  return t === "new" || TABS.includes(t) ? t : "dash";
+  return t === "new" || t === "quotas" || TABS.includes(t) ? t : "dash";
 }
 
 /** How the hub last answered the page (direct.ts shows the Tailscale path when it is down). */
@@ -267,7 +271,7 @@ function routeChip(t: PageTask): HTMLElement {
     if (ex === "claude") return h("span", { class: "ex ex-opus" }, "✷ Claude");
     if (ex === "gemini") return h("span", { class: "ex ex-gem", title: t.toName }, L("✧ Gemini (חינמי)", "✧ Gemini (free)"));
     // An executor this page does not know yet (a newer PC) is shown as written.
-    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "opencode" ? "◈ OpenCode Go" : ex === "local" ? L("מקומי", "Local") : ex;
+    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "opencode" ? "◈ OpenCode Go" : ex === "ghostcli" ? "👻 GhostCLI" : ex === "local" ? L("מקומי", "Local") : ex;
     return h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${name}`);
   }
   return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
@@ -314,13 +318,15 @@ const TAB_LABEL: Record<Tab, [string, string, string]> = {
   devices: ["מכשירים", "Devices", "🖥"],
   tasks: ["משימות", "Tasks", "📋"],
   new: ["משימה חדשה", "New task", "＋"],
+  quotas: ["מכסות", "Quotas", "📊"],
   pair: ["חיבור", "Pair", "🔗"],
   settings: ["הגדרות", "Settings", "⚙️"],
 };
 
 /** The tab links (top on a computer, bottom on a phone). */
 function tabs(cls: string): HTMLElement {
-  const cur = tab() === "new" ? "tasks" : tab();
+  // A sub-page lights its tab: a new task is under Tasks, the quotas under Agents.
+  const cur = tab() === "new" ? "tasks" : tab() === "quotas" ? "agents" : tab();
   const waiting = device.paired ? waitingEntries(device).filter((e) => !e.sent).length : 0;
   return h(
     "nav",
@@ -717,7 +723,7 @@ function tasksTab(): HTMLElement {
   return h(
     "main",
     { class: "page" },
-    h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
+    h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), quotasLink(), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
     driveLine(),
     !device.paired ? pairThisCard() : null,
     waitingSection(waitingView),
@@ -1232,7 +1238,7 @@ function render(): void {
   const y = scroller?.scrollTop ?? 0;
 
   const showSignIn = !app.signedIn && !device.paired;
-  const body: Child = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
+  const body: Child = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, quotas: () => quotasPage(quotasView), pair: pairTab, settings: settingsTab }[tab()]();
   root.replaceChildren(
     ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), (device.hasRelays && device.relayPath !== "hub" ? relayLine(device.relayPath) : pathLine(hubProbe, app.appOrigin)), rememberedLine(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
   );

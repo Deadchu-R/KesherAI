@@ -115,6 +115,8 @@ export class HubDevice {
      */
     boards = new Map();
     boardActions = new Map();
+    /** Each PC's providers and what is left of them (its newest sealed `quotas` snapshot, in memory; quotas.ts shows it). */
+    quotas = new Map();
     /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
     taskActions = new Map();
     agentSeq = 0;
@@ -795,6 +797,8 @@ export class HubDevice {
             return this.onApprovals(env.from, body.items, body.at);
         if (body.type === "board")
             return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
+        if (body.type === "quotas")
+            return this.onQuotas(env.from, body.items, body.at);
         if (body.type === "command_result")
             return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
         if (body.type === "inbox_task")
@@ -832,6 +836,14 @@ export class HubDevice {
             }
         }
         await this.saveTasks();
+    }
+    /** A PC's quotas snapshot: replaces the last one (an older one that arrives late is ignored). */
+    onQuotas(from, items, at) {
+        const last = this.quotas.get(from);
+        if (last && last.at > at)
+            return;
+        this.quotas.set(from, { items, at });
+        this.changed();
     }
     /** A PC's board snapshot: replaces the last one (an older one that arrives late is ignored). */
     onBoard(from, items, doneTotal, rev, at) {

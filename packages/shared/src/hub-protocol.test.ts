@@ -206,3 +206,13 @@ test("inbox_task: the current step and Antigravity's quota pass checked (one lin
   assert.equal(bad.now, undefined);
   assert.equal(bad.agQuota, undefined);
 });
+
+test("quotas: a PC's snapshot is cleaned strictly, kept 30 minutes at most, and only as its own kind", () => {
+  assert.ok(parseEnvelope({ ...env, kind: "quotas" }));
+  assert.equal(ttlFor("quotas", 7 * 24 * 3600), HUB_LIMITS.approvalTtl);
+  const items = [{ id: "antigravity", kind: "antigravity", group: "tasks", name: "Antigravity", state: "low", bars: [{ label: "Gemini Pro", left: 0.1, resetAt: 99 }], readAt: 5 }, { id: "x y", kind: "local", name: "n", state: "ok", bars: [] }];
+  assert.deepEqual(parseSealedBody({ type: "quotas", items, at: 7, extra: "dropped" }, "quotas"), { type: "quotas", items: [items[0]], at: 7 });
+  assert.equal(parseSealedBody({ type: "quotas", items: "nope", at: 7 }, "quotas"), null);
+  // A snapshot cannot pass as another kind (the kind is authenticated).
+  assert.equal(parseSealedBody({ type: "quotas", items: [], at: 7 }, "board"), null);
+});

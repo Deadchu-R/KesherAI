@@ -58,6 +58,7 @@ export * from "./drive-sync.js";
 export * from "./work-list.js";
 export * from "./task-inbox.js";
 export * from "./claude-code.js";
+export * from "./provider-quotas.js";
 export * from "./inbox-models.js";
 export * from "./task-steps.js";
 export * from "./diff-review.js";

@@ -312,3 +312,18 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .nw-now { margin-top: 2px; opacity: .9; }
 .nw-bar { height: 4px; border-radius: 2px; background: var(--raised, #2a2a2a); overflow: hidden; margin-top: 4px; }
 .nw-bar > i { display: block; height: 100%; background: var(--accent, #7c6cff); transition: width .4s; }
+/* Quotas (quotas.ts, HubQuotas): one row per provider, a bar per window or model group. */
+.q-pc { margin-bottom: 12px; }
+.q-sub { padding: 8px 16px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.q-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; padding: 6px 12px 12px; }
+.q-row { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 11px; background: #1c1c20; border: 1px solid #26262b; min-width: 0; }
+.q-row.q-out { border-color: #4a2a2c; } .q-row.q-low { border-color: #4a3a26; } .q-row.q-unknown, .q-row.q-off { opacity: .85; }
+.q-head { gap: 8px; } .q-ic { width: 20px; text-align: center; font-size: 15px; }
+.q-bar-head { gap: 8px; }
+.q-track { height: 6px; border-radius: 3px; background: #2a2a30; overflow: hidden; }
+.q-track > i { display: block; height: 100%; background: var(--ok); }
+.q-track.q-low > i { background: var(--warn); } .q-track.q-out > i { background: var(--bad); }
+.q-facts { display: flex; flex-direction: column; gap: 2px; }
+.q-age { margin-top: 2px; }
+.q-note { margin: 4px 4px 16px; }
+@media (max-width: 640px) { .q-list { grid-template-columns: 1fr; padding-inline: 10px; } .q-link { padding-inline: 10px; } }

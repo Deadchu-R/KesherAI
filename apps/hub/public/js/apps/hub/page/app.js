@@ -26,6 +26,7 @@ import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag } from 
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup } from "./board.js";
+import { quotasLink, quotasPage } from "./quotas.js";
 import { failedBlock, doneLine, foldingRows, leavingRow, loadWorkFilters, nowNextSections, workState, workTabs } from "./work.js";
 import { listOrder, passes, runToWorkTask, toWorkTask } from "../../../packages/shared/src/hub-work.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
@@ -105,6 +106,8 @@ const agentsView = {
     render: () => render(),
     snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
+/** The Quotas page (quotas.ts): each PC's providers and what is left of them. */
+const quotasView = { device, devices: () => devices() };
 /** Settings › Notifications (push.ts): this browser's Web Push for "N waiting for you". */
 const pushView = { device, vapidKey: () => app.vapidKey, inApp: () => app.inApp, externalHref: () => externalHref(), render: () => render() };
 /** The shared task board (board.ts): its actions go sealed to the PC, which applies them through the board's own rules. */
@@ -115,7 +118,7 @@ const waitingView = { device, render: () => render(), openAgent: (key) => agents
 /** The current tab, from the address (#devices…). Anything else, such as #waiting from a notification, is the dashboard, which opens with "Waiting for you". */
 function tab() {
     const t = location.hash.slice(1);
-    return t === "new" || TABS.includes(t) ? t : "dash";
+    return t === "new" || t === "quotas" || TABS.includes(t) ? t : "dash";
 }
 /** How the hub last answered the page (direct.ts shows the Tailscale path when it is down). */
 let hubProbe;
@@ -278,12 +281,14 @@ const TAB_LABEL = {
     devices: ["מכשירים", "Devices", "🖥"],
     tasks: ["משימות", "Tasks", "📋"],
     new: ["משימה חדשה", "New task", "＋"],
+    quotas: ["מכסות", "Quotas", "📊"],
     pair: ["חיבור", "Pair", "🔗"],
     settings: ["הגדרות", "Settings", "⚙️"],
 };
 /** The tab links (top on a computer, bottom on a phone). */
 function tabs(cls) {
-    const cur = tab() === "new" ? "tasks" : tab();
+    // A sub-page lights its tab: a new task is under Tasks, the quotas under Agents.
+    const cur = tab() === "new" ? "tasks" : tab() === "quotas" ? "agents" : tab();
     const waiting = device.paired ? waitingEntries(device).filter((e) => !e.sent).length : 0;
     return h("nav", { class: cls, "aria-label": L("לשוניות המרכז", "Hub tabs") }, TABS.map((t) => {
         // What waits for the owner is counted on the dashboard and the Tasks tab (both show it on top).
@@ -526,7 +531,7 @@ function tasksTab() {
     const f = workState.filters;
     const list = pairs.filter((p) => p.work.phase === phase && passes(p.work, f) && (!q || `${p.task.title}\n${p.task.spec}`.toLowerCase().includes(q))).sort((a, b) => listOrder(phase)(a.work, b.work)).map((p) => p.task);
     const open = app.openTask ? byId.get(app.openTask)?.task : undefined;
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), ...nowNextSections(workView), workTabs(workView, items), h("div", { class: "row wrap filters" }, h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip", role: "tabpanel", "aria-live": phase === "active" ? "polite" : undefined }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q, byId), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, items.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, boardGroup(boardParts, q), workListGroup(q));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), quotasLink(), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), ...nowNextSections(workView), workTabs(workView, items), h("div", { class: "row wrap filters" }, h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip", role: "tabpanel", "aria-live": phase === "active" ? "polite" : undefined }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q, byId), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, items.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, boardGroup(boardParts, q), workListGroup(q));
 }
 /**
  * Claude's work list (HubWorkList / PhoneHubWorkList): the items the PC copies from docs/WORK_LIST.md to Drive,
@@ -893,7 +898,7 @@ function render() {
     const scroller = document.scrollingElement;
     const y = scroller?.scrollTop ?? 0;
     const showSignIn = !app.signedIn && !device.paired;
-    const body = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
+    const body = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, quotas: () => quotasPage(quotasView), pair: pairTab, settings: settingsTab }[tab()]();
     root.replaceChildren(...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), (device.hasRelays && device.relayPath !== "hub" ? relayLine(device.relayPath) : pathLine(hubProbe, app.appOrigin)), rememberedLine(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body, showSignIn ? null : tabs("bottom-tabs")].filter((x) => !!x));
     root.classList.toggle("in-app", !!app.appOrigin);
     if (scroller)

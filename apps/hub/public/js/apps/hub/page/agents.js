@@ -24,6 +24,7 @@ import { deviceIcon, getLocale, h, L, when } from "./dom.js";
 import { SNAPSHOT_SOURCE } from "./drive-view.js";
 import { assignBox } from "./assign.js";
 import { runWithUndo } from "./run-button.js";
+import { quotasLink } from "./quotas.js";
 const STATE = {
     queued: { dot: "off", tag: "t-off", he: "בתור", en: "Queued" },
     running: { dot: "on", tag: "t-run", he: "רץ", en: "Running" },
@@ -252,7 +253,7 @@ export function agentsTab(v) {
     const cloud = cloudTasks(v, now);
     const snaps = v.snapshots?.() ?? [];
     const empty = !cards.length && !cloud.length && !snaps.length;
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("סוכנים", "Agents")), h("span", { class: "mut" }, L(`· ${going} פעילים${waiting.length ? ` · ${waiting.length} מחכים לך` : ""}`, `· ${going} active${waiting.length ? ` · ${waiting.length} waiting for you` : ""}`)), h("span", { class: "grow" }), v.device.connected ? h("span", { class: "chip" }, h("span", { class: "dot on", "aria-hidden": "true" }), L(" חי", " Live")) : h("span", { class: "chip" }, h("span", { class: "dot off", "aria-hidden": "true" }), L(" לא מחובר", " Not connected"))), h("div", { class: "relay" }, "🔐 ", h("span", null, L("נעול במחשב: כותרות, צעדים ושמות כלים בלבד. בלי הנחיות, בלי תוכן קבצים ובלי תשובות. המרכז שומר 50 אירועים אחרונים לכל סוכן, 7 ימים.", "Sealed on the PC: titles, steps and tool names only. No prompts, file contents or answers. The hub keeps the last 50 events per agent, 7 days."))), waiting.length ? h("section", { class: "card clip pin" }, h("div", { class: "row head" }, h("b", null, L("⏳ מחכים לך", "⏳ Waiting for you")), h("span", { class: "grow" }), h("span", { class: "tag t-ask" }, String(waiting.length))), h("div", { class: "alist" }, waiting.map((c) => card(v, c, now, pcOf(c.deviceId))))) : null, ...ids.map((id) => {
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("סוכנים", "Agents")), h("span", { class: "mut" }, L(`· ${going} פעילים${waiting.length ? ` · ${waiting.length} מחכים לך` : ""}`, `· ${going} active${waiting.length ? ` · ${waiting.length} waiting for you` : ""}`)), h("span", { class: "grow" }), quotasLink(), v.device.connected ? h("span", { class: "chip" }, h("span", { class: "dot on", "aria-hidden": "true" }), L(" חי", " Live")) : h("span", { class: "chip" }, h("span", { class: "dot off", "aria-hidden": "true" }), L(" לא מחובר", " Not connected"))), h("div", { class: "relay" }, "🔐 ", h("span", null, L("נעול במחשב: כותרות, צעדים ושמות כלים בלבד. בלי הנחיות, בלי תוכן קבצים ובלי תשובות. המרכז שומר 50 אירועים אחרונים לכל סוכן, 7 ימים.", "Sealed on the PC: titles, steps and tool names only. No prompts, file contents or answers. The hub keeps the last 50 events per agent, 7 days."))), waiting.length ? h("section", { class: "card clip pin" }, h("div", { class: "row head" }, h("b", null, L("⏳ מחכים לך", "⏳ Waiting for you")), h("span", { class: "grow" }), h("span", { class: "tag t-ask" }, String(waiting.length))), h("div", { class: "alist" }, waiting.map((c) => card(v, c, now, pcOf(c.deviceId))))) : null, ...ids.map((id) => {
         const pc = pcOf(id);
         // Claude's helpers report through the PC they run on, but they are shown once, in the Claude curtain.
         const list = rest.filter((c) => c.deviceId === id && !isChat(c));

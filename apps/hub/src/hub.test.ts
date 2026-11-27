@@ -452,6 +452,30 @@ test("board snapshot: only from a PC to a phone, sealed (the hub reads nothing),
   assert.deepEqual(sockets.frames(phone.id, "sent").at(-1), { t: "sent", id: ok.id, queued: false });
 });
 
+test("quotas snapshot: only from a PC to a phone, sealed, the newest replaces the last, not audited", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  const body = (n: number): SealedBody => ({ type: "quotas", items: [{ id: "opencode", kind: "opencode", group: "tasks", name: "OpenCode Go", state: "ok", bars: [{ label: "day", used: n, limit: 10 }] }], at: n });
+  for (const n of [1, 2]) {
+    const env = await sealMessage({ from: pc.id, to: phone.id, kind: "quotas", ttl: 1800 }, body(n), pc.keys.privateKey, phone.keys.publicKey);
+    await hub.onFrame(pc.id, JSON.stringify({ t: "send", env }));
+  }
+  // The phone comes on: only the newest snapshot waits for it.
+  sockets.on.add(phone.id);
+  await hub.onOpen(phone.id);
+  const got = sockets.frames(phone.id, "deliver").filter((f) => f.t === "deliver" && f.env.kind === "quotas");
+  assert.equal(got.length, 1);
+  assert.ok(got[0]?.t === "deliver");
+  assert.deepEqual(await openEnvelope(got[0].env, phone.keys.privateKey, pc.keys.publicKey), body(2));
+  const fake = await sealMessage({ from: phone.id, to: pc.id, kind: "quotas" }, body(3), phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
+  assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
+  assert.ok(!JSON.stringify(store.auditList(100)).includes("quotas"));
+});
+
 test("Claude chat device: pairs by code, reports agent activity without PC opt-ins, never relays or takes tasks", async () => {
   const { hub, store, sockets } = await setup();
   const chat = await pair(hub, "claude-chat", "Claude chat");

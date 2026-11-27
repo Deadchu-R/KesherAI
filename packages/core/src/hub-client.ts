@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import WebSocket from "ws";
 import {
+  type ProviderQuota,
   cleanOptIn,
   estimateTaskSteps,
   exportPrivateJwk,
@@ -162,6 +163,8 @@ export interface HubClientDeps {
   agentLabel?: (runId: string, label: AgentLabel, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
   /** Applies a board command (reopen, a higher priority, for self-work, a note) from the owner's phone or hub page (hub-board.ts). */
   boardCommand?: (taskId: string, cmd: HubBoardCommand) => Promise<{ ok: boolean; text: string }>;
+  /** What is left of each provider this PC's agents use (provider-quotas.ts), for the hub page's Quotas section. */
+  quotas?: () => Promise<ProviderQuota[]>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
   /**
@@ -250,6 +253,10 @@ const PING_MS = 30_000;
 const DEAD_MS = 100_000;
 /** How often the approvals waiting on this PC are compared with the last snapshot sent (in memory; sent only on change). */
 const APPROVALS_MS = 3000;
+/** The quotas snapshot (provider-quotas.ts) is read and, when it changed, sent at most this often. */
+export const QUOTAS_MS = 2 * 60_000;
+/** An unchanged quotas snapshot is sent again after this, so the page's "read N min ago" stays true. */
+const QUOTAS_REFRESH_MS = 10 * 60_000;
 /** The hub's diagnostics are read this often while connected, and never more often than {@link DIAG_GAP_MS} after a failure. */
 const DIAG_MS = 10 * 60_000;
 const DIAG_GAP_MS = 60_000;
@@ -423,6 +430,16 @@ export class HubClient {
   private boardTimer?: NodeJS.Timeout;
   private boardRun?: Promise<void>;
   private boardAgain = false;
+  /** The last quotas snapshot sent to all online phones (a hash without its read times), when, and to which phones. */
+  private quotasKey = "";
+  private quotasSentAt = 0;
+  private quotasTo = new Set<string>();
+  /** A hub that refused the quotas snapshot (an older hub) is not sent it again on this connection. */
+  private quotasOff = false;
+  private quotasTriedAt = 0;
+  private quotasRun?: Promise<void>;
+  private quotasAgain = false;
+  private quotasTimer?: NodeJS.Timeout;
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
@@ -879,6 +896,7 @@ export class HubClient {
     clearInterval(this.diagTimer);
     clearInterval(this.pingTimer);
     clearInterval(this.approvalsTimer);
+    clearInterval(this.quotasTimer);
     clearTimeout(this.boardTimer);
     this.boardTimer = undefined;
     clearTimeout(this.inboxTimer);
@@ -1017,6 +1035,13 @@ export class HubClient {
         this.boardKey = "";
         this.boardTo.clear();
         this.boardOff = false;
+        this.quotasKey = "";
+        this.quotasSentAt = 0;
+        this.quotasTo.clear();
+        this.quotasOff = false;
+        clearInterval(this.quotasTimer);
+        this.quotasTimer = setInterval(() => void this.reportQuotas().catch(() => undefined), QUOTAS_MS);
+        this.quotasTimer.unref?.();
         clearInterval(this.approvalsTimer);
         this.approvalsTimer = setInterval(() => void this.sendApprovals().catch(() => undefined), APPROVALS_MS);
         this.approvalsTimer.unref?.();
@@ -1047,6 +1072,7 @@ export class HubClient {
         clearInterval(this.diagTimer);
         clearInterval(this.pingTimer);
         clearInterval(this.approvalsTimer);
+        clearInterval(this.quotasTimer);
         clearTimeout(this.boardTimer);
         this.boardTimer = undefined;
         this.socket = undefined;
@@ -1135,6 +1161,7 @@ export class HubClient {
         this.paused = f.paused === true;
         void this.reportInbox().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
+        void this.reportQuotas().catch(() => undefined);
         // Each new link sends the relay keys again to the phones that are on (in case one lost its storage).
         this.relaysSent.clear();
         void this.sendRelays().catch(() => undefined);
@@ -1146,6 +1173,7 @@ export class HubClient {
         void this.reportInbox().catch(() => undefined);
         void this.sendApprovals().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
+        void this.reportQuotas().catch(() => undefined);
         void this.sendRelays().catch(() => undefined);
         void this.syncRelays().catch(() => undefined);
         return;
@@ -1163,6 +1191,7 @@ export class HubClient {
         if (f.code === "rate-limited") this.deps.activity?.slowDown();
         // An older hub does not know the board snapshot (it cannot read the frame): the board is not sent again on this link.
         if (f.code === "bad-frame" && Date.now() - this.boardSentAt < 10_000) this.boardOff = true;
+        if (f.code === "bad-frame" && Date.now() - this.quotasTriedAt < 10_000) this.quotasOff = true;
         return;
       default:
         return;
@@ -1483,6 +1512,59 @@ export class HubClient {
     const at = Date.now();
     this.boardSentAt = at;
     for (const p of to) await this.sendSealed(p.id, "board", { type: "board", rev: board.rev, ...snap, at }, HUB_LIMITS.approvalTtl);
+  }
+
+  /**
+   * Reports what is left of each provider (provider-quotas.ts) to the owner's online phones and hub pages: one sealed
+   * snapshot that replaces the last. It is read every {@link QUOTAS_MS} while connected and sent to every online phone
+   * when it changed (its read times aside) or every 10 minutes unchanged; a phone that just came on gets it at once.
+   * Offline phones get nothing (they get the current one when they come on).
+   */
+  async reportQuotas(): Promise<void> {
+    // One report at a time; a call during one runs once more after it (a phone that came on meanwhile is not missed).
+    if (this.quotasRun) {
+      this.quotasAgain = true;
+      return this.quotasRun;
+    }
+    this.quotasRun = (async () => {
+      try {
+        do {
+          this.quotasAgain = false;
+          await this.reportQuotasOnce();
+        } while (this.quotasAgain);
+      } finally {
+        this.quotasRun = undefined;
+      }
+    })();
+    return this.quotasRun;
+  }
+
+  private async reportQuotasOnce(): Promise<void> {
+    if (!this.deps.quotas || !this.linked || !this.s.deviceId || this.quotasOff) return;
+    const phones = this.devices.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
+    if (!phones.length) {
+      this.quotasTo.clear();
+      return;
+    }
+    const now = Date.now();
+    // The 2-minute timer may fire a little early; a few seconds of slack keep it from skipping a round.
+    const due = now - this.quotasSentAt >= QUOTAS_MS - 5_000;
+    const fresh = phones.filter((p) => !this.quotasTo.has(p.id));
+    if (!due && !fresh.length) return;
+    const items = await this.deps.quotas();
+    const key = createHash("sha256").update(JSON.stringify(items.map(({ readAt: _r, ...q }) => q))).digest("base64url").slice(0, 16);
+    const all = due && (key !== this.quotasKey || now - this.quotasSentAt >= QUOTAS_REFRESH_MS);
+    const to = all ? phones : fresh;
+    if (!to.length) return;
+    const online = new Set(phones.map((p) => p.id));
+    if (all) {
+      this.quotasKey = key;
+      this.quotasSentAt = now;
+      this.quotasTo = new Set(online);
+    } else for (const p of to) this.quotasTo.add(p.id);
+    for (const id of this.quotasTo) if (!online.has(id)) this.quotasTo.delete(id);
+    this.quotasTriedAt = now;
+    for (const p of to) await this.sendSealed(p.id, "quotas", { type: "quotas", items, at: now }, HUB_LIMITS.approvalTtl);
   }
 
   /**

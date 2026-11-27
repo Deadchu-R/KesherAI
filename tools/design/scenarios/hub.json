@@ -2400,6 +2400,263 @@
      }
     ]
    }
+  },
+  {
+   "id": "HubQuotas",
+   "title": "ענן Kesher: מכסות — כמה נשאר לכל ספק (Antigravity, GhostCLI, OpenCode Go, Gemini, Claude, מקומי, עוזרי ענן) ומתי חוזר",
+   "titleEn": "Kesher Cloud: Quotas — what is left of each provider (Antigravity, GhostCLI, OpenCode Go, Gemini, Claude, local, free helpers) and when it is back",
+   "route": "#quotas",
+   "height": {
+    "desktop": 900,
+    "phone": 1800
+   },
+   "steps": [
+    {
+     "wait": ".q-row"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [],
+    "quotas": [
+     {
+      "pc": "pc-studio",
+      "items": [
+       {
+        "id": "antigravity",
+        "kind": "antigravity",
+        "group": "tasks",
+        "name": "Antigravity",
+        "state": "low",
+        "bars": [
+         {
+          "label": "Gemini Pro",
+          "left": 0.62,
+          "resetAt": {
+           "$inMs": "3h"
+          }
+         },
+         {
+          "label": "Gemini Flash",
+          "left": 0.9
+         },
+         {
+          "label": "Claude / GPT",
+          "left": 0,
+          "resetAt": {
+           "$inMs": "1h"
+          }
+         }
+        ],
+        "readAt": {
+         "$agoMs": "4m"
+        }
+       },
+       {
+        "id": "ghostcli",
+        "kind": "ghostcli",
+        "group": "tasks",
+        "name": "GhostCLI",
+        "state": "ok",
+        "bars": [],
+        "today": {
+         "runs": 5,
+         "done": 3,
+         "partial": 1,
+         "failed": 1,
+         "rateLimited": 0
+        },
+        "total": {
+         "runs": 41,
+         "done": 30,
+         "partial": 5,
+         "failed": 6,
+         "rateLimited": 2,
+         "since": {
+          "$agoMs": "2d"
+         }
+        },
+        "avgMinutes": 8.4,
+        "health": {
+         "ok": true,
+         "model": "ghostcli/claude-opus",
+         "ms": 2300,
+         "at": {
+          "$agoMs": "12m"
+         }
+        },
+        "lastRateLimitAt": {
+         "$agoMs": "20h"
+        },
+        "readAt": {
+         "$agoMs": "12m"
+        }
+       },
+       {
+        "id": "opencode",
+        "kind": "opencode",
+        "group": "tasks",
+        "name": "OpenCode Go",
+        "state": "ok",
+        "bars": [
+         {
+          "label": "day",
+          "used": 7,
+          "limit": 10
+         }
+        ],
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "gemini",
+        "kind": "gemini",
+        "group": "tasks",
+        "name": "Gemini",
+        "state": "ok",
+        "bars": [
+         {
+          "label": "day",
+          "used": 14
+         }
+        ],
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "inbox-openrouter",
+        "kind": "free",
+        "group": "tasks",
+        "name": "OpenRouter",
+        "state": "out",
+        "bars": [
+         {
+          "label": "day",
+          "used": 50,
+          "limit": 50,
+          "resetAt": {
+           "$inMs": "5h"
+          }
+         }
+        ],
+        "until": {
+         "$inMs": "5h"
+        },
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "claude",
+        "kind": "claude",
+        "group": "tasks",
+        "name": "Claude (subscription)",
+        "state": "ok",
+        "bars": [
+         {
+          "label": "5h",
+          "left": 0.38,
+          "resetAt": {
+           "$inMs": "2h"
+          }
+         },
+         {
+          "label": "week",
+          "left": 0.7,
+          "resetAt": {
+           "$inMs": "3d"
+          }
+         }
+        ],
+        "today": {
+         "runs": 2
+        },
+        "readAt": {
+         "$agoMs": "6m"
+        }
+       },
+       {
+        "id": "local",
+        "kind": "local",
+        "group": "tasks",
+        "name": "Local model",
+        "state": "ok",
+        "bars": [],
+        "model": "qwen3-14b-q4_k_m",
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "cloud-cloudflare",
+        "kind": "free",
+        "group": "chat",
+        "name": "Cloudflare Workers AI",
+        "state": "out",
+        "bars": [
+         {
+          "label": "day",
+          "used": 100,
+          "limit": 100,
+          "resetAt": {
+           "$inMs": "40m"
+          }
+         }
+        ],
+        "until": {
+         "$inMs": "40m"
+        },
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "cloud-zhipu",
+        "kind": "free",
+        "group": "chat",
+        "name": "Zhipu GLM-4-Flash",
+        "state": "ok",
+        "bars": [
+         {
+          "label": "day",
+          "used": 3
+         }
+        ],
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       },
+       {
+        "id": "cloud-nvidia",
+        "kind": "free",
+        "group": "chat",
+        "name": "NVIDIA",
+        "state": "ok",
+        "bars": [
+         {
+          "label": "day",
+          "used": 120,
+          "limit": 1000
+         }
+        ],
+        "readAt": {
+         "$agoMs": "1m"
+        }
+       }
+      ]
+     }
+    ]
+   }
   }
  ]
 }

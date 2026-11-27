@@ -65,6 +65,18 @@ test("a run on a PC the seed does not list is refused", () => {
   assert.throws(() => hubPlan(seedOf({ agents: [{ pc: "nope", runId: "r1" }] }), 0), /not in "pcs"/);
 });
 
+test("a quotas seed is cleaned as the page cleans it, its times fixed; an unknown PC is refused", () => {
+  const now = Date.UTC(2026, 10, 27, 9);
+  const plan = hubPlan(seedOf({ pcs: [{ id: "pc1", name: "PC" }], quotas: [{ pc: "pc1", items: [{ id: "opencode", kind: "opencode", name: "OpenCode Go", state: "out", bars: [{ label: "day", used: 10, limit: 10, resetAt: { $inMs: "2h" } }], readAt: { $agoMs: "3m" } }, { id: "bad id", kind: "local", name: "x", state: "ok", bars: [] }] }] }), now);
+  assert.equal(plan.quotas.length, 1);
+  assert.equal(plan.quotas[0]!.at, now);
+  // The seed's times are fixed by the scenario's own clock when it is read.
+  const q = plan.quotas[0]!.items;
+  assert.deepEqual(q.map((x) => [x.id, x.group, x.state, x.bars[0]?.used, x.bars[0]?.limit]), [["opencode", "tasks", "out", 10, 10]]);
+  assert.equal(q[0]!.bars[0]!.resetAt! - q[0]!.readAt!, 2 * 3_600_000 + 3 * 60_000);
+  assert.throws(() => hubPlan(seedOf({ pcs: [], quotas: [{ pc: "nope", items: [] }] }), now), /quotas are on PC "nope"/);
+});
+
 test("the owner state has defaults and the seed's fields win", () => {
   const seed = seedOf({ owner: { paused: true, connections: [{ id: "c1", name: "Claude" }] } });
   const o = hubOwnerState(seed, [{ id: "pc1", name: "PC", kind: "pc", online: true }]);

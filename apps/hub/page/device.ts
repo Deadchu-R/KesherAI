@@ -14,6 +14,7 @@ import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from ".
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
 import { inboxMetaOf, type InboxMeta } from "../../../packages/shared/src/hub-work.js";
 import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
+import type { ProviderQuota } from "../../../packages/shared/src/provider-quotas.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import type { DriveMark } from "./drive-view.js";
 import { rememberDirect } from "./direct.js";
@@ -180,6 +181,8 @@ export class HubDevice {
    */
   boards = new Map<string, { items: HubBoardItem[]; doneTotal: number; rev: number; at: number }>();
   boardActions = new Map<string, { commandId: string; result?: { ok: boolean; text: string; at: number } }>();
+  /** Each PC's providers and what is left of them (its newest sealed `quotas` snapshot, in memory; quotas.ts shows it). */
+  quotas = new Map<string, { items: ProviderQuota[]; at: number }>();
   /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
   taskActions = new Map<string, { action: HubCommandAction; commandId: string; left: number; at: number; result?: { ok: boolean; text: string } }>();
   private agentSeq = 0;
@@ -851,6 +854,7 @@ export class HubDevice {
     if (!this.replay.first(env.id, env.ttl)) return;
     if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
     if (body.type === "board") return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
+    if (body.type === "quotas") return this.onQuotas(env.from, body.items, body.at);
     if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
     if (body.type === "relays") return this.onRelayKeys(env.from, body.keys, body.at);
@@ -878,6 +882,14 @@ export class HubDevice {
       }
     }
     await this.saveTasks();
+  }
+
+  /** A PC's quotas snapshot: replaces the last one (an older one that arrives late is ignored). */
+  private onQuotas(from: string, items: ProviderQuota[], at: number): void {
+    const last = this.quotas.get(from);
+    if (last && last.at > at) return;
+    this.quotas.set(from, { items, at });
+    this.changed();
   }
 
   /** A PC's board snapshot: replaces the last one (an older one that arrives late is ignored). */

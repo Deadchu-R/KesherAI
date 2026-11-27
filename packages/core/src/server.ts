@@ -22,7 +22,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { ensureMemoryWatchdog } from "./memory-watchdog.js";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { ASSIGN_CHOICES, beaconSecret, branding, features, helperHandoff, parseWorkList, ROUTER_MODEL } from "@kesher/shared";
+import { ASSIGN_CHOICES, beaconSecret, branding, buildProviderQuotas, features, helperHandoff, parseWorkList, ROUTER_MODEL } from "@kesher/shared";
 import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
@@ -75,7 +75,7 @@ import { buildTaskInbox } from "./server/build-inbox.js";
 import { resolveWorktreesDir, setWorktreesRoot } from "./session-worktrees.js";
 import { buildWatchdog } from "./server/build-watchdog.js";
 import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFactory } from "./free-cloud.js";
-import { FREE_PROVIDER_IDS } from "./free-cloud-catalog.js";
+import { FREE_PROVIDER_IDS, freeProvider } from "./free-cloud-catalog.js";
 import { freeCloudFileStore } from "./routes/free-cloud.js";
 import { nextInLineTitle } from "./inbox-runner.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
@@ -848,6 +848,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",
+    // What is left of each provider, for the hub page's Quotas section (provider-quotas.ts: names, numbers, times only).
+    quotas: async () => {
+      const st = await taskInbox.state(false);
+      const eng = engine.status();
+      return buildProviderQuotas({
+        now: Date.now(),
+        inbox: { agQuota: st.agQuota, relay: st.relay, opencode: st.opencode, opencodeDailyCap: st.settings.opencode?.dailyCap, claude: st.claude, free: st.free, quota: st.quota },
+        freeCloud: freeCloud.status().map((p) => ({ ...p, name: freeProvider(p.id)?.name ?? p.id })),
+        local: { loaded: eng.running && !!eng.modelPath, ...(eng.modelPath ? { model: eng.modelPath } : {}) },
+      });
+    },
     // Another device wrote to the user's Google Drive: pull now (tasks-sync.ts).
     onSync: () => services.tasksSync?.onPing(),
     // The hub's own problem log goes to logs/hub-diag.json (and its newest error to main.log): hub-diag.ts.

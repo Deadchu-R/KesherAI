@@ -12,6 +12,7 @@ import { parseAssignTo, type AssignTo } from "./task-assign.js";
 import { cleanAwayNote, type AwayNote } from "./device-status.js";
 import { cleanTailscaleDirect, type TailscaleDirect } from "./direct-path.js";
 import { cleanRelayKeys, type RelayKeys } from "./relay-keys.js";
+import { cleanProviderQuotas, type ProviderQuota } from "./provider-quotas.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -91,9 +92,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -263,7 +264,12 @@ export type SealedBody =
    * through Ably / Supabase when the hub is down. Sealed like everything else: the hub never sees the keys. An empty
    * `keys` tells the phone to forget them.
    */
-  | { type: "relays"; keys: RelayKeys; at: number };
+  | { type: "relays"; keys: RelayKeys; at: number }
+  /**
+   * PC to its owner's phones only: what is left of each provider its agents use (provider-quotas.ts; names, numbers
+   * and times only), a whole snapshot that replaces the last. `at`: when the PC built it.
+   */
+  | { type: "quotas"; items: ProviderQuota[]; at: number };
 
 /**
  * One ask as the phone's notification shows it, with the answer it needs: Run / Not now (`run`, an Antigravity Run
@@ -519,6 +525,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   ask_note: "ask_note",
   board: "board",
   relays: "relays",
+  quotas: "quotas",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -598,7 +605,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -763,6 +770,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     }
     case "relays":
       return { type: "relays", keys: cleanRelayKeys(b.keys), at: num(b.at) };
+    case "quotas":
+      return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;
       const error = str(b.error, 300);

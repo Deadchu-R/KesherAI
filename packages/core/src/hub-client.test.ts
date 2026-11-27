@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateHubKeys, openEnvelope, pairChannel, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
 import type { InboxTaskView } from "@kesher/shared";
-import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubClientDeps, type HubSettings, type HubSocketEvents } from "./hub-client.js";
+import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, QUOTAS_MS, type HubClientDeps, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
 
 const settings = (): HubSettings => ({ enabled: true, url: "https://hub.example.test", reported: [], optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false } });
@@ -493,6 +493,53 @@ test("board: one sealed snapshot to the online phones, on change only; a board c
   await r.client.onMessage(JSON.stringify({ t: "refused", code: "bad-frame" }));
   await r.client.reportBoard();
   assert.equal(snaps().length, 2, "stopped after the hub refused it");
+});
+
+test("quotas: sent to the online phones when they change (at most every 2 minutes), to a new phone at once", async (t) => {
+  let used = 1;
+  let reads = 0;
+  const r = await rig({ quotas: async () => (reads++, [{ id: "opencode", kind: "opencode", group: "tasks", name: "OpenCode Go", state: "ok", bars: [{ label: "day", used, limit: 10 }], readAt: Date.now() + reads }]) });
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const p1 = { id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} };
+  const p2 = { ...p1, id: "dphone2", name: "Phone 2", online: false };
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence: [p1, p2] }));
+  await r.client.reportQuotas();
+  const snaps = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "quotas").map((f) => f.env as SealedEnvelope);
+  assert.deepEqual(snaps().map((e) => e.to), ["dphone"], "online phones only");
+  assert.equal(snaps()[0]!.ttl, 30 * 60);
+  const body = (await openEnvelope(snaps()[0]!, phone.privateKey, pcPub)) as Extract<SealedBody, { type: "quotas" }>;
+  assert.equal(body.items[0]!.bars[0]!.used, 1);
+  // Changed, but sooner than 2 minutes: not read, not sent.
+  used = 2;
+  const before = reads;
+  await r.client.reportQuotas();
+  assert.equal(snaps().length, 1);
+  assert.equal(reads, before, "not even read before it is due");
+  // Two minutes later: sent; then unchanged (only its read time moved): not sent.
+  const priv = r.client as unknown as { quotasSentAt: number };
+  priv.quotasSentAt -= QUOTAS_MS;
+  await r.client.reportQuotas();
+  assert.equal(snaps().length, 2);
+  priv.quotasSentAt -= QUOTAS_MS;
+  await r.client.reportQuotas();
+  assert.equal(snaps().length, 2, "an unchanged snapshot waits for the 10-minute refresh");
+  // A phone that comes on gets it at once, without waiting.
+  await r.client.onMessage(JSON.stringify({ t: "presence", presence: [p1, { ...p2, online: true }] }));
+  await wait(20);
+  assert.deepEqual(snaps().slice(2).map((e) => e.to), ["dphone2"]);
+  // An older hub that cannot read the frame: no more snapshots on this link.
+  await r.client.onMessage(JSON.stringify({ t: "refused", code: "bad-frame" }));
+  used = 5;
+  priv.quotasSentAt -= QUOTAS_MS;
+  await r.client.reportQuotas();
+  assert.equal(snaps().length, 3, "stopped after the hub refused it");
 });
 
 test("a local task: waiting for the local agent while open on the board, running once the agent claimed it", () => {

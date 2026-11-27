@@ -4749,3 +4749,18 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
   writing tokens into `.git/config` remotes (gh's old `https://token@` habit).
 - Tasks: WORK_LIST g-01..g-03 (Tuesday 24.11).
 - Stopped at: done (brief).
+
+## 2026-11-27 — Quota view on the hub: how usage dashboards show what is left (Claude helper, brief, for Roee 27.11 "info on quotas in the hub too")
+- **Claude usage (Settings › Usage, `/usage`)**: one bar per window (current 5-hour session, weekly, weekly per model),
+  "N% used" and "Resets at HH:MM / Tue 09:00"; no raw counts. Take: one bar per window, the reset time beside it.
+- **Cursor (Dashboard › Usage)**: requests used vs the plan's included count this cycle, the cycle's end date, and a
+  plain line when you are on usage-based pricing. Take: "used / limit" text when a limit is known, otherwise only the count.
+- **OpenRouter (Credits / Activity)**: credits left as a number, a per-key daily limit, and 429s per model in the
+  activity log. Take: rate-limit hits as a count with the time of the last one; "back at" after a 429.
+- Common: the freshness of the reading is shown ("updated 3 min ago"); unknown is left blank, never guessed. Leave:
+  charts over time (the hub keeps no history) and money values (KesherAI only uses free or flat plans).
+- **Language and weight**: the snapshot is a pure TypeScript function on the PC (shared, no I/O), sent sealed at most
+  every 2 minutes (~1-2 KB); the page is plain DOM (no chart library). Nothing heavier is needed on any platform.
+- Tasks: the quota view itself (this build: provider-quotas.ts, `quotas` hub message, apps/hub/page/quotas.ts, board HubQuotas);
+  later: Antigravity's 5-hour / weekly windows when its local server reports them, OpenCode Go's monthly share.
+- Stopped at: done (brief).

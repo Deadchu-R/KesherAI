@@ -14,6 +14,7 @@ import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
+import { cleanProviderQuotas, type ProviderQuota } from "@kesher/shared";
 import type { HubSeed } from "./design-scenarios.js";
 
 /** Where the hub's static files are in the repo. */
@@ -167,6 +168,8 @@ export interface HubPlan {
   agents: Array<{ pc: string; runId: string; state: Record<string, unknown>; events: Array<Record<string, unknown>> }>;
   /** The PCs' shared task boards, whole (sealed to this device and delivered after the welcome). */
   boards: Array<{ pc: string; rev: number; items: Array<Record<string, unknown>>; doneTotal: number; at: number }>;
+  /** The PCs' quotas snapshots, cleaned as the page cleans them (sealed and delivered after the welcome, like the boards). */
+  quotas: Array<{ pc: string; items: ProviderQuota[]; at: number }>;
 }
 
 /**
@@ -187,7 +190,11 @@ export function hubPlan(seed: HubSeed, now: number): HubPlan {
     const items = b.items.map((i, n) => ({ id: `t${n + 1}`, status: "open", size: "big", priority: 5, at: now - (n + 1) * 600_000, ...i }));
     return { pc: b.pc, rev: 40, items, doneTotal: b.doneTotal ?? items.filter((i) => i.status === "done").length, at: now };
   });
-  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards };
+  const quotas = seed.quotas.map((q) => {
+    if (!seed.pcs.some((p) => p.id === q.pc)) throw new Error(`hub seed: the quotas are on PC "${q.pc}", which is not in "pcs"`);
+    return { pc: q.pc, items: cleanProviderQuotas(q.items), at: now };
+  });
+  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards, quotas };
 }
 
 /**
@@ -216,6 +223,7 @@ export const HUB_SEED_JS = `async (plan) => {
   }
   const boardEnvs = [];
   for (const b of plan.boards) boardEnvs.push(await c.sealMessage({ from: b.pc, to: plan.deviceId, kind: "board" }, { type: "board", rev: b.rev, items: b.items, doneTotal: b.doneTotal, at: b.at }, keys[b.pc].privateKey, me.publicKey));
+  for (const q of plan.quotas) boardEnvs.push(await c.sealMessage({ from: q.pc, to: plan.deviceId, kind: "quotas" }, { type: "quotas", items: q.items, at: q.at }, keys[q.pc].privateKey, me.publicKey));
   const db = await new Promise((ok, fail) => {
     const r = indexedDB.open("kesher-hub", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("kv");
