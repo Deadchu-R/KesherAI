@@ -60,6 +60,9 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
           throw new Error(`A game is running (${playing[0]}): the chat model loads after it closes.`);
         }
       }
+      // A background load says where it came from in the log (Roee 27.11: the 27B model loaded twice with no chat open
+      // and nothing in the log said why): the first few of KesherAI's own call sites, no arguments or text.
+      if (!titles.length) app.log.info(`chat model: loading for a background request from ${callSites(new Error().stack)}`);
       await loadModel(services, path, undefined, titles.length ? { kind: "chat", chats: titles as string[] } : { kind: "request" });
     },
     pids: () => (engine.pid ? [engine.pid] : []),
@@ -146,4 +149,20 @@ function wirePlayStandby(app: FastifyInstance, services: KesherServices, guard: 
   }, 3000);
   timer.unref();
   app.addHook("onClose", async () => clearInterval(timer));
+}
+
+/**
+ * The first few KesherAI call sites in a stack, as `file:line` (node internals and dependencies left out), for a log
+ * line that says which part of KesherAI asked for something.
+ *
+ * @param stack - An `Error().stack`.
+ * @returns E.g. "inbox-runner.js:812 < task-inbox.js:40", or "unknown".
+ */
+export function callSites(stack: string | undefined): string {
+  const sites = (stack ?? "").split("\n").slice(1)
+    .map((l) => /([\w.-]+\.[cm]?[jt]s):(\d+):\d+\)?\s*$/.exec(l))
+    .filter((m): m is RegExpExecArray => !!m && !/node_modules|node:/.test(m.input))
+    .map((m) => `${m[1]}:${m[2]}`)
+    .filter((x) => !x.startsWith("start-engines.") && !x.startsWith("gpu-guard."));
+  return sites.slice(0, 4).join(" < ") || "unknown";
 }

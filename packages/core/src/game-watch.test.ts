@@ -22,3 +22,10 @@ test("the game watch names a running game by its install folder and caches the p
   now += 30_001;
   assert.deepEqual(await w.running(), []);
 });
+
+test("callSites names KesherAI's own frames only", async () => {
+  const { callSites } = await import("./server/start-engines.js");
+  const stack = ["Error", "    at reload (/app/core/dist/server/start-engines.js:51:12)", "    at GpuGuard.before (/app/core/dist/gpu-guard.js:590:9)", "    at Digest.make (/app/core/dist/daily-digest.js:120:5)", "    at async x (node:internal/process/task_queues:95:5)", "    at y (/app/node_modules/fastify/lib/route.js:10:1)", "    at TaskInbox.loop (C:\\KesherAI\\core\\dist\\inbox-runner.js:812:3)"].join("\n");
+  assert.equal(callSites(stack), "daily-digest.js:120 < inbox-runner.js:812");
+  assert.equal(callSites(undefined), "unknown");
+});
