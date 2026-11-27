@@ -130,7 +130,7 @@ test("hub client: a connector query opens only from the hub, is refused while th
   const pcPub = (await importPrivateJwk(s.key!)).publicKey;
   await client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: hub.publicKey, paused: false, rotateDue: false, presence: [{ id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} }] }));
   const ask = async (from: "hub" | "dphone", body: Record<string, unknown>) => {
-    const env = await sealMessage({ from, to: "dpc", kind: "connector_query" }, { type: "connector_query", ...body } as never, from === "hub" ? hub.privateKey : phone.privateKey, pcPub);
+    const env = await sealMessage({ from, to: "dpc", kind: "connector_query" }, { type: "connector_query", at: Date.now(), ...body } as never, from === "hub" ? hub.privateKey : phone.privateKey, pcPub);
     await client.onMessage(JSON.stringify({ t: "deliver", env }));
   };
   const answers = async () => Promise.all(sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "connector_answer").map((f) => openEnvelope(f.env as SealedEnvelope, hub.privateKey, pcPub)));
@@ -153,4 +153,12 @@ test("hub client: a connector query opens only from the hub, is refused while th
   assert.equal((await answers()).length, 2);
   const env = sent.find((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "connector_answer")!.env as SealedEnvelope;
   assert.equal(env.to, "hub");
+  // Replay after a restart: a query from an hour ago (or without its time) is refused and nothing runs.
+  await ask("hub", { queryId: "q5", op: "action", taskId: "r-1", action: "run", at: Date.now() - 3_600_000 });
+  await ask("hub", { queryId: "q6", op: "action", taskId: "r-1", action: "run", at: undefined });
+  got = await answers();
+  assert.equal(got.length, 4);
+  assert.ok(got[2]!.type === "connector_answer" && !got[2]!.ok && /too old/.test(got[2]!.text ?? ""));
+  assert.ok(got[3]!.type === "connector_answer" && !got[3]!.ok && /no time/.test(got[3]!.text ?? ""));
+  assert.deepEqual(ran, ["inbox-run r-1"]);
 });

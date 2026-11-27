@@ -10,13 +10,16 @@ const webFails = async () => {
 
 test("researchSearch: the web first; grounding only when every backend failed, with the query through the leak guard", async () => {
   const grounded: string[] = [];
+  const toWeb: string[] = [];
   let web = async () => [HIT];
-  const search = researchSearch({ web: () => web(), grounded: () => async (q) => (grounded.push(q), [HIT]), redact: (q) => q.replace("secret", "[hidden]") });
+  const search = researchSearch({ web: (q) => (toWeb.push(q), web()), grounded: () => async (q) => (grounded.push(q), [HIT]), redact: (q) => q.replace("secret", "[hidden]") });
   assert.deepEqual(await search("q", sig), [HIT]);
   assert.equal(grounded.length, 0);
   web = webFails as typeof web;
   assert.deepEqual(await search("about secret", sig), [HIT]);
   assert.deepEqual(grounded, ["about [hidden]"]);
+  // The web search gets the guarded query too (scan 2026-11-27).
+  assert.deepEqual(toWeb, ["q", "about [hidden]"]);
 });
 
 test("researchSearch: every reason is kept; no grounding without a Gemini key", async () => {

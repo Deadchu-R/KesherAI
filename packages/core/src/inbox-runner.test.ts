@@ -593,6 +593,8 @@ test("inbox: free-Gemini research runs by itself, one at a time, and waits with 
     await inbox.pumpGemini();
     t = await inbox.task("r-20261121-01");
     assert.deepEqual([t.status, t.note, t.researchReport?.startsWith("# Sync")], ["done", undefined, true]);
+    // The page's state leaves the report's text out (scan 2026-11-27: every poll carried every report).
+    assert.equal((await inbox.state(false)).tasks.find((x) => x.id === "r-20261121-01")?.researchReport, undefined);
     assert.match(asked[0]!, /How do others sync notes\n\nHow do Obsidian/);
     assert.match(await sh(repo, "show", "origin/kesher-inbox:results/r-20261121-01.md").catch(async () => (await sh(repo, "fetch", "-q", "origin", "kesher-inbox"), sh(repo, "show", "FETCH_HEAD:results/r-20261121-01.md"))), /status: done[\s\S]*## Research report\n# Sync/);
   } finally {

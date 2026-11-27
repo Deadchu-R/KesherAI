@@ -14,6 +14,7 @@ import WebSocket from "ws";
 import {
   type ProviderQuota,
   cleanOptIn,
+  connectorQueryStale,
   estimateTaskSteps,
   exportPrivateJwk,
   fitApprovals,
@@ -1319,7 +1320,9 @@ export class HubClient {
         // desk refuses it while "Claude connector may read and run" is off; the answer goes to the hub only.
         if (env.from !== "hub" || !fromHub) return ack();
         const { type: _type, ...q } = body;
-        const a = await this.desk.answer(q, cleanOptIn(this.s.optIn).connector);
+        // A query from long ago (replayed after a restart cleared the replay memory) is refused, never acted on.
+        const stale = connectorQueryStale(q, (this.deps.now ?? Date.now)());
+        const a = stale ? this.desk.refuse(q, stale) : await this.desk.answer(q, cleanOptIn(this.s.optIn).connector);
         await this.sendSealed("hub", "connector_answer", { type: "connector_answer", ...a }, 60);
         return ack();
       }

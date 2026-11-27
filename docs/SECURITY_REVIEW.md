@@ -2010,3 +2010,50 @@ Scope: `git diff f189a92..HEAD` (225 files).
   titles and press Run within the daily limits while the setting is on. Revoke in hub page › Settings › Connections, or
   turn the setting off on the PC.
 
+
+## 2026-11-27 scan (0.6.493–0.6.497 + connector)
+
+Scope: `git diff 7fcea8b..719aac9` (0.6.488–0.6.497 and the Claude connector commit that goes into 0.6.498).
+
+- `pnpm audit --prod`: no known vulnerabilities. No personal e-mail, Windows user name or personal path in the diff
+  (only fake ones in tests); no new `eval` / `new Function`; the one `innerHTML` mention is a comment saying it is not used.
+- **Fixed (medium): web tools could reach this computer behind a redirect or a DNS name.** `web_fetch` and
+  `download_file` checked only the typed host (and missed `100.64/10` Tailscale, IPv6 unique-local/link-local,
+  `::ffff:`-mapped and `*.localhost`), then `fetch` followed redirects by itself: a public page redirecting to
+  `http://127.0.0.1:<port>/api/…`, or a name resolving to a private address, was fetched. Research now runs on a
+  third-party model (GhostCLI) that picks the pages, so that text could leave. New `packages/agent/src/public-url.ts`:
+  the host as typed, its DNS answer and every redirect (at most 5, followed by hand) must be public; such a refusal is
+  never retried through Tor. Tests: `public-url.test.ts` (addresses, names, rebinding name, redirect into localhost, loop).
+- **Fixed (low): research's web-search queries skipped the leak guard.** `researchSearch` redacted only the Gemini
+  grounding leg; now the query passes `redact` before either search (`research-search.ts`, test extended).
+- **Fixed (low, defense in depth): a connector query carried no time.** The PC's replay memory (envelope ids) is in
+  memory only, so after a restart a captured `connector_query` delivered again would have run. The hub now puts `at`
+  inside the sealed query; the PC refuses one without it or more than 5 minutes from its clock (`connectorQueryStale`,
+  answered "refused", nothing read or run, noted in `main.log`). Tests in shared and core. Relays already could not carry
+  this kind (`fromHub` only) and the hub never queues it, so this needed a compromised hub before; now it needs a fresh one.
+  **The hub must be deployed with this commit**, or a PC on 0.6.498 refuses the old hub's queries ("update the hub").
+- **Fixed (performance): the task inbox's state carried every research report's full text** on every page / phone poll
+  (`state()` dropped only `diff`); it now drops `researchReport` too (the page never shows it), and a stored report is
+  capped at 60,000 characters like its results file. Test in `inbox-runner.test.ts`.
+- **Fixed (performance): the game watch** (no chat-model load during a game) ran one folder scan per caller when several
+  background requests asked at once; callers now share one look. Test in `game-watch.test.ts`.
+- **Checked, fine:** connector — only the hub's key opens `connector_query` as `from: "hub"`, only over the hub socket
+  (a phone's sealed query is dropped, tested); the hub refuses both kinds from devices and accepts an answer only from
+  the PC that was asked, opens it in memory, never stores it; `parseConnectorQuery` allows only the six ops, ids
+  `^[\w-]{1,64}$`, executors from a fixed list, title 200 / goal 6000 characters, `assign` through `parseAssignTo`;
+  the PC gate (opt-in, 30/min) and the hub limit (30/min per connection) hold; every text is scrubbed on both sides;
+  the MCP Apps views build every value with `textContent`/`setAttribute` (no HTML from data), accept messages only from
+  `parent`, and are served with an empty CSP allow-list. `removeLooseRef` takes only `refs/remotes/…` without `..`,
+  removes only a file that is not an object id (a link is removed, not followed). Quota failover never picks an
+  executor with `extraCost`, sends a security-sensitive task only to Antigravity, and keeps relay/training-unsafe tasks
+  off GhostCLI / Gemini; a running task never moves; the pass runs every 5 minutes. GhostCLI: code and research turns go
+  through the privacy guard (`ghostcli` is in the training rules), its research reads pages through the leak guard,
+  and both routes need `safeForRelay` + the privacy scan. `claude-usage.ts` runs one `haiku` turn with tools off, at
+  most every 10 minutes, refuses an API-key sign-in and reads no token. Gemini grounding: the key only in the
+  `x-goog-api-key` header; errors carry no key or address; redirect links are unwrapped by one HEAD to Google's fixed
+  host without following them (the page itself is later read through `fetchPublic`). Hub quotas: read every 2 minutes,
+  sent only when changed (or every 10).
+- **Left (low, listed):** `brokenRemoteRef` reads the ref name from any line of git's fetch output, so a `remote:` line
+  from the (trusted, own) GitHub remote could name a ref; the removal is still limited to a damaged file under
+  `.git/refs/remotes` (kept out of inbox-runner.ts while another helper works there). A DNS answer can change between
+  the check and the fetch (rebinding within the TTL); the redirect and name checks close the simple forms.

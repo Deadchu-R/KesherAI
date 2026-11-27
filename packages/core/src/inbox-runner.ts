@@ -892,7 +892,8 @@ export class TaskInbox {
       settings: this.s,
       today: { ...this.today() },
       // Newest first; the diff is only on the task page.
-      tasks: [...this.saved.tasks].reverse().map(({ diff: _d, ...t }) => this.withPlace(t)),
+      // The diff and a research report's full text stay out (the page never shows them; each poll stays small).
+      tasks: [...this.saved.tasks].reverse().map(({ diff: _d, researchReport: _r, ...t }) => this.withPlace(t)),
       busy,
       ...(this.saved.lastFetch ? { lastFetch: this.saved.lastFetch } : {}),
       ...(this.saved.lastError ? { lastError: this.saved.lastError } : {}),
@@ -1365,7 +1366,8 @@ export class TaskInbox {
         new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the safety limit.")), { once: true })),
       ])).trim();
       if (!report) throw new Error("The model wrote no report.");
-      t.researchReport = report;
+      // Capped like its results file (task-inbox.ts): a model's runaway answer never bloats the saved inbox.
+      t.researchReport = report.slice(0, 60_000);
       t.summary = report.slice(0, 2000);
     } catch (e) {
       const msg = (e as Error).message || String(e);

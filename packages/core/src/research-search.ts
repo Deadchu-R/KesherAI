@@ -6,7 +6,8 @@
  *
  * Grounding stays inside the free tier: at most {@link GROUNDED_DAILY_CAP} searches a day (UTC) from this PC, and a
  * free-limit or billing answer stops it for {@link GROUNDED_COOLDOWN_MS} (each request then fails at once, with the
- * reason). Queries are research sub-questions (safe-for-relay text); they still pass the leak guard (`redact`).
+ * reason). Queries are research sub-questions (safe-for-relay text); they still pass the leak guard (`redact`) before
+ * either search sees them (scan 2026-11-27: the web search got them unredacted before).
  */
 
 /** The start of the note of a research whose searches returned nothing (the inbox's search-retry rule looks for it). */
@@ -33,7 +34,7 @@ export interface ResearchSearchDeps {
   web: ResearchSearchFn;
   /** Gemini's Google Search grounding (the free key's provider): read on each search, undefined while there is none. */
   grounded?: () => ResearchSearchFn | undefined;
-  /** Removes anything private from a query before it leaves for the grounded search (the leak guard). */
+  /** Removes anything private from a query before it leaves for any search (the leak guard). */
   redact?: (query: string) => string;
   now?: () => number;
 }
@@ -66,7 +67,8 @@ export function researchSearch(d: ResearchSearchDeps): ResearchSearchFn {
   const now = d.now ?? Date.now;
   let restUntil = 0;
   let day = { date: "", used: 0 };
-  return async (query, signal) => {
+  return async (asked, signal) => {
+    const query = d.redact ? d.redact(asked) : asked;
     let failures: string[];
     try {
       const hits = await d.web(query, signal);
@@ -86,7 +88,7 @@ export function researchSearch(d: ResearchSearchDeps): ResearchSearchFn {
     else {
       day.used++;
       try {
-        const hits = await grounded(d.redact ? d.redact(query) : query, signal);
+        const hits = await grounded(query, signal);
         if (hits.length) return hits;
         failures.push("gemini-search: Google Search found nothing.");
       } catch (e) {

@@ -1471,7 +1471,7 @@ export class Hub {
    */
   async connectorAsk(query: Record<string, unknown>, grantId: string, device = "", wait: number = CONNECTOR_LIMITS.waitMs): Promise<{ answer: ConnectorAnswer; pc: string } | { error: string }> {
     if (this.paused) return { error: "The hub is paused (hub page › Settings)." };
-    const q = parseConnectorQuery({ ...query, queryId: randomB64url(12) });
+    const q = parseConnectorQuery({ ...query, queryId: randomB64url(12), at: this.now() });
     if (!q) return { error: "That request is not allowed." };
     const pcs = this.presence().filter((d) => d.kind === "pc");
     const want = device.trim().toLowerCase();

@@ -102,6 +102,18 @@ export class ConnectorDesk {
     }
   }
 
+  /**
+   * A refused answer without reading or doing anything (a stale query: see connectorQueryStale), noted in the log.
+   *
+   * @param q - The query.
+   * @param why - Why, in one short line.
+   * @returns The answer to seal to the hub.
+   */
+  refuse(q: ConnectorQuery, why: string): ConnectorAnswer {
+    this.deps.log?.(`Claude connector: ${q.op}${q.action ? `:${q.action}` : ""}${q.taskId ? ` ${q.taskId}` : ""} -> refused (stale)`);
+    return { queryId: q.queryId, ok: false, text: why, at: this.now() };
+  }
+
   /** The op itself. */
   private async run(q: ConnectorQuery, at: number): Promise<Omit<ConnectorAnswer, "queryId" | "at">> {
     switch (q.op) {

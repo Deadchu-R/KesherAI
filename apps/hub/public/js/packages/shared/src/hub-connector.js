@@ -20,6 +20,12 @@ export const CONNECTOR_LIMITS = {
     answerChars: 10_000,
     /** How long the hub waits for the PC's answer. */
     waitMs: 10_000,
+    /**
+     * How far a query's time (`at`, set by the hub) may be from the PC's clock, either way: an older query is refused,
+     * so one captured and delivered again after the PC restarted (its replay memory is gone) does nothing. Wide enough
+     * for a PC clock a few minutes off.
+     */
+    maxSkewMs: 5 * 60_000,
     /** Queries a PC takes in a minute (and the hub sends per connection). */
     perMinute: 30,
 };
@@ -47,7 +53,8 @@ export function parseConnectorQuery(x) {
     const q = x;
     if (typeof q.queryId !== "string" || !ID.test(q.queryId) || !CONNECTOR_OPS.includes(q.op))
         return null;
-    const base = { queryId: q.queryId, op: q.op };
+    const at = num(q.at);
+    const base = { queryId: q.queryId, op: q.op, ...(at ? { at } : {}) };
     switch (base.op) {
         case "tasks": {
             const filter = ["open", "running", "ended", "all"].find((f) => f === q.filter) ?? "all";
@@ -200,4 +207,18 @@ export function mapConnectorText(a, fn) {
             ? { agents: a.agents.map((g) => ({ ...g, ...(g.label ? { label: fn(g.label) } : {}), ...(g.task ? { task: { ...g.task, title: fn(g.task.title), ...(g.task.now ? { now: step(g.task.now) } : {}) } } : {}) })) }
             : {}),
     };
+}
+/**
+ * Whether a query is fresh enough to act on (the PC's replay check beside its in-memory envelope-id memory).
+ *
+ * @param q - The query.
+ * @param now - The PC's clock (ms).
+ * @returns Undefined when fresh, or why not (a short line for the refused answer).
+ */
+export function connectorQueryStale(q, now) {
+    if (!q.at)
+        return "The hub sent no time with this request (an older hub); update the hub.";
+    if (Math.abs(now - q.at) > CONNECTOR_LIMITS.maxSkewMs)
+        return "This request is too old, or the PC's clock is off from the hub's by more than 5 minutes; check the PC's time.";
+    return undefined;
 }

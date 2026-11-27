@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CONNECTOR_LIMITS, fitConnectorAnswer, mapConnectorText, parseConnectorAnswer, parseConnectorQuery } from "./hub-connector.js";
+import { CONNECTOR_LIMITS, connectorQueryStale, fitConnectorAnswer, mapConnectorText, parseConnectorAnswer, parseConnectorQuery } from "./hub-connector.js";
 import { DEFAULT_OPT_IN, cleanOptIn, parseSealedBody } from "./hub-protocol.js";
 
 test("connector queries: only the listed ops and the hub page's actions; ids and fields checked", () => {
@@ -36,4 +36,13 @@ test("connector answers: rows capped, fitted under the envelope cap, text mapped
   assert.match(fit.text!, /left out/);
   const m = mapConnectorText({ queryId: "q", ok: true, at: 1, text: "a", task: { taskId: "r", title: "b", state: "done", executor: "x", result: "c", stepLog: [{ tool: "d", target: "e", at: 1 }] } }, (s) => s.toUpperCase());
   assert.deepEqual([m.text, m.task!.title, m.task!.result, m.task!.stepLog[0]!.target, m.task!.taskId], ["A", "B", "C", "E", "r"]);
+});
+
+test("connectorQueryStale: a query needs the hub's time, within 5 minutes of the PC's clock", () => {
+  const now = Date.UTC(2026, 10, 27, 12);
+  assert.equal(parseConnectorQuery({ queryId: "q1", op: "quotas", at: now })?.at, now);
+  assert.equal(connectorQueryStale({ at: now - 60_000 }, now), undefined);
+  assert.equal(connectorQueryStale({ at: now + 60_000 }, now), undefined);
+  assert.match(connectorQueryStale({ at: now - CONNECTOR_LIMITS.maxSkewMs - 1 }, now)!, /too old/);
+  assert.match(connectorQueryStale({}, now)!, /no time/);
 });

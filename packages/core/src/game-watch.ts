@@ -24,8 +24,17 @@ export class GameWatch {
    */
   constructor(private readonly d: GameWatchDeps = {}) {}
 
+  /** The look in progress: callers that ask at the same moment share it (one folder scan, one process list). */
+  private looking?: Promise<string[]>;
+
   /** The names of the games running now (empty when none, or when they could not be read). */
-  async running(): Promise<string[]> {
+  running(): Promise<string[]> {
+    this.looking ??= this.look().finally(() => (this.looking = undefined));
+    return this.looking;
+  }
+
+  /** One look, with the caches. */
+  private async look(): Promise<string[]> {
     const now = (this.d.now ?? Date.now)();
     if (now - this.games.at > 10 * 60_000) this.games = { at: now, list: await (this.d.games ?? (async () => gameFoldersForBusy(await findGamesAndStoreApps())))().catch(() => []) };
     if (now - this.programs.at > 30_000) this.programs = { at: now, list: await (this.d.programs ?? runningPrograms)().catch(() => []) };

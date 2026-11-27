@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { AgentTool, ToolContext } from "./tools.js";
+import { fetchPublic, privateHostName } from "./public-url.js";
 import { MAX_OUTPUT, refreshPath, runShell } from "./shell.js";
 import { resolveForTool } from "./workspace.js";
 import { safeValue, searchBackends } from "./web-search.js";
@@ -131,10 +132,9 @@ export function htmlToText(html: string): string {
 function checkUrl(raw: string): URL {
   const url = new URL(raw);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Only http and https links can be opened.");
-  // Never reach this computer's own services or the home network from a web tool.
-  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?$)/i.test(url.hostname) || /^172\.(1[6-9]|2\d|3[01])\./.test(url.hostname)) {
-    throw new Error("web_fetch only opens public web pages, not addresses on this computer or the home network.");
-  }
+  // Never reach this computer's own services or the home network from a web tool (the DNS lookup and every redirect
+  // are checked again in fetchPublic).
+  if (privateHostName(url)) throw new Error("web_fetch only opens public web pages, not addresses on this computer or the home network.");
   return url;
 }
 
@@ -162,19 +162,24 @@ export const webFetchTool: AgentTool = {
     if (only.length && !only.some((d) => onSite(url.href, d))) throw new Error(`This chat reads only from: ${only.join(", ")} (the user set it). Pick a page there.`);
     if (never.some((d) => onSite(url.href, d))) throw new Error(`This chat never reads from that site (the user set it).`);
     let res: Response | undefined;
+    let finalUrl = url.href;
     let why = "";
     try {
-      res = await fetch(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]), headers: { "user-agent": "KesherAI (+https://github.com/Deadchu-R/KesherAI)" } });
+      const got = await fetchPublic(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]), headers: { "user-agent": "KesherAI (+https://github.com/Deadchu-R/KesherAI)" } });
+      res = got.res;
+      finalUrl = got.url.href;
       if (!res.ok) why = `The page answered ${res.status} ${res.statusText}.`;
     } catch (err) {
       if (ctx.signal.aborted) throw err;
+      // A private address (as typed, after the DNS lookup or behind a redirect) is refused, never tried through Tor.
+      if (/only open public web pages/.test((err as Error).message)) throw err;
       why = `The page did not open (${(err as { cause?: { code?: string } }).cause?.code ?? (err as Error).message}).`;
     }
     if (res?.ok) {
       const type = res.headers.get("content-type") ?? "";
       const body = await res.text();
       const text = /html/i.test(type) ? htmlToText(body) : body;
-      return { output: `${res.url}\n\n${text.slice(0, MAX_OUTPUT)}` };
+      return { output: `${res.url || finalUrl}\n\n${text.slice(0, MAX_OUTPUT)}` };
     }
     // Blocked here (a DNS or network block, "unavailable for legal reasons", forbidden): once more through Tor.
     if (ctx.viaTor && (!res || [403, 451].includes(res.status))) {
@@ -314,7 +319,7 @@ export const downloadFileTool: AgentTool = {
   async run(input, ctx: ToolContext) {
     const url = checkUrl(String(input.url ?? ""));
     const dest = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], String(input.path ?? ""));
-    const res = await fetch(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(600_000)]) });
+    const { res } = await fetchPublic(url, { signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(600_000)]) });
     if (!res.ok || !res.body) throw new Error(`The server answered ${res.status} ${res.statusText}.`);
     await mkdir(dirname(dest), { recursive: true });
     ctx.recordChange(dest, null);
