@@ -377,11 +377,12 @@ export const inboxRunId = (taskId: string): string => `in-${taskId.replace(/[^\w
  * @param t - The task.
  * @param ask - Its open run ask, if any.
  * @param inboxAsks - The conversation id the PC uses for those asks.
- * @returns The snapshot, or undefined when the task is not an Antigravity, OpenCode Go or Claude Code run.
+ * @returns The snapshot, or undefined when the task is not an Antigravity, OpenCode Go, GhostCLI or Claude Code run.
  */
 export function inboxSnapshot(t: InboxTaskView, ask: InboxRunAsk | undefined, inboxAsks: string): RunSnapshot | undefined {
-  // OpenCode Go's and Claude Code's tasks show too (Roee wants to see them take tasks): as the inbox's own runs, with their model.
-  if (t.runBy !== "antigravity" && t.runBy !== "opencode" && t.runBy !== "claude") return undefined;
+  // OpenCode Go's, GhostCLI's and Claude Code's tasks show too (Roee wants to see them take tasks): as the inbox's own
+  // runs, with their model ("GhostCLI · claude-opus-5-5").
+  if (t.runBy !== "antigravity" && t.runBy !== "opencode" && t.runBy !== "ghostcli" && t.runBy !== "claude") return undefined;
   const state = (
     {
       waiting: ask ? "waiting" : "queued",

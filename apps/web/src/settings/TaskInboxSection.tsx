@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CLAUDE_DEFAULTS, OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
+import { CLAUDE_DEFAULTS, GHOSTCLI_DEFAULTS, OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
 import { ClaudeQuotaLine, claudeWhen } from "../ClaudeCodeCard";
 import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -71,10 +71,6 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
         <input type="checkbox" checked={c.useFree !== false} disabled={!c.enabled} onChange={(e) => set({ useFree: e.target.checked })} />
         <span className="grow">{L("קודם המודלים החינמיים (Beam Free): לא נספרים בסף היומי", "Free models first (Beam Free): they don't count toward the daily limit")}</span>
       </label>
-      <label className="row wrap small">
-        <input type="checkbox" checked={c.useRelay !== false} disabled={!c.enabled} onChange={(e) => set({ useRelay: e.target.checked })} />
-        <span className="grow">{L("משימות כבדות בלי מידע רגיש ל-GhostCLI (מנוי חודשי, לא נספר בסף היומי). עובד רק אחרי שמוסיפים אותו בחיבורים", "Heavy tasks without sensitive content to GhostCLI (monthly plan, outside the daily limit). Works once it is added in Connections")}</span>
-      </label>
       {(s.free ?? []).length > 0 && (
         <ul className="small stack" dir="ltr">
           {(s.free ?? []).map((f) => (
@@ -97,6 +93,61 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
           {[...new Set([5, 10, 15, 20, 30, 50, c.dailyCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
+    </div>
+  );
+}
+
+/**
+ * Settings → Task inbox → GhostCLI: the flat-rate relay as its own executor (Roee, 27.11: not part of OpenCode Go).
+ * On/off, heavy tasks to it, its daily limit with today's count, the model order (tap to move a model to the front, or
+ * to take it out), its models cooling down after "too many requests", and whether its last check answered. Code and
+ * research tasks, never sensitive ones. Works from the phone.
+ *
+ * @param p - The inbox's state and the settings writer.
+ */
+function GhostcliSettings({ s, put }: { s: InboxState; put: (body: Record<string, unknown>) => void }) {
+  const c = { ...GHOSTCLI_DEFAULTS, ...s.settings.ghostcli };
+  const st = s.ghostcli;
+  const set = (v: Record<string, unknown>) => put({ ghostcli: v });
+  const heavy = c.takeHeavy ?? s.settings.opencode?.useRelay !== false;
+  const name = (m: string) => m.replace(/^ghostcli\//, "");
+  const order = c.models.length ? c.models : (st?.models ?? []);
+  const rest = (st?.models ?? []).filter((m) => !order.includes(m));
+  const cool = st?.cooldowns ?? {};
+  const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return (
+    <div className="stack tinbox-gcli">
+      <div className="row">
+        <h3 className="grow">👻 GhostCLI</h3>
+        <label className="row small"><input type="checkbox" checked={c.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> {L("פעיל", "On")}</label>
+      </div>
+      <p className="small muted">{L("ריליי בתשלום חודשי: משימות קוד ומחקר בלי מידע רגיש רצות עליו לבד, עם הסף והמונים שלו (לא של OpenCode Go). העבודה בענף gcli/*.", "A monthly-paid relay: code and research tasks without sensitive content run on it by themselves, with its own limit and counters (not OpenCode Go's). Work goes to gcli/* branches.")}</p>
+      {!st?.ready && <p className="small tinbox-err">{L("אין חיבור GhostCLI עם מפתח: הוסף אותו בהגדרות › חיבורים.", "No GhostCLI connection with a key: add it in Settings › Connections.")}</p>}
+      {st?.answering !== undefined && <p className={`small ${st.answering ? "" : "tinbox-err"}`}>● {st.answering ? L("עונה", "Answering") : L("לא עונה (נבדק כל 15 דק׳)", "Not answering (checked every 15 min)")}</p>}
+      {st?.until && <p className="small tinbox-err">⏸ {L(`כל המודלים חסומים עד ${hhmm(st.until)}`, `Every model is blocked until ${hhmm(st.until)}`)}</p>}
+      <label className="row wrap small">
+        <input type="checkbox" checked={heavy} disabled={!c.enabled} onChange={(e) => set({ takeHeavy: e.target.checked })} />
+        <span className="grow">{L("משימות קוד כבדות (M/L) בלי מידע רגיש עוברות מ-OpenCode Go ל-GhostCLI כשהוא עונה", "Heavy (M/L) code tasks without sensitive content move from OpenCode Go to GhostCLI while it answers")}</span>
+      </label>
+      <label className="row wrap small">
+        <span className="grow">{L(`סף יומי (היום ${st?.used ?? 0})`, `Daily limit (today ${st?.used ?? 0})`)}</span>
+        <select value={c.dailyCap} disabled={!c.enabled} onChange={(e) => set({ dailyCap: Number(e.target.value) })} aria-label={L("סף יומי ל-GhostCLI", "GhostCLI daily limit")}>
+          {[...new Set([10, 20, 30, 50, 80, 120, c.dailyCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <span className="small muted">{L("סדר המודלים (הקש כדי להעביר לראש הרשימה)", "Model order (tap to move to the front)")}</span>
+      <ul className="small stack tinbox-ocmodels" dir="ltr">
+        {[...order, ...rest].map((m, i) => (
+          <li key={m} className="row wrap">
+            <button type="button" className="chip-text grow" disabled={!c.enabled || i === 0} onClick={() => set({ models: [m, ...[...order, ...rest].filter((x) => x !== m)].slice(0, 10) })}>
+              {i + 1}. {name(m)}
+            </button>
+            {cool[m] !== undefined && <span className="tinbox-err">⏸ {L(`חסום עד ${hhmm(cool[m]!)}`, `blocked until ${hhmm(cool[m]!)}`)}</span>}
+          </li>
+        ))}
+        {!order.length && !rest.length && <li className="muted">{L("עוד לא ידוע (צריך חיבור)", "Not known yet (needs the connection)")}</li>}
+      </ul>
+      {c.models.length > 0 && <button type="button" className="chip-text" disabled={!c.enabled} onClick={() => set({ models: [] })}>{L("חזרה לסדר של GhostCLI", "Back to GhostCLI's own order")}</button>}
     </div>
   );
 }
@@ -218,6 +269,8 @@ export function TaskInboxSection() {
 
       <OpencodeSettings s={s} put={put} />
 
+      <GhostcliSettings s={s} put={put} />
+
       <ClaudeSettingsCard s={s} put={put} />
 
       <h3>{L("מבצע לכל סוג משימה", "Who does each kind of task")}</h3>
@@ -225,12 +278,13 @@ export function TaskInboxSection() {
         <span><span className="tinbox-ex local">{L("◆ מודל מקומי", "◆ Local model")}</span> {L("עבודה עצמית לוקחת אותן מלוח המשימות כשהמחשב פנוי.", "Self-work takes them from the task board when the PC is free.")}</span>
         <span><span className="tinbox-ex agy">✦ Antigravity</span> {L('רק ב"הפעל".', "Only on Run.")}</span>
         <span><span className="tinbox-ex ocgo">◈ OpenCode Go</span> {L("רץ לבד, משימות קוד קטנות ובינוניות כש-Antigravity נגמר.", "Runs by itself: small and medium code tasks while Antigravity is out.")}</span>
+        <span><span className="tinbox-ex gcli">👻 GhostCLI</span> {L("רץ לבד: קוד ומחקר בלי מידע רגיש, עם הסף שלו.", "Runs by itself: code and research without sensitive content, with its own limit.")}</span>
         <span><span className="tinbox-ex claude">✳ Claude Code</span> {L('רק משימות שנשלחו אליו, ב"הפעל" (ברירת מחדל), עם המנוי שלך.', "Only tasks sent to it, on Run (default), with your subscription.")}</span>
         <span><span className="tinbox-ex opus">{L("✷ סוכן Opus", "✷ Opus agent")}</span> {L("של Claude, לא רץ במחשב. Claude מחליט.", "Claude's own, not on this PC. Claude decides.")}</span>
       </div>
 
       <h3>Git</h3>
-      <p className="small">{L(`KesherAI דוחף רק ענפי agy/*, ocgo/* ו-claude/* ואת ${c.branch}.`, `KesherAI pushes only agy/*, ocgo/* and claude/* branches and ${c.branch}.`)}</p>
+      <p className="small">{L(`KesherAI דוחף רק ענפי agy/*, ocgo/*, gcli/* ו-claude/* ואת ${c.branch}.`, `KesherAI pushes only agy/*, ocgo/*, gcli/* and claude/* branches and ${c.branch}.`)}</p>
       <p className="small">✕ {L("אף פעם לא: main, תגיות, מחיקת ענפים, force push.", "Never: main, tags, deleting branches, force push.")}</p>
       <p className="small">✕ {L("לסוכן עצמו אין הרשאת push: רק KesherAI, אחרי הבדיקות.", "The agent itself cannot push: only KesherAI, after its checks.")}</p>
 

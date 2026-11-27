@@ -4,7 +4,8 @@ import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
 import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ModelTurn, type ToolContext } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
-import { FREE_PROVIDERS, RELAY_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, trainingRiskOf, type InboxBusy } from "@kesher/shared";
+import { FREE_PROVIDERS, RELAY_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, redactLeaks, trainingRiskOf, type InboxBusy } from "@kesher/shared";
+import { privacyContext } from "../privacy-guard.js";
 import { UsageLog } from "../usage-log.js";
 import type { WatchdogModel } from "../watchdog-model.js";
 import { fetchFreeUsage } from "../openrouter-free.js";
@@ -360,6 +361,17 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
         }
         throw last ?? new Error("Gemini is busy.");
         }
+      },
+      // The same research on one chosen model (GhostCLI's): every request passes the privacy guard (modelTurnFor, the
+      // run counts as unattended), and each page it reads is scanned too before it joins a request.
+      viaModel: async (question, model, signal) => {
+        const prefs = withFilter(undefined, p.config.webFilter, false);
+        const { ctx } = privacyContext();
+        return researchReport(question, {
+          model: modelTurnFor(p.registry, model, undefined, "helper", { unattended: () => true }),
+          search: (q: string, sig: AbortSignal) => searchWeb(q, prefs, sig),
+          read: async (url: string, sig: AbortSignal) => redactLeaks((await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output, ctx).text,
+        }, signal);
       },
     },
     ...(p.chats ? { coder: opencodeCoder({ config: p.config, registry: p.registry, chats: p.chats }) } : {}),

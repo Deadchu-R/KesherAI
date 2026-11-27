@@ -305,6 +305,16 @@ export const KesherConfigSchema = z.object({
           freeTrainingOk: z.boolean().default(true),
         })
         .prefault({}),
+      // GhostCLI (inbox-runner.ts): the flat-rate relay as its own executor (27.11), with its own cap and model order.
+      ghostcli: z
+        .object({
+          enabled: z.boolean().default(true),
+          dailyCap: z.number().int().min(0).max(200).default(30),
+          models: z.array(z.string().max(120)).max(10).default([]),
+          // Heavy OpenCode tasks without sensitive content go to GhostCLI; absent: the older opencode.useRelay decides.
+          takeHeavy: z.boolean().optional(),
+        })
+        .prefault({}),
       // Claude Code on this PC (claude-exec.ts): the user's own subscription; Run tap per task by default.
       claude: z
         .object({

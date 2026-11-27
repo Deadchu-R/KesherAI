@@ -121,7 +121,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {
-    const ALL = ["local", "opus", "antigravity", "gemini", "opencode", "claude"] as const;
+    const ALL = ["local", "opus", "antigravity", "gemini", "opencode", "ghostcli", "claude"] as const;
     const to = ALL.find((x) => x === req.body?.to);
     if (!to) return reply.code(400).send({ error: `to is ${ALL.join(", ")}.` });
     return inbox.reassign(req.params.id, to).catch((e) => failed(reply, e));
@@ -220,6 +220,24 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
         }
         cur.opencode = oc;
       }
+      // GhostCLI (Settings › Task inbox card): on/off, the daily cap, the model order (only `ghostcli/…` ids), heavy tasks to it.
+      if (b.ghostcli && typeof b.ghostcli === "object") {
+        const o = b.ghostcli as Record<string, unknown>;
+        const gc = { ...cur.ghostcli };
+        if (typeof o.enabled === "boolean") gc.enabled = o.enabled;
+        if (typeof o.takeHeavy === "boolean") gc.takeHeavy = o.takeHeavy;
+        if (o.dailyCap !== undefined) {
+          const n = Number(o.dailyCap);
+          if (!Number.isInteger(n) || n < 0 || n > 200) throw new Error("The GhostCLI daily limit must be 0–200.");
+          gc.dailyCap = n;
+        }
+        if (o.models !== undefined) {
+          const list = Array.isArray(o.models) ? o.models.map((m) => String(m).trim()).filter(Boolean) : [];
+          if (list.length > 10 || list.some((m) => m.length > 120 || !/^ghostcli\/[\w./:-]+$/.test(m))) throw new Error("Pick GhostCLI models (ghostcli/…), at most 10.");
+          gc.models = [...new Set(list)];
+        }
+        cur.ghostcli = gc;
+      }
       // Claude Code (Settings › Task inbox card): on/off, Run tap per task, the daily cap, the two quota thresholds, the model.
       if (b.claude && typeof b.claude === "object") {
         const o = b.claude as Record<string, unknown>;
@@ -265,6 +283,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     if (!cur.enabled) await inbox.stopAll();
     inbox.start();
     void inbox.pumpOpencode().catch(() => undefined);
+    void inbox.pumpGhostcli().catch(() => undefined);
     return inbox.state(isLocalRequest(req));
   });
 }

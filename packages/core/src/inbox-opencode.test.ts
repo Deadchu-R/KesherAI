@@ -754,35 +754,48 @@ test("run guard: the safety ceiling is never below 120 minutes (an old 15-minute
   }
 });
 
-test("ghostcli: a task given to GhostCLI runs on it with the automatic relay off; a sensitive one never reaches it", async () => {
+test("ghostcli: a task given to GhostCLI runs on it as its own executor (own counter, gcli/* branch), not on OpenCode Go's; a sensitive one never reaches it", async () => {
   const { root, repo } = await setup({ "c-20261126-41": TASK("c-20261126-41", "opencode"), "c-20261126-42": TASK("c-20261126-42", "opencode").replace("Add a clear button", "Rotate the API token") });
   const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-flash"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
   const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: true, useRelay: false, dailyCap: 0 } });
   try {
     await inbox.sync();
-    await inbox.reassign("c-20261126-41", "opencode", { relay: true });
-    await assert.rejects(inbox.reassign("c-20261126-42", "opencode", { relay: true }), /Not for GhostCLI/);
+    await inbox.reassign("c-20261126-41", "ghostcli");
+    await assert.rejects(inbox.reassign("c-20261126-42", "ghostcli"), /Not for GhostCLI/);
+    await inbox.pumpGhostcli();
     await inbox.pumpOpencode();
     await inbox.idle();
-    assert.deepEqual(runs.filter((r) => r.title.includes("c-20261126-41")).map((r) => r.model), ["ghostcli/claude-opus-5-5"]);
+    const mine = runs.filter((r) => r.title.includes("c-20261126-41"));
+    assert.deepEqual(mine.map((r) => r.model), ["ghostcli/claude-opus-5-5"]);
+    assert.match(mine[0]!.title, /^👻 GhostCLI · /);
     assert.ok(runs.every((r) => !r.title.includes("c-20261126-42") || !r.model.startsWith("ghostcli/")));
-    assert.equal((await inbox.task("c-20261126-41")).status, "done");
+    const t = await inbox.task("c-20261126-41");
+    assert.equal(t.status, "done");
+    assert.equal(t.runBy, "ghostcli");
+    assert.match(t.branch, /^gcli\//);
+    assert.match(t.modelUsed ?? "", /^GhostCLI · claude-opus-5-5$/);
+    const st = await inbox.state(true);
+    assert.equal(st.ghostcli?.used, 1, "counted on GhostCLI");
+    assert.equal(st.opencode?.used, 0, "not on OpenCode Go");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("model button: an OpenCode task takes the GhostCLI pin or a plan/free model (relay only when safe), not Antigravity's names", async () => {
+test("model button: an OpenCode task takes a plan/free model; a GhostCLI model moves it to GhostCLI (only when safe); Antigravity's names are refused", async () => {
   const { root, repo } = await setup({ "c-20261127-51": TASK("c-20261127-51", "opencode"), "c-20261127-52": TASK("c-20261127-52", "opencode").replace("Add a clear button", "Rotate the API token") });
   const { coder } = fakeCoder({ free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
-  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: false } });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: false }, ghostcli: { enabled: false } });
   try {
     await inbox.sync();
-    assert.equal((await inbox.setModel("c-20261127-51", RELAY_PIN)).model, RELAY_PIN);
-    assert.equal((await inbox.setModel("c-20261127-51", "ghostcli/claude-sonnet-5")).model, "ghostcli/claude-sonnet-5");
     assert.equal((await inbox.setModel("c-20261127-51", "opencode-go/mimo-v2.6-pro")).model, "opencode-go/mimo-v2.6-pro");
     await assert.rejects(inbox.setModel("c-20261127-51", KNOWN_MODELS.flash), /OpenCode Go does not offer that model/);
     await assert.rejects(inbox.setModel("c-20261127-52", RELAY_PIN), /Not for GhostCLI/);
+    const moved = await inbox.setModel("c-20261127-51", "ghostcli/claude-sonnet-5");
+    assert.equal(moved.runBy, "ghostcli");
+    assert.equal(moved.model, "ghostcli/claude-sonnet-5");
+    assert.equal((await inbox.setModel("c-20261127-51", RELAY_PIN)).model, undefined, "the old mark means GhostCLI's own order");
+    await assert.rejects(inbox.setModel("c-20261127-51", "opencode-go/mimo-v2.6-pro"), /GhostCLI does not offer that model/);
     assert.equal((await inbox.setModel("c-20261127-51", "")).model, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -816,6 +829,74 @@ test("opencode: the coder gets the task's allowed and forbidden paths (its write
     await syncAndRun(inbox);
     const t = await inbox.task("c-20261127-54");
     assert.deepEqual(seen[0], { allowed: t.allowedPaths, forbidden: t.forbiddenPaths });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ghostcli: an old saved task (opencode + ghostcli/*) and an old task file are read as GhostCLI tasks", async () => {
+  const { root, repo } = await setup({ "c-20261127-55": TASK("c-20261127-55", "opencode", "model: ghostcli/*\n") });
+  const { coder } = fakeCoder({ free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const file = join(root, "inbox.json");
+  writeFileSync(file, JSON.stringify({ tasks: [{ id: "c-20261127-56", title: "Old", executor: "opencode", runBy: "opencode", model: "ghostcli/*", status: "waiting", risk: "medium", from: "claude", base: "origin/main", allowedPaths: ["apps/**"], forbiddenPaths: [], check: "", maxMinutes: 30, maxFiles: 5, goal: "x", branch: "ocgo/c-20261127-56-old", resultWritten: false }], today: { date: "", used: 0 } }));
+  const { inbox } = inboxFor(repo, root, coder, { ghostcli: { enabled: false } });
+  try {
+    const old = await inbox.task("c-20261127-56");
+    assert.equal(old.runBy, "ghostcli");
+    assert.equal(old.executor, "ghostcli");
+    assert.equal(old.model, undefined);
+    await inbox.sync();
+    await inbox.idle();
+    await inbox.pumpGhostcli();
+    const t = await inbox.task("c-20261127-55");
+    assert.equal(t.runBy, "ghostcli");
+    assert.equal(t.model, undefined);
+    assert.match((await inbox.task("c-20261127-56")).note ?? "", /GhostCLI is off/, "GhostCLI's own switch holds it, not OpenCode Go's");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ghostcli: a 429 cools that GhostCLI model only and the next one goes on; OpenCode Go's cooldowns stay untouched", async () => {
+  const { root, repo } = await setup({ "c-20261127-57": TASK("c-20261127-57", "ghostcli") });
+  const busy = Object.assign(new Error("429 Too Many Requests"), { retryAfterMs: 60_000 });
+  const { coder, runs } = fakeCoder({ free: { ghostcli: ["ghostcli/claude-opus-5-5", "ghostcli/claude-sonnet-5"] }, fail: (m) => (m === "ghostcli/claude-opus-5-5" ? busy : undefined) });
+  const { inbox } = inboxFor(repo, root, coder);
+  try {
+    await inbox.sync();
+    await inbox.pumpGhostcli();
+    await inbox.idle();
+    assert.deepEqual(runs.map((r) => r.model), ["ghostcli/claude-opus-5-5", "ghostcli/claude-sonnet-5"]);
+    const st = await inbox.state(true);
+    assert.ok(st.ghostcli?.cooldowns?.["ghostcli/claude-opus-5-5"]);
+    assert.equal(st.opencode?.cooldowns, undefined);
+    assert.equal((await inbox.task("c-20261127-57")).status, "done");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ghostcli research: runs like Gemini's on GhostCLI's model (report kept, no branch work); a sensitive one is refused; auto research goes to GhostCLI while Gemini is not connected", async () => {
+  const research = (id: string, executor: string, extra = "") => TASK(id, executor, `kind: research\n${extra}`);
+  const { root, repo } = await setup({ "c-20261127-58": research("c-20261127-58", "ghostcli"), "c-20261127-59": research("c-20261127-59", "auto"), "c-20261127-60": research("c-20261127-60", "ghostcli").replace("Add a clear button", "Rotate the API token") });
+  const { coder, runs } = fakeCoder({ free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const asked: string[] = [];
+  const { inbox } = inboxFor(repo, root, coder, {}, () => Date.now(), {
+    research: { ready: () => false, run: async () => "never", viaModel: async (q, model) => (asked.push(model), `# Report\n\n${q.slice(0, 20)}\n\n## Tasks\n- [S] Do a thing`) },
+  });
+  try {
+    await inbox.sync();
+    await inbox.pumpGhostcli();
+    await inbox.idle();
+    const t = await inbox.task("c-20261127-58");
+    assert.equal(t.status, "done");
+    assert.match(t.researchReport ?? "", /## Tasks/);
+    assert.equal(runs.length, 0, "no code chat for research");
+    const auto = await inbox.task("c-20261127-59");
+    assert.equal(auto.runBy, "ghostcli");
+    assert.deepEqual(asked, ["ghostcli/claude-opus-5-5", "ghostcli/claude-opus-5-5"]);
+    assert.equal((await inbox.state(true)).ghostcli?.used, 2);
+    assert.equal((await inbox.task("c-20261127-60")).status === "done", false, "a sensitive research task never reaches GhostCLI");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

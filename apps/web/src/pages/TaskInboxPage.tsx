@@ -27,6 +27,8 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 function modelLine(t: InboxTaskView): string | null {
   // OpenCode Go: the runner and its model ("OpenCode Go · kimi-k3"), set when the task starts.
   if (t.runBy === "opencode") return t.modelUsed?.replace(/^OpenCode Go · /, "") ?? null;
+  // GhostCLI: its model ("GhostCLI · claude-opus-5-5"), or the task's pick before it runs.
+  if (t.runBy === "ghostcli") return t.modelUsed?.replace(/^GhostCLI · /, "") ?? t.model?.replace(/^ghostcli\//, "") ?? null;
   if (t.runBy === "claude") return t.modelUsed?.replace(/^Claude Code · /, "") ?? null;
   if (t.runBy !== "antigravity") return null;
   if (t.modelUsed) return `${t.modelFallback ? "↘ " : ""}${t.modelUsed}`;
@@ -51,7 +53,7 @@ const PROVIDERS = ["ghostcli", "opencode", "opencode-free", "zai", "openrouter",
  */
 function providerOf(t: InboxTaskView): string {
   const m = t.modelUsed ?? "";
-  if (/ghostcli\//.test(m)) return "ghostcli";
+  if (t.runBy === "ghostcli" || /ghostcli\/|^GhostCLI · /.test(m)) return "ghostcli";
   if (/fc-zhipu|zai\//i.test(m)) return "zai";
   if (/openrouter/i.test(m)) return "openrouter";
   if (/cloudflare/i.test(m)) return "cloudflare";
@@ -82,7 +84,7 @@ function stepsText(t: InboxTaskView): string | null {
 function statusChip(t: InboxTaskView): { text: string; cls: string } {
   const step = t.plan?.length ? ` · ${L("שלב", "step")} ${Math.min(t.plan.filter((p) => p.status === "completed").length + 1, t.plan.length)}/${t.plan.length}` : "";
   const m: Record<InboxStatus, [string, string, string]> = {
-    waiting: [t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? 'ממתין ל"הפעל"' : t.runBy === "opencode" ? "ממתין ל-OpenCode Go" : t.runBy === "claude" ? "ממתין ל-Claude Code" : "ממתין", t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? "Waiting for Run" : t.runBy === "opencode" ? "Waiting for OpenCode Go" : t.runBy === "claude" ? "Waiting for Claude Code" : "Waiting", ""],
+    waiting: [t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? 'ממתין ל"הפעל"' : t.runBy === "opencode" ? "ממתין ל-OpenCode Go" : t.runBy === "ghostcli" ? "ממתין ל-GhostCLI" : t.runBy === "claude" ? "ממתין ל-Claude Code" : "ממתין", t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? "Waiting for Run" : t.runBy === "opencode" ? "Waiting for OpenCode Go" : t.runBy === "ghostcli" ? "Waiting for GhostCLI" : t.runBy === "claude" ? "Waiting for Claude Code" : "Waiting", ""],
     queued: [t.runBy === "opus" ? "בתור" : t.boardState === "claimed" ? "הסוכן המקומי עובד עליה" : "ממתין לסוכן המקומי", t.runBy === "opus" ? "Queued" : t.boardState === "claimed" ? "The local agent is on it" : "Waiting for the local agent", t.boardState === "claimed" ? "run" : ""],
     running: [`רץ${step}`, `Running${step}`, "run"],
     "needs-approval": ["🔔 צריך אישור", "🔔 Needs approval", "ask"],
@@ -106,6 +108,7 @@ function executorChip(runBy: InboxTaskView["runBy"], kind?: InboxTaskView["kind"
   if (runBy === "gemini") return { text: L("✧ מחקר · אוטומטי (Gemini חינם)", "✧ Research · automatic (free Gemini)"), cls: "local" };
   if (runBy === "antigravity") return { text: "✦ Antigravity", cls: "agy" };
   if (runBy === "opencode") return { text: "◈ OpenCode Go", cls: "ocgo" };
+  if (runBy === "ghostcli") return { text: kind === "research" ? L("👻 GhostCLI · מחקר", "👻 GhostCLI · research") : "👻 GhostCLI", cls: "gcli" };
   if (runBy === "claude") return { text: "✳ Claude Code", cls: "claude" };
   if (runBy === "local") return { text: L("◆ מודל מקומי", "◆ Local model"), cls: "local" };
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
@@ -554,6 +557,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
             <option value="antigravity">✦ Antigravity</option>
             <option value="local">{L("◆ מודל מקומי", "◆ Local model")}</option>
             <option value="opencode">◈ OpenCode Go</option>
+            <option value="ghostcli">👻 GhostCLI</option>
             <option value="claude">✳ Claude Code</option>
             <option value="opus">{L("✷ סוכן Opus", "✷ Opus agent")}</option>
           </select>
@@ -662,7 +666,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         </section>
 
         <section className="card stack">
-          <h2>{L("תוכנית", "Plan")} <span className="small muted">{(() => { const who = t.runBy === "claude" ? "Claude Code" : t.runBy === "opencode" ? "OpenCode Go" : t.runBy === "local" ? L("המודל המקומי", "the local model") : "Antigravity"; return L(`חי, מ-${who}`, `live, from ${who}`); })()}</span></h2>
+          <h2>{L("תוכנית", "Plan")} <span className="small muted">{(() => { const who = t.runBy === "claude" ? "Claude Code" : t.runBy === "opencode" ? "OpenCode Go" : t.runBy === "ghostcli" ? "GhostCLI" : t.runBy === "local" ? L("המודל המקומי", "the local model") : "Antigravity"; return L(`חי, מ-${who}`, `live, from ${who}`); })()}</span></h2>
           {t.plan?.length ? <ul className="tinbox-plan">{t.plan.map((p, i) => <li key={i} className={p.status}>{p.status === "completed" ? "✓" : p.status === "in_progress" ? "▸" : "○"} {p.content}</li>)}</ul> : <p className="small muted">{L("עוד אין תוכנית.", "No plan yet.")}</p>}
           <b className="small">{L("אישורים בדרך", "Approvals on the way")}</b>
           <p className="small">{L(`אוטומטי · ${auto} צעדים לפי כלל`, `Automatic · ${auto} steps by rule`)}</p>

@@ -301,13 +301,13 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
   if (state === "waiting" && t.runBy === "local" && t.boardState === "claimed") state = "running";
   const ended = state === "done" || state === "partial" || state === "failed";
   const result = (ended ? (t.status === "skipped" ? "Skipped." : t.status === "declined" ? t.note : (t.summary ?? t.note)) : t.status === "needs-approval" ? "Waits for an approval on the PC or the phone." : t.note)?.replace(/\s+/g, " ").trim().slice(0, 300);
-  const going = (t.runBy === "antigravity" && (state === "running" || state === "waiting-run")) || (t.runBy === "opencode" && state === "running");
+  const going = (t.runBy === "antigravity" && (state === "running" || state === "waiting-run")) || ((t.runBy === "opencode" || t.runBy === "ghostcli") && state === "running");
   return {
     taskId: t.id,
     title: (t.title || t.id).slice(0, 200),
     state,
-    // A run on the relay (GhostCLI) shows as its own worker in the hub's agents list.
-    executor: t.runBy === "opus" ? "claude" : t.runBy === "opencode" && /ghostcli\//.test(t.modelUsed ?? "") ? "ghostcli" : t.runBy,
+    // GhostCLI is its own executor (27.11), so it shows as its own worker in the hub's agents list.
+    executor: t.runBy === "opus" ? "claude" : t.runBy,
     from: t.from === "roee" || t.from === "self-work" ? t.from : "claude",
     // The branch shows once there is work on it (a started or ended run), never a planned name.
     ...(t.branch && (t.startedAt || ended) && t.status !== "declined" ? { branch: t.branch } : {}),

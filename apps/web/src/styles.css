@@ -4457,8 +4457,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-ex.agy { color: #8fd0ff; border-color: rgb(143 208 255 / 0.35); }
 .tinbox-ex.local { color: var(--good); border-color: rgb(111 211 165 / 0.35); }
 .tinbox-ex.ocgo { color: #c9a6ff; border-color: rgb(201 166 255 / 0.35); }
+.tinbox-ex.gcli { color: #9fd8d0; border-color: rgb(159 216 208 / 0.35); }
 /* OpenCode Go's card in Settings > Task inbox: long model names never push the phone layout (390 px) wider. */
-.tinbox-ocgo select { max-width: 100%; min-width: 0; }
+.tinbox-ocgo select, .tinbox-gcli select { max-width: 100%; min-width: 0; }
+.tinbox-gcli .chip-text { text-align: start; overflow-wrap: anywhere; }
 .tinbox-ex.opus { color: #e8b4ff; border-color: rgb(232 180 255 / 0.35); }
 .tinbox-ex.claude { color: #f0a77e; border-color: rgb(240 167 126 / 0.35); }
 /* Claude Code's cards (Settings › Connections, Settings › Task inbox): the quota line wraps on a 390 px phone. */

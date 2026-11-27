@@ -1,6 +1,19 @@
 import { freeTierTrains } from "./training-risk.js";
 /** The connection id of the user's OpenCode Go plan (packages/providers/src/presets.ts). */
 export const OPENCODE_PROVIDER = "opencode-go";
+/** GhostCLI's defaults: on, 30 tasks a day, the relay's own best-first order. */
+export const GHOSTCLI_DEFAULTS = { enabled: true, dailyCap: 30, models: [] };
+/**
+ * A task's executor read from older saved data and task files: a task given to GhostCLI used to be an OpenCode task
+ * pinned to the relay (`executor: opencode` + `model: ghostcli/*` or a `ghostcli/<model>`); it is a GhostCLI task now.
+ *
+ * @param executor - The saved executor.
+ * @param model - The saved model, if any.
+ * @returns The executor to use.
+ */
+export function ghostcliCompat(executor, model) {
+    return executor === "opencode" && !!model && /^ghostcli\//.test(model) ? "ghostcli" : executor;
+}
 /** The defaults: a cheap model for small work, a stronger (still cheap) one for the rest, 15 a day. */
 // Defaults by cost (Go plan, 2026-11-22, requests a month): Kimi K3 ~98 (44 requests spent a 5-hour window and 20% of
 // the month), MiMo-V2.6-Pro ~3,260, MiMo-V2.6-Flash ~30,100. An agent task makes tens of requests, so the cheap pair.

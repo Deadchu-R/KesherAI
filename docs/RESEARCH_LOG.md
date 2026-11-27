@@ -4764,3 +4764,24 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - Tasks: the quota view itself (this build: provider-quotas.ts, `quotas` hub message, apps/hub/page/quotas.ts, board HubQuotas);
   later: Antigravity's 5-hour / weekly windows when its local server reports them, OpenCode Go's monthly share.
 - Stopped at: done (brief).
+
+## 2026-11-27 — Why task-inbox runs on the coding agent fail (GhostCLI 10 of 15), and GhostCLI as its own executor (Claude helper, build)
+- Measured on the PC (0.6.493): the watchdog's reasons were re-reading the same big file, checks written but never run, and one run
+  thrown away at commit time for a write outside allowed_paths. Context was not the cause: GhostCLI is a cloud connection
+  (100K tokens) and one unattended run is one turn, so older reads were not pruned. The agent simply had no memory of what it read,
+  no map of big files (default read = first ~30K characters of a 3,400-line file), and nothing told it a written command never ran.
+- Changed (all executors on KesherAI's agent benefit): outline (symbols + lines) on the first read of a 400+ line file; ranged reads
+  return at least 80 lines; an identical repeat read of an unchanged file whose result the model still has in full gets a short note
+  (step, result id, outline, tool_output to reopen) instead of the text; "you wrote `cmd` but did not run it" nudge once per command;
+  a write guard refuses writes outside allowed_paths at the call (inbox-policy writeGuardFor = the commit check's rule).
+- Model button: OpenCode tasks take plan/free models; a GhostCLI model moves the task to GhostCLI (safeForRelay); reassign clears a
+  model the new executor does not offer.
+- GhostCLI is now executor `ghostcli` (gcli/* branches, own on/off, daily cap 30, model order, 429 cooldowns, counters, settings card,
+  provider filter line); old `opencode + ghostcli/*` tasks and files are read as ghostcli. It also takes research exactly like Gemini
+  (researchReport: public pages only, no shell or repo writes, the privacy guard on every request and on each page read; auto research
+  goes to it when Gemini is out/not connected or the task is L).
+- Language and weight: all TypeScript in the existing server process; the outline is a regex pass (no parser); no new runtime needed on
+  any platform. Measure first: per-run requests and repeat-read notes in the usage log over the next 20 GhostCLI runs.
+- Tasks: (1) compare done/partial/failed of the next 20 gcli/* runs with today's 2/3/10; (2) if repeats persist, add a per-run
+  "files read" recap to the rescue hint; (3) design-doc board for the GhostCLI settings card.
+- Stopped at: done (build); measurement waits for real runs on the PC.

@@ -36,7 +36,7 @@ export const ASSIGN_CHOICES: readonly AssignChoice[] = [
   { to: "gemini", icon: "✧", he: "Gemini (חינמי, מחקר)", en: "Gemini (free, research)", noteHe: "רץ לבד, למשימות מחקר בלבד", noteEn: "Runs by itself, research tasks only" },
   { to: "claude-code", icon: "✳", he: "Claude Code במחשב", en: "Claude Code on the PC", noteHe: "המנוי שלך, מחכה ללחיצה על הרצה", noteEn: "Your subscription, waits for your Run" },
   { to: "opencode", icon: "◈", he: "OpenCode Go (תוכנית קבועה)", en: "OpenCode Go (flat plan)", noteHe: "רץ לבד, משימות קוד", noteEn: "Runs by itself, code tasks" },
-  { to: "ghostcli", icon: "👻", he: "GhostCLI (ריליי, ניסיון)", en: "GhostCLI (relay, trial)", noteHe: "רק על GhostCLI, בלי מידע רגיש", noteEn: "Only on GhostCLI, no sensitive content" },
+  { to: "ghostcli", icon: "👻", he: "GhostCLI (ריליי, ניסיון)", en: "GhostCLI (relay, trial)", noteHe: "קוד ומחקר, בלי מידע רגיש", noteEn: "Code and research, no sensitive content" },
   { to: "local", icon: "◆", he: "מודל מקומי (עבודה עצמית)", en: "Local model (self-work)", noteHe: "דרך לוח המשימות", noteEn: "Through the task board" },
   { to: "helper:lookup", icon: "🔎", he: "סוכן חיפוש בצ׳אט", en: "Lookup agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
   { to: "helper:research", icon: "📚", he: "סוכן מחקר בצ׳אט", en: "Research agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
@@ -59,20 +59,23 @@ export function parseAssignTo(x: unknown): AssignTo | undefined {
 }
 
 /** The task inbox's executor for a target (a chat role has none: it leaves the inbox). */
-export function inboxExecutorOf(to: AssignTo): "opus" | "antigravity" | "local" | "gemini" | "opencode" | "claude" | undefined {
-  return to === "claude" ? "opus" : to === "claude-code" ? "claude" : to === "ghostcli" ? "opencode" : to === "antigravity" || to === "local" || to === "gemini" || to === "opencode" ? to : undefined;
+export function inboxExecutorOf(to: AssignTo): "opus" | "antigravity" | "local" | "gemini" | "opencode" | "ghostcli" | "claude" | undefined {
+  return to === "claude" ? "opus" : to === "claude-code" ? "claude" : to === "antigravity" || to === "local" || to === "gemini" || to === "opencode" || to === "ghostcli" ? to : undefined;
 }
 
 /** A chat role of a target, if it is one: a helper type, or an engine specialist. */
 export const roleOf = (to: AssignTo): AssignRole | SpecialistId | undefined => (to.startsWith("helper:") ? (to.slice(7) as AssignRole | SpecialistId) : undefined);
 
-/** The model mark of a task given to GhostCLI: it runs only on the relay's models (inbox-runner.ts). */
+/**
+ * The old model mark of a task given to GhostCLI (before 27.11 it was an OpenCode task pinned to the relay's models);
+ * saved tasks and task files with it are read as the `ghostcli` executor (ghostcliCompat in task-inbox.ts).
+ */
 export const RELAY_PIN = "ghostcli/*";
 
-/** The current executor of an inbox task as a target (to mark it in the list); `model` tells GhostCLI from OpenCode Go. */
+/** The current executor of an inbox task as a target (to mark it in the list); an old relay-pinned OpenCode task is GhostCLI's. */
 export function assignOfExecutor(runBy: string | undefined, model?: string): AssignTo | undefined {
-  if (runBy === "opencode" && model === RELAY_PIN) return "ghostcli";
-  return runBy === "opus" ? "claude" : runBy === "claude" ? "claude-code" : runBy === "antigravity" || runBy === "local" || runBy === "gemini" || runBy === "opencode" ? runBy : undefined;
+  if (runBy === "opencode" && model?.startsWith("ghostcli/")) return "ghostcli";
+  return runBy === "opus" ? "claude" : runBy === "claude" ? "claude-code" : runBy === "antigravity" || runBy === "local" || runBy === "gemini" || runBy === "opencode" || runBy === "ghostcli" ? runBy : undefined;
 }
 
 /**

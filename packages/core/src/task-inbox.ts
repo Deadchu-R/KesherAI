@@ -1,4 +1,4 @@
-import type { InboxExecutor, InboxFrom, InboxKind, InboxRisk, InboxSettings, InboxSize, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
+import { RELAY_PIN, ghostcliCompat, type InboxExecutor, type InboxFrom, type InboxKind, type InboxRisk, type InboxSettings, type InboxSize, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox's files and rules (docs/RESEARCH_LOG.md, "A task inbox"; docs/INBOX.md has the template Claude
@@ -34,7 +34,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
   gpuBusyPercent: 40,
 };
 
-const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini", "opencode", "claude"]);
+const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini", "opencode", "ghostcli", "claude"]);
 const RISKS = new Set<InboxRisk>(["low", "medium", "high"]);
 const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub", "device"]);
 /** The biggest task file read (bigger ones are refused, not cut). */
@@ -72,8 +72,8 @@ export function validBranchName(name: string): boolean {
 export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
   if (typeof ref !== "string" || !validBranchName(ref)) return false;
   if (ref === inboxBranch && validBranchName(inboxBranch) && !inboxBranch.includes("/") && inboxBranch !== "main" && inboxBranch !== "master" && inboxBranch !== "release") return true;
-  // agy/*: Antigravity's work; ocgo/*: OpenCode Go's; claude/*: Claude Code's. All wait for review, never merged here.
-  return /^(agy|ocgo|claude)\/[a-z0-9][a-z0-9._-]*$/.test(ref);
+  // agy/*: Antigravity's work; ocgo/*: OpenCode Go's; gcli/*: GhostCLI's; claude/*: Claude Code's. All wait for review, never merged here.
+  return /^(agy|ocgo|gcli|claude)\/[a-z0-9][a-z0-9._-]*$/.test(ref);
 }
 
 /**
@@ -86,7 +86,7 @@ export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
  * @throws When the ref is not allowed (nothing runs) or the push failed.
  */
 export async function pushRef(git: (cwd: string, args: string[]) => Promise<{ code: number; out: string }>, repo: string, ref: string, inboxBranch = INBOX_BRANCH): Promise<void> {
-  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/*, ocgo/* and claude/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
+  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/*, ocgo/*, gcli/* and claude/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
   const r = await git(repo, ["push", "--no-verify", "origin", `refs/heads/${ref}:refs/heads/${ref}`]);
   if (r.code !== 0) throw new Error(`git push failed: ${r.out.slice(0, 300)}`);
 }
@@ -102,7 +102,8 @@ export function slugOf(text: string): string {
 }
 
 /**
- * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `ocgo/<id>-<slug>` (OpenCode Go), `claude/<id>-<slug>`
+ * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `ocgo/<id>-<slug>` (OpenCode Go), `gcli/<id>-<slug>`
+ * (GhostCLI), `claude/<id>-<slug>`
  * (Claude Code on the PC), `local/<id>-<slug>` (self-work, never pushed) or
  * `helper/<id>-<slug>` (Claude's Opus agent, in the cloud); `-partial` when the work was kept unfinished.
  *
@@ -111,7 +112,7 @@ export function slugOf(text: string): string {
  * @param partial - Unfinished work.
  */
 export function branchFor(spec: Pick<InboxTaskSpec, "id" | "title">, runBy: Exclude<InboxExecutor, "auto">, partial = false): string {
-  const prefix = runBy === "antigravity" ? "agy" : runBy === "opencode" ? "ocgo" : runBy === "claude" ? "claude" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
+  const prefix = runBy === "antigravity" ? "agy" : runBy === "opencode" ? "ocgo" : runBy === "ghostcli" ? "gcli" : runBy === "claude" ? "claude" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
   const name = `${prefix}/${spec.id}-${slugOf(spec.title)}${partial ? "-partial" : ""}`;
   if (!validBranchName(name)) throw new Error("Bad branch name.");
   return name;
@@ -225,11 +226,15 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
   if (id !== fileId) return { error: `The id (${id}) does not match the file name (${fileId}).` };
   const title = str("title", 200);
   if (!title) return { error: "The task has no title." };
-  const executor = (str("executor", 20) || "auto") as InboxExecutor;
-  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus, gemini, opencode or claude." };
+  const rawModel = str("model", 80);
+  // An older file's GhostCLI task (executor opencode + a ghostcli/ model) is a GhostCLI task; its `ghostcli/*` mark means
+  // "any GhostCLI model", so the model is left to the GhostCLI settings.
+  const executor = ghostcliCompat((str("executor", 20) || "auto") as InboxExecutor, rawModel);
+  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus, gemini, opencode, ghostcli or claude." };
   const kind = (str("kind", 10) || "code") as InboxKind;
   if (kind !== "code" && kind !== "research") return { error: "kind must be code or research." };
   if (executor === "gemini" && kind !== "research") return { error: "executor gemini is only for kind: research." };
+  // GhostCLI takes code and research (Roee, 27.11); OpenCode Go only code.
   if (executor === "opencode" && kind !== "code") return { error: "executor opencode is only for code tasks." };
   const size = str("size", 2).toUpperCase();
   if (size && size !== "S" && size !== "M" && size !== "L") return { error: "size must be S, M or L." };
@@ -253,7 +258,7 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
   };
   // `replaces: [ids]` (or one id): older tasks this one supersedes. Only valid ids count; at most 20.
   const replaces = [...new Set(listOf(fm["replaces"]).map((x) => x.trim()).filter((x) => validTaskId(x) && x !== id))].slice(0, 20);
-  const model = str("model", 80);
+  const model = rawModel === RELAY_PIN ? "" : rawModel;
   if (model && !/^[\w .:/()-]+$/.test(model)) return { error: "model has odd characters." };
   // Sections: "## Goal" and the others; anything before the first heading counts as the goal.
   const body = m[2] ?? "";

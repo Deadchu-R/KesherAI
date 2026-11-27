@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { RELAY_PIN, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -72,9 +72,10 @@ export interface TaskInboxDeps {
   /**
    * Small research tasks with the user's free "gemini" provider (route B; absent: none can run). `ready` says whether
    * that provider is configured; `run` writes the report for a question (deep-research.ts `researchReport`) and throws
-   * the provider's own error, so a quota or billing error can be told apart here.
+   * the provider's own error, so a quota or billing error can be told apart here. `viaModel`: the same research on one
+   * chosen model (GhostCLI's research tasks), with the privacy guard on every request and on every page it reads.
    */
-  research?: { ready: () => boolean; run: (question: string, signal: AbortSignal) => Promise<string> };
+  research?: { ready: () => boolean; run: (question: string, signal: AbortSignal) => Promise<string>; viaModel?: (question: string, model: string, signal: AbortSignal) => Promise<string> };
   /**
    * Code tasks on the user's flat OpenCode Go plan (absent: none can run). `ready`: its connection exists and has a key.
    * `models`: the models its connection lists. `run`: one task in a self-work style code chat (auto mode, unattended) in
@@ -160,6 +161,8 @@ interface Saved {
   familySure?: Partial<Record<ModelFamily, boolean>>;
   /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
   opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
+  /** GhostCLI (its own executor since 27.11): tasks started today (UTC) and each model's 429 cooldown end (ms). */
+  ghostcli?: { date: string; used: number; modelUntil?: Record<string, number> };
   /** Claude Code: tasks started today (UTC), and the end of a usage limit its CLI reported (ms since epoch). */
   claude?: { date: string; used: number; until?: number };
   /** The free services (shared FREE_PROVIDERS), by connection id: today's requests (UTC; failed ones too), the day's limit when known, and a stop until a time (402, 429 or the limit). */
@@ -303,6 +306,9 @@ export class TaskInbox {
   private claudeRun?: Promise<void>;
   private claudeStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
   private opencodeStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
+  /** The GhostCLI loop (one task at a time, beside OpenCode Go's: another service) and the stop for its running task. */
+  private ghostcliRun?: Promise<void>;
+  private ghostcliStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TaskInboxDeps) {}
@@ -317,7 +323,8 @@ export class TaskInbox {
     const ask = { ...INBOX_DEFAULTS.askBeforeNext, ...((given.askBeforeNext as Partial<InboxSettings["askBeforeNext"]> | undefined) ?? {}) };
     const opencode = { ...OPENCODE_DEFAULTS, ...((given.opencode as Partial<OpencodeSettings> | undefined) ?? {}) };
     const claude = { ...CLAUDE_DEFAULTS, ...((given.claude as Partial<ClaudeSettings> | undefined) ?? {}) };
-    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode, claude } as InboxSettings;
+    const ghostcli = { ...GHOSTCLI_DEFAULTS, ...((given.ghostcli as Partial<GhostcliSettings> | undefined) ?? {}) };
+    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode, ghostcli, claude } as InboxSettings;
   }
 
   /** The Claude Code settings, with the defaults filled in. */
@@ -335,6 +342,78 @@ export class TaskInbox {
   /** The OpenCode Go settings, with the defaults filled in. */
   private get oc(): OpencodeSettings {
     return this.s.opencode ?? OPENCODE_DEFAULTS;
+  }
+
+  /** The GhostCLI settings, with the defaults filled in. */
+  private get gc(): GhostcliSettings {
+    return this.s.ghostcli ?? GHOSTCLI_DEFAULTS;
+  }
+
+  /** Whether heavy OpenCode tasks without sensitive content go to GhostCLI (its own setting, else the older OpenCode one). */
+  private get gcTakesHeavy(): boolean {
+    return this.gc.enabled && (this.gc.takeHeavy ?? this.oc.useRelay !== false);
+  }
+
+  /** Today's GhostCLI count (UTC); a model's cooldown stays across the day. */
+  private gcToday(): { date: string; used: number; modelUntil?: Record<string, number> } {
+    const date = new Date(this.now()).toISOString().slice(0, 10);
+    if (this.saved.ghostcli?.date !== date) this.saved.ghostcli = { date, used: 0, ...(this.saved.ghostcli?.modelUntil ? { modelUntil: this.saved.ghostcli.modelUntil } : {}) };
+    return this.saved.ghostcli;
+  }
+
+  /** GhostCLI's models still cooling down after a 429 (model id → end, ms); expired ones are dropped. */
+  private ghostcliCooldowns(): Record<string, number> {
+    const day = this.gcToday();
+    const now = this.now();
+    const live = Object.fromEntries(Object.entries(day.modelUntil ?? {}).filter(([, u]) => u > now));
+    if (Object.keys(live).length) day.modelUntil = live;
+    else delete day.modelUntil;
+    return live;
+  }
+
+  /**
+   * Blocks one GhostCLI model after its 429 (or a failed answer): until the reset the answer named, else an hour.
+   *
+   * @param model - The model id.
+   * @param wait - The wait the answer gave (ms), when it did.
+   */
+  private blockGhostcliModel(model: string, wait?: number): void {
+    const day = this.gcToday();
+    day.modelUntil = { ...day.modelUntil, [model]: this.now() + (wait && wait > 0 ? wait : 60 * 60_000) };
+  }
+
+  /**
+   * GhostCLI's models for a task, in order: the task's own pick, then the settings' order (those the relay lists), then
+   * the rest of what it lists, strongest first.
+   *
+   * @param c - The coder (the GhostCLI connection).
+   * @param first - The task's model, when it is one of GhostCLI's.
+   */
+  private async ghostcliOrder(c: NonNullable<TaskInboxDeps["coder"]>, first?: string): Promise<string[]> {
+    const listed = await this.relayModels(c, true);
+    const wanted = this.gc.models.filter((m) => relayProviderOf(m) && (!listed.length || listed.includes(m)));
+    const pick = first && relayProviderOf(first) ? [first] : [];
+    return [...new Set([...pick, ...wanted, ...listed])];
+  }
+
+  /** Why GhostCLI cannot take a task now, or undefined: turned off, no connection with a key, or today's cap reached. */
+  private ghostcliBlocked(): string | undefined {
+    if (!this.gc.enabled) return "GhostCLI is off (Settings > Task inbox > GhostCLI).";
+    if (!this.d.coder?.free?.ghostcli?.ready()) return "Waiting for the GhostCLI connection: add it with your key (Settings > Connections).";
+    if (this.gcToday().used >= this.gc.dailyCap) return `Today's limit of ${this.gc.dailyCap} GhostCLI tasks is reached (Settings > Task inbox > GhostCLI).`;
+    return undefined;
+  }
+
+  /** GhostCLI's state for its settings card (its models are asked from the connection, never more than 5 s). */
+  private async ghostcliState(): Promise<GhostcliState> {
+    const conn = this.d.coder?.free?.ghostcli;
+    const ready = !!conn?.ready();
+    const models = ready ? (await this.connModels("ghostcli", conn!)).filter((m) => relayProviderOf(m)) : [];
+    const cooldowns = this.ghostcliCooldowns();
+    const order = this.gc.models.length ? this.gc.models : models;
+    const until = order.length && order.every((m) => cooldowns[m]) ? Math.min(...order.map((m) => cooldowns[m]!)) : undefined;
+    const h = this.saved.relayHealth;
+    return { ready, used: this.gcToday().used, ...(until ? { until } : {}), ...(Object.keys(cooldowns).length ? { cooldowns } : {}), models: models.slice(0, 100), ...(h ? { answering: h.ok, checkedAt: h.at } : {}) };
   }
 
   /** Today's OpenCode Go count, reset at midnight (UTC, like Antigravity's). */
@@ -498,6 +577,9 @@ export class TaskInbox {
     // Big work stays with Antigravity and its one Run tap (Roee, 21.11), and so does a task OpenCode Go can't take
     // (no connection, or turned off).
     if (spec.executor === "auto" && runBy === "opencode" && (taskSize(spec) === "L" || !this.d.coder?.ready() || this.oc.enabled === false)) return "antigravity";
+    // Research goes to Gemini first; GhostCLI writes it when Gemini is out of quota or not connected, or the task is
+    // marked big, and only when nothing private would leave (Roee, 27.11).
+    if (spec.executor === "auto" && runBy === "gemini" && ((this.saved.geminiUntil ?? 0) > this.now() || !this.d.research?.ready() || taskSize(spec) === "L") && this.ghostcliResearchOk(spec)) return "ghostcli";
     return runBy;
   }
 
@@ -507,15 +589,21 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}), ...(raw.relayHealth ? { relayHealth: raw.relayHealth } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.ghostcli ? { ghostcli: raw.ghostcli } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}), ...(raw.relayHealth ? { relayHealth: raw.relayHealth } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
     for (const t of this.saved.tasks) {
+      // Before 27.11 a GhostCLI task was an OpenCode task pinned to the relay: it is GhostCLI's own task now.
+      if (ghostcliCompat(t.runBy, t.model) === "ghostcli") {
+        t.runBy = "ghostcli";
+        if (t.executor === "opencode") t.executor = "ghostcli";
+        if (t.model === RELAY_PIN) delete t.model;
+      }
       if (t.status === "running" || t.status === "needs-approval") {
         // Cut off by a restart, not by the agent: back in line where it was (creation order), ready for Run again.
         t.status = t.runBy === "local" ? "queued" : "waiting";
-        t.note = t.runBy === "opencode" || (t.runBy === "claude" && !this.cs.askRun) ? "KesherAI restarted during the run; it starts again by itself." : "KesherAI restarted during the run; it is back in line — press Run again.";
+        t.note = t.runBy === "opencode" || t.runBy === "ghostcli" || (t.runBy === "claude" && !this.cs.askRun) ? "KesherAI restarted during the run; it starts again by itself." : "KesherAI restarted during the run; it is back in line — press Run again.";
         delete t.pending;
       } else if (t.note?.startsWith("Queued") && RUNNABLE.has(t.status)) {
         // The line was in memory only: it is gone, the task waits for Run again.
@@ -621,6 +709,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      ...(this.d.coder?.free?.ghostcli ? { ghostcli: await this.ghostcliState() } : {}),
       ...(this.saved.agQuota ? { agQuota: this.saved.agQuota } : {}),
       ...(this.saved.agQuotaWhy ? { agQuotaWhy: this.saved.agQuotaWhy } : {}),
       ...(this.saved.relayLog?.length ? { relay: { ...relayReport(this.saved.relayLog), ...(this.saved.relayHealth ? { health: this.saved.relayHealth } : {}) } } : {}),
@@ -669,6 +758,7 @@ export class TaskInbox {
     await this.active?.done;
     await this.geminiRun;
     await this.opencodeRun;
+    await this.ghostcliRun;
     await this.claudeRun;
   }
 
@@ -726,9 +816,10 @@ export class TaskInbox {
       this.claudeStop.why = "stop";
       this.claudeStop.ctl.abort();
     }
-    if (this.opencodeStop) {
-      this.opencodeStop.why = "stop";
-      this.opencodeStop.ctl.abort();
+    for (const r of [this.opencodeStop, this.ghostcliStop]) {
+      if (!r) continue;
+      r.why = "stop";
+      r.ctl.abort();
     }
     if (this.active) await this.stop(this.active.id).catch(() => undefined);
   }
@@ -826,6 +917,7 @@ export class TaskInbox {
     await this.save();
     void this.pumpGemini().catch(() => undefined);
     void this.pumpOpencode().catch(() => undefined);
+    void this.pumpGhostcli().catch(() => undefined);
     void this.pumpClaude().catch(() => undefined);
     void this.pump().catch(() => undefined);
   }
@@ -856,8 +948,8 @@ export class TaskInbox {
       ...spec,
       runBy,
       branch: branchFor(spec, runBy),
-      status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" || runBy === "claude" ? "waiting" : "queued",
-      ...(runBy === "claude" ? { note: this.claudeNote() } : runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : {}),
+      status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" || runBy === "ghostcli" || runBy === "claude" ? "waiting" : "queued",
+      ...(runBy === "claude" ? { note: this.claudeNote() } : runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : runBy === "ghostcli" ? { note: spec.kind === "research" ? "GhostCLI writes this research by itself (no sensitive content)." : "Runs on GhostCLI (its models, no sensitive content)." } : {}),
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
@@ -961,7 +1053,7 @@ export class TaskInbox {
     // A research task ("research only", no code) is marked so: free Gemini and Antigravity take it (25.11: four research
     // tasks went to the Claude queue as code tasks).
     const research = input.kind === "research" || (input.kind === undefined && /^research\b|^מחקר/i.test(input.title.trim()) && /research only|no code|רק מחקר/i.test(input.goal));
-    const executor = ["auto", "antigravity", "local", "opus", "opencode", "claude", "gemini"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
+    const executor = ["auto", "antigravity", "local", "opus", "opencode", "ghostcli", "claude", "gemini"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
     const size = ["S", "M", "L"].includes(String(input.size)) ? (input.size as InboxTaskSpec["size"]) : undefined;
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
     const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(research ? { kind: "research" as const } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}), ...(input.source && /^[\w./-]{1,200}$/.test(input.source) && !input.source.includes("..") ? { source: input.source } : {}) };
@@ -972,6 +1064,7 @@ export class TaskInbox {
     await this.save();
     void this.pumpGemini().catch(() => undefined);
     void this.pumpOpencode().catch(() => undefined);
+    void this.pumpGhostcli().catch(() => undefined);
     if (s.enabled && s.repo) await this.commitToInbox([[`tasks/${spec.id}.md`, taskFileText(parsed.spec)]], `inbox: task ${spec.id}`).catch((e) => {
       this.saved.lastError = `Could not write the task to ${s.branch}: ${(e as Error).message.slice(0, 160)}`;
     });
@@ -1042,26 +1135,35 @@ export class TaskInbox {
         }
         return;
       }
-      await this.runGemini(t, r);
+      await this.runGemini(t, (q, signal) => r.run(q, signal));
     }
   }
 
-  /** One free-Gemini research run, to its end (done, failed or deferred by the quota). */
-  private async runGemini(t: InboxTaskView, r: NonNullable<TaskInboxDeps["research"]>): Promise<void> {
+  /**
+   * One research run, to its end (done, failed or deferred by the quota): on the free Gemini key, or on GhostCLI
+   * (`gh`: its models in order, each request through the privacy guard; a 429 cools that model and the next one goes on).
+   *
+   * @param t - The research task.
+   * @param ask - Writes the report for the question.
+   * @param gh - GhostCLI runs it (its own counters and cooldowns), not Gemini.
+   */
+  private async runGemini(t: InboxTaskView, ask: (question: string, signal: AbortSignal) => Promise<string>, gh = false): Promise<void> {
     if (t.status === "deferred-quota") t.autoRetried = true;
     Object.assign(t, { status: "running" as InboxStatus, startedAt: this.now(), resultWritten: false });
     for (const k of ["endedAt", "note", "summary", "retryAt", "researchReport"] as const) delete t[k];
     await this.save();
-    this.d.notify("✦ Research started (free Gemini)", `${t.id}: ${t.title}`);
-    const stop = (this.geminiStop = new AbortController());
+    this.d.notify(gh ? "👻 Research started (GhostCLI)" : "✦ Research started (free Gemini)", `${t.id}: ${t.title}`);
+    const stop = new AbortController();
+    if (gh) this.ghostcliStop = { id: t.id, ctl: stop };
+    else this.geminiStop = stop;
     // A research run has no steps or files to watch: only the safety ceiling stops it.
     const timer = setTimeout(() => stop.abort(), limitsFor(t.maxMinutes, this.s).ceilingMs);
     let status: InboxStatus = "done";
     try {
-      const question = [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
+      const question = researchQuestion(t);
       // The time limit holds even if a search or a page read ignores the signal (a run once hung for two hours).
       const report = (await Promise.race([
-        r.run(question, stop.signal),
+        ask(question, stop.signal),
         new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the safety limit.")), { once: true })),
       ])).trim();
       if (!report) throw new Error("The model wrote no report.");
@@ -1069,7 +1171,13 @@ export class TaskInbox {
       t.summary = report.slice(0, 2000);
     } catch (e) {
       const msg = (e as Error).message || String(e);
-      if (isQuotaError(msg)) {
+      if (gh && !stop.signal.aborted && (isQuotaError(msg) || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(msg))) {
+        // Every GhostCLI model was cooling or busy: wait for the first one back (its own cooldowns, never Gemini's).
+        const cools = Object.values(this.ghostcliCooldowns());
+        status = "deferred-quota";
+        t.retryAt = cools.length ? Math.min(...cools) : this.now() + 15 * 60_000;
+        t.note = `GhostCLI's models are cooling down or busy; it goes again by itself at ${new Date(t.retryAt).toISOString()}.`;
+      } else if (isQuotaError(msg)) {
         // A limit, quota or billing offer: stop here and wait for the reset. Never retried in a loop, never paid.
         const q = quotaUntil(msg, this.now());
         this.saved.geminiUntil = q.until;
@@ -1087,7 +1195,18 @@ export class TaskInbox {
       }
     } finally {
       clearTimeout(timer);
-      this.geminiStop = undefined;
+      if (gh) this.ghostcliStop = undefined;
+      else this.geminiStop = undefined;
+    }
+    // Gemini out of quota or busy: an automatic research task goes on GhostCLI when it may (no sensitive content).
+    if (!gh && status === "deferred-quota" && t.executor === "auto" && this.ghostcliResearchOk(t)) {
+      Object.assign(t, { runBy: "ghostcli" as const, status: "waiting" as InboxStatus, note: "Gemini is out or busy: GhostCLI writes this research (no sensitive content)." });
+      delete t.retryAt;
+      delete t.autoRetried;
+      delete t.endedAt;
+      await this.save();
+      void this.pumpGhostcli().catch(() => undefined);
+      return;
     }
     t.status = status;
     t.endedAt = this.now();
@@ -1129,8 +1248,10 @@ export class TaskInbox {
       const t = this.saved.tasks.find((x) => x.runBy === "opencode" && (x.status === "waiting" || x.status === "deferred-quota"));
       if (!t) return;
       if (await this.drainNote(t)) return;
-      // A task given to GhostCLI does not wait for OpenCode Go's own limits or the relay's health check: it tries now.
-      const no = t.model === RELAY_PIN || relayProviderOf(t.model ?? "") ? (this.oc.enabled ? undefined : "OpenCode Go is off (Settings > Task inbox).") : this.opencodeBlocked();
+      // A heavy task without sensitive content goes to GhostCLI while it answers ("Heavy tasks to GhostCLI"): it becomes
+      // a GhostCLI task, counted and limited there, never on OpenCode Go's counters.
+      if (await this.toGhostcli(t)) continue;
+      const no = this.opencodeBlocked();
       if (no) {
         if (t.note !== no) {
           t.note = no;
@@ -1140,6 +1261,116 @@ export class TaskInbox {
       }
       await this.runOpencode(t, this.d.coder!);
     }
+  }
+
+  /**
+   * Hands an OpenCode task to GhostCLI when the setting sends heavy tasks there: an M/L task that passes the relay's
+   * content check and privacy scan, while GhostCLI answered its last check and can take a task.
+   *
+   * @param t - The OpenCode task about to start.
+   * @returns True when it was handed over (the GhostCLI loop runs it).
+   */
+  private async toGhostcli(t: InboxTaskView): Promise<boolean> {
+    if (!this.gcTakesHeavy || taskSize(t) === "S" || !this.saved.relayHealth?.ok || this.ghostcliBlocked()) return false;
+    if (!safeForRelay(t).ok || scanDiff(agentPrompt(t, t.branch).split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length) return false;
+    t.runBy = "ghostcli";
+    if (t.model && !this.offersModel("ghostcli", t.model)) delete t.model;
+    t.branch = branchFor(t, "ghostcli");
+    t.note = "A heavy task without sensitive content: GhostCLI takes it (Settings > Task inbox > GhostCLI).";
+    await this.save();
+    void this.pumpGhostcli().catch(() => undefined);
+    return true;
+  }
+
+  /**
+   * Runs the GhostCLI code tasks by themselves, one at a time, beside OpenCode Go's (another service): the same coding
+   * agent, its own on/off, daily cap, model order and 429 cooldowns. A task waits with a note while GhostCLI is off, has
+   * no key or is at today's cap.
+   *
+   * @returns Resolves when no task is left to run now.
+   */
+  pumpGhostcli(): Promise<void> {
+    this.ghostcliRun ??= this.doGhostcli().finally(() => {
+      this.ghostcliRun = undefined;
+    });
+    return this.ghostcliRun;
+  }
+
+  private async doGhostcli(): Promise<void> {
+    await this.load();
+    const s = this.s;
+    if (!s.enabled || s.paused || !s.repo) return;
+    for (;;) {
+      const t = this.saved.tasks.find((x) => x.runBy === "ghostcli" && (x.status === "waiting" || x.status === "deferred-quota") && !(x.status === "deferred-quota" && (x.retryAt ?? 0) > this.now()));
+      if (!t) return;
+      if (await this.drainNote(t)) return;
+      const no = this.ghostcliBlocked() ?? (t.kind === "research" && !this.d.research?.viaModel ? "GhostCLI research is not available here." : undefined);
+      if (no) {
+        if (t.note !== no) {
+          t.note = no;
+          await this.save();
+        }
+        return;
+      }
+      if (t.kind === "research") await this.runGhostcliResearch(t, this.d.coder!);
+      else await this.runOpencode(t, this.d.coder!);
+    }
+  }
+
+  /**
+   * Whether GhostCLI may write a research task now: on, connected, under its cap, and the task's text passes the relay's
+   * content check and the privacy scan (nothing private leaves).
+   *
+   * @param t - The research task.
+   */
+  private ghostcliResearchOk(t: Pick<InboxTaskSpec, "title" | "goal" | "acceptance" | "outOfScope" | "risk" | "allowedPaths" | "readFirst">): boolean {
+    if (this.ghostcliBlocked() || !this.d.research?.viaModel) return false;
+    return safeForRelay(t).ok && !scanDiff(researchQuestion(t).split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length;
+  }
+
+  /**
+   * One GhostCLI research run (Roee, 27.11): research mode exactly like Gemini's (KesherAI searches public pages and the
+   * model writes one report; no shell, no repository writes; the report becomes docs/research/<id>.md with its "Tasks"
+   * imported like Gemini's), on GhostCLI's models in order. Only a task whose text passes safeForRelay and the privacy
+   * scan; every request and every page read goes through the privacy guard.
+   *
+   * @param t - The research task.
+   * @param c - The coder (the GhostCLI connection).
+   */
+  private async runGhostcliResearch(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
+    const via = this.d.research!.viaModel!;
+    const ok = safeForRelay(t).ok && !scanDiff(researchQuestion(t).split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length;
+    const order = ok ? await this.ghostcliOrder(c, t.model) : [];
+    if (!order.length) {
+      Object.assign(t, { status: "failed" as InboxStatus, endedAt: this.now(), note: ok ? "GhostCLI has no model to offer now (check its key in Settings > Connections)." : "Not sent to GhostCLI: the task's text looks sensitive." });
+      rememberFail(t, "failed", this.now());
+      await this.save();
+      return;
+    }
+    this.gcToday().used++;
+    await this.runGemini(
+      t,
+      async (question, signal) => {
+        let last: Error | undefined;
+        for (const model of order) {
+          if ((this.ghostcliCooldowns()[model] ?? 0) > this.now()) continue;
+          t.modelUsed = modelLabel(model);
+          try {
+            const report = await via(question, model, signal);
+            this.noteRelay({ at: this.now(), id: t.id, model, status: "done", ms: this.now() - (t.startedAt ?? this.now()) });
+            return report;
+          } catch (e) {
+            last = e as Error;
+            const quota = isQuotaError(last.message);
+            this.noteRelay({ at: this.now(), id: t.id, model, status: quota ? "rate-limited" : "failed", ms: this.now() - (t.startedAt ?? this.now()) });
+            if (signal.aborted || !(quota || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(last.message))) throw last;
+            this.blockGhostcliModel(model, quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, last.message, this.now()) : 15 * 60_000);
+          }
+        }
+        throw last ?? new Error("429 every GhostCLI model is cooling down.");
+      },
+      true,
+    );
   }
 
   /**
@@ -1157,45 +1388,65 @@ export class TaskInbox {
     return true;
   }
 
-  /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
+  /**
+   * One coding-agent task for OpenCode Go or GhostCLI (two services, one harness): its own worktree and branch (`ocgo/*`
+   * or `gcli/*`), the code chat, then the same checks, commit and push as Antigravity's. Each service keeps its own
+   * models, counters, cooldowns and stop.
+   */
   private async runOpencode(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
-    const listed = await this.opencodeListed(c);
-    // The free services (Z.ai, OpenRouter, ...) take S tasks only (a coding agent burns many requests); right after Beam Free.
+    const gh = t.runBy === "ghostcli";
+    const lane = gh ? "GhostCLI" : "OpenCode Go";
+    const icon = gh ? "👻" : "◈";
+    const cooldowns = (): Record<string, number> => (gh ? this.ghostcliCooldowns() : this.opencodeCooldowns());
+    const prompt = agentPrompt(t, t.branch);
+    const clean = scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
     // Services that may train on prompts get a task only when the setting allows it, the task is low-risk and not about
     // security (safeForTrainingProvider), and the privacy scan finds nothing in the prompt.
-    const prompt = agentPrompt(t, t.branch);
-    const safe = safeForTrainingProvider({ ...t, size: taskSize(t) });
-    const trainOk = this.oc.freeTrainingOk !== false && safe.ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    // Free services take small tasks; larger ones too once the paid day is used up (better than waiting for midnight).
-    const services = taskSize(t) === "S" || this.ocToday().used >= this.oc.dailyCap ? await this.freeServiceModels(c, listed, trainOk) : [];
-    // A flat-rate relay (GhostCLI) for tasks without sensitive content: first for medium and large tasks (what it is paid
-    // for), after the free services for small ones. Its prompt is scanned like a training service's.
-    const relayOk = this.oc.useRelay !== false && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    // Given to GhostCLI: the whole relay (RELAY_PIN) or one of its models (picked with the model button: tried first).
-    const pinned = t.model === RELAY_PIN || !!relayProviderOf(t.model ?? "");
-    // Given to GhostCLI, the relay setting does not matter (the user chose it), but the content checks still do.
-    const pinnedOk = pinned && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    const relayList = pinned ? (pinnedOk ? await this.relayModels(c, true) : []) : relayOk ? await this.relayModels(c) : [];
-    const relays = pinned && t.model !== RELAY_PIN && pinnedOk ? [t.model!, ...relayList.filter((m) => m !== t.model)] : relayList;
-    if (pinned && !relays.length) {
-      // Given to GhostCLI, but it cannot take it: its prompt holds sensitive content, or no GhostCLI key or model is there.
-      t.note = pinnedOk ? "GhostCLI has no model to offer now (check its key in Settings > Connections)." : "Not sent to GhostCLI: the task's text looks sensitive (the privacy scan found something).";
-      t.status = "failed";
-      t.endedAt = this.now();
-      rememberFail(t, "failed", this.now());
-      await this.save();
-      return;
+    const trainOk = !gh && this.oc.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok && clean;
+    // GhostCLI: only tasks without sensitive content (safeForRelay) whose prompt the privacy scan passes.
+    const relayOk = gh && safeForRelay(t).ok && clean;
+    let freeFirst: string[];
+    let order: string[];
+    let paidLeft = false;
+    let model: string;
+    if (gh) {
+      order = relayOk ? await this.ghostcliOrder(c, t.model) : [];
+      if (!order.length) {
+        // GhostCLI cannot take it: its prompt holds sensitive content, or no GhostCLI key or model is there.
+        t.note = relayOk ? "GhostCLI has no model to offer now (check its key in Settings > Connections)." : "Not sent to GhostCLI: the task's text looks sensitive (the privacy scan found something).";
+        t.status = "failed";
+        t.endedAt = this.now();
+        rememberFail(t, "failed", this.now());
+        await this.save();
+        return;
+      }
+      freeFirst = order;
+      const first = opencodeFreeModel(order, cooldowns(), this.now(), t.model);
+      if (!first) {
+        // Every GhostCLI model cools down after a 429: the task waits for the first one back (nothing was started).
+        const back = Math.min(...order.map((m) => cooldowns()[m] ?? Infinity));
+        Object.assign(t, { status: "deferred-quota" as InboxStatus, retryAt: back, note: `Every GhostCLI model is cooling down after "too many requests"; it goes again by itself at ${new Date(back).toISOString()}.` });
+        await this.save();
+        return;
+      }
+      model = first;
+      // Started tasks count toward GhostCLI's own daily cap (never OpenCode Go's).
+      this.gcToday().used++;
+    } else {
+      const listed = await this.opencodeListed(c);
+      // The free services (Z.ai, OpenRouter, ...) take S tasks only (a coding agent burns many requests); right after Beam
+      // Free; larger ones too once the paid day is used up (better than waiting for midnight).
+      const services = taskSize(t) === "S" || this.ocToday().used >= this.oc.dailyCap ? await this.freeServiceModels(c, listed, trainOk) : [];
+      // Free services first, Beam Free last of the free ones: on 23.11 it ended 3 of 3 real tasks without changing a file.
+      freeFirst = [...services, ...opencodeFreeFirst(this.oc, listed)];
+      paidLeft = this.ocToday().used < this.oc.dailyCap;
+      // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
+      order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
+      const wanted = opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
+      // A free model first; else the task's own pick, unless it is cooling down after a 429: then the next free one.
+      model = opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now()) ?? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted;
     }
-    // Free services first, Beam Free last of the free ones: on 23.11 it ended 3 of 3 real tasks without changing a file.
-    const freeFirst = pinned ? relays : taskSize(t) === "S" ? [...services, ...relays, ...opencodeFreeFirst(this.oc, listed)] : [...relays, ...services, ...opencodeFreeFirst(this.oc, listed)];
-    const paidLeft = !pinned && this.ocToday().used < this.oc.dailyCap;
-    // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
-    const order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
-    const wanted = pinned ? relays[0]! : opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
-    // A free model first; else the task's own pick, unless it is cooling down after a 429: then the next free one.
-    // A task given to GhostCLI tries its first model even while it cools down (the user asked for a try now).
-    let model = opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now()) ?? (pinned ? wanted : opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted);
-    if (!pinned && !paidLeft && !opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now())) {
+    if (!gh && !paidLeft && !opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now())) {
       // The daily cap is reached and no free model can take it: the task waits for tomorrow (nothing was started).
       const back = Math.min(...freeFirst.map((m) => this.opencodeCooldowns()[m] ?? Infinity));
       const when = Number.isFinite(back) ? ` A free model opens again at ${new Date(back).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : " It runs again after midnight.";
@@ -1210,7 +1461,7 @@ export class TaskInbox {
     const resume = await this.resumeRef(repo, t);
     const base = resume ?? taskBase;
     let attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
-    const named = (n: number): string => `${branchFor(t, "opencode")}${n > 1 ? `-r${n}` : ""}`;
+    const named = (n: number): string => `${branchFor(t, t.runBy)}${n > 1 ? `-r${n}` : ""}`;
     // A run that failed before saving its branch name left that branch behind (2026-11-23: "a branch named
     // ocgo/…-r2 already exists" failed 12 tasks in a row): take the next free name; never delete the old branch.
     for (let i = 0; i < 20 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${named(attempt)}`])).code === 0; i++) attempt++;
@@ -1218,7 +1469,7 @@ export class TaskInbox {
     let wt: Awaited<ReturnType<typeof createSessionWorktree>>;
     try {
       if (!validBranchName(branch)) throw new Error("Bad branch name.");
-      wt = await createSessionWorktree(repo, `ocgo-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
+      wt = await createSessionWorktree(repo, `${gh ? "gcli" : "ocgo"}-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
     } catch (e) {
       Object.assign(t, { status: "failed" as InboxStatus, endedAt: this.now(), note: `Could not make the work folder: ${(e as Error).message.slice(0, 200)}` });
       await this.save();
@@ -1230,10 +1481,11 @@ export class TaskInbox {
     for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions", "watchLog", "review"] as const) delete t[k];
     if (resume) t.note = `Continuing from the partial branch ${resume.replace(/^refs\/(heads|remotes\/origin)\//, "")}.`;
     await this.save();
-    this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
+    this.d.notify(`${icon} ${lane} התחיל משימה`, `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
     if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
     const run: { id: string; ctl: AbortController; why?: "stop" | StopReason } = { id: t.id, ctl: new AbortController() };
-    this.opencodeStop = run;
+    if (gh) this.ghostcliStop = run;
+    else this.opencodeStop = run;
     // No wall-clock kill: the guard stops a run that makes no progress, repeats itself or spends its request budget; the
     // safety ceiling is the longest of the task's minutes, the setting and 120 (agent-watch.ts).
     let send: ((text: string) => Promise<void>) | undefined;
@@ -1262,15 +1514,15 @@ export class TaskInbox {
         try {
           // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
           // services only when allowed): refused here, before anything is sent.
-          // A task given to GhostCLI passed the same content checks (pinnedOk) without the relay setting.
-          if (!inboxModelAllowed(model, trainOk, relayOk || pinnedOk)) throw new Error(`The task inbox may not use ${model}.`);
+          // A GhostCLI task passed the relay's content checks (relayOk); an OpenCode task never reaches the relay.
+          if (!inboxModelAllowed(model, trainOk, relayOk)) throw new Error(`The task inbox may not use ${model}.`);
           // Every attempt counts toward the service's day, failed ones too (OpenRouter's docs); each tool call is another request.
           const attemptFree = freeProviderOf(model);
           if (attemptFree) this.freeDay(attemptFree.id).used++;
           const r = await Promise.race([
             c.run({
               worktree: wt.path,
-              title: `◈ OpenCode Go · ${t.title}`.slice(0, 120),
+              title: `${icon} ${lane} · ${t.title}`.slice(0, 120),
               prompt,
               model,
               signal: run.ctl.signal,
@@ -1321,7 +1573,7 @@ export class TaskInbox {
           // on to the next model that is not cooling down: at most one paid retry after the free ones.
           if (privacy) {
             tried.push(model);
-            const next = opencodeFreeModel(order.filter((m) => !trainingRiskOf(m)), this.opencodeCooldowns(), this.now(), undefined, tried);
+            const next = gh ? undefined : opencodeFreeModel(order.filter((m) => !trainingRiskOf(m)), this.opencodeCooldowns(), this.now(), undefined, tried);
             if (!next) break;
             const prev = model;
             model = next;
@@ -1333,10 +1585,11 @@ export class TaskInbox {
           const wait = pay ? nextUtcMidnight(this.now()) - this.now() : quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now()) : 60 * 60_000;
           // A free service that answers 402 or 429 cools down as a whole (Z.ai allows one request at a time).
           if (fp && (pay || quota)) this.stopFreeService(fp.id, this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS), order);
-          this.blockOpencodeModel(model, wait);
+          if (gh) this.blockGhostcliModel(model, wait);
+          else this.blockOpencodeModel(model, wait);
           tried.push(model);
-          const paidTried = tried.filter((m) => !isFreeOpencodeModel(m)).length;
-          const next = paidTried < 2 ? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), undefined, tried) : undefined;
+          const paidTried = tried.filter((m) => !isFreeOpencodeModel(m) && !relayProviderOf(m)).length;
+          const next = paidTried < 2 ? opencodeFreeModel(order, cooldowns(), this.now(), undefined, tried) : undefined;
           if (!next) {
             exhausted = paidTried < 2 && isFreeOpencodeModel(model);
             break;
@@ -1352,19 +1605,25 @@ export class TaskInbox {
       }
     } finally {
       end();
-      this.opencodeStop = undefined;
+      if (gh) this.ghostcliStop = undefined;
+      else this.opencodeStop = undefined;
     }
     // Only paid models count toward the daily cap (a task that ended on a free one cost nothing).
-    if (!isFreeOpencodeModel(model) && !relayProviderOf(model)) this.ocToday().used++;
-    this.paidRuns.set(t.id, !isFreeOpencodeModel(model));
+    if (!gh && !isFreeOpencodeModel(model)) this.ocToday().used++;
+    this.paidRuns.set(t.id, !gh && !isFreeOpencodeModel(model));
     t.summary = text.trim().slice(-2000) || undefined;
     const limited = !run.why && !!error && (isQuotaError(error) || exhausted);
     if (limited) this.log(t, "quota", "warning", { requests: t.steps ?? 0 }, error.slice(0, 160));
     // The earliest cooldown (a free model back, 1 hour for a failed one), else the paid cap's reset at the next UTC midnight.
-    const cools = Object.values(this.opencodeCooldowns());
-    const until = limited ? (exhausted ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
-    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why ? this.stopText(t, run.why) : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
+    const cools = Object.values(cooldowns());
+    const until = limited ? (exhausted || gh ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
+    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `${lane} limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why ? this.stopText(t, run.why) : error ? `${lane} failed: ${error.slice(0, 300)}` : "";
     await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
+    // GhostCLI's put-off task goes again by itself when its first model is back (doGhostcli skips it until then).
+    if (gh && t.status === "deferred-quota" && until) {
+      t.retryAt = until;
+      await this.save();
+    }
     if (relayProviderOf(model) && !error) {
       this.noteRelay({ at: this.now(), id: t.id, model, status: t.status, ms: this.now() - attemptAt });
       await this.save();
@@ -1435,7 +1694,7 @@ export class TaskInbox {
 
   private async probeRelays(): Promise<void> {
     const c = this.d.coder;
-    if (!c || this.oc.useRelay === false || this.probing) return;
+    if (!c || !this.gc.enabled || this.probing) return;
     const last = this.saved.relayHealth;
     if (last && this.now() - last.at < RELAY_PROBE_MS) return;
     if (this.now() - this.probeTriedAt < RELAY_PROBE_MS) return;
@@ -1470,10 +1729,13 @@ export class TaskInbox {
         await this.save();
         // A model that answered is not cooling down any more (25.11: after a 502 the models stayed out for an hour
         // although the next check answered).
-        const until = this.ocToday().modelUntil;
+        const until = this.gcToday().modelUntil;
         if (answered.length && until) for (const m of answered) delete until[m];
         // It answers again: load it right away (Roee, 25.11: "when they are available, load them up").
-        if (ok && !was) void this.pumpOpencode();
+        if (ok && !was) {
+          void this.pumpGhostcli();
+          void this.pumpOpencode();
+        }
         if (was !== ok && (was !== undefined || ok)) this.d.notify(ok ? `✓ ${r.name} עונה` : `✕ ${r.name} לא עונה`, ok ? `${opencodeModelName(model)} answered in ${Math.round((this.now() - t0) / 1000)} s; heavy tasks go to it again.` : `${note}. No tasks go to it until it answers again (checked every 15 minutes).`, { path: "#/settings/task-inbox" });
       }
     } finally {
@@ -2376,7 +2638,11 @@ export class TaskInbox {
     if (t.status === "running" || t.status === "needs-approval") throw fail("The task is running; its model cannot change now.", 409);
     const want = model.trim();
     if (!want) delete t.model;
-    else if (t.runBy === "opencode") t.model = this.opencodeModelChoice(t, want);
+    else if (t.runBy === "opencode" || t.runBy === "ghostcli") {
+      const m = this.opencodeModelChoice(t, want);
+      if (m) t.model = m;
+      else delete t.model;
+    }
     else {
       const m = pickableModels(this.saved.models).find((x) => x.id === want || x.name === want);
       if (!m) throw fail("Antigravity does not offer that model.", 400);
@@ -2387,21 +2653,29 @@ export class TaskInbox {
   }
 
   /**
-   * Checks a model picked for a task run by the coding agent (OpenCode Go, the free services, the GhostCLI relay): the
-   * relay pin or one of the relay's models only for a task that passes the relay's content check (as "Who does it" →
-   * GhostCLI), else a model the task inbox may use (the plan's models and the free services' free ones).
+   * Checks a model picked for a task run by the coding agent (OpenCode Go and the free services, or GhostCLI). GhostCLI's
+   * models (or the old `ghostcli/*` mark) only for a task that passes the relay's content check: an OpenCode task given
+   * one becomes a GhostCLI task (another service, its own counters). Else a model the task inbox may use on OpenCode Go
+   * (the plan's models and the free services' free ones).
    *
-   * @param t - The task.
+   * @param t - The task (an OpenCode or GhostCLI one).
    * @param want - The model id, or {@link RELAY_PIN}.
-   * @returns The model to keep on the task.
-   * @throws 409 when the task may not go to the relay, 400 for a model the coding agent does not offer.
+   * @returns The model to keep on the task (undefined: GhostCLI's own order).
+   * @throws 409 when the task may not go to the relay, 400 for a model its executor does not offer.
    */
-  private opencodeModelChoice(t: InboxTaskView, want: string): string {
+  private opencodeModelChoice(t: InboxTaskView, want: string): string | undefined {
     if (want === RELAY_PIN || relayProviderOf(want)) {
       const safe = safeForRelay(t);
       if (!safe.ok) throw fail(`Not for GhostCLI: ${safe.why}`, 409);
-      return want;
+      if (t.runBy !== "ghostcli") {
+        t.runBy = "ghostcli";
+        if (t.executor === "opencode") t.executor = "ghostcli";
+        t.branch = branchFor(t, "ghostcli");
+        void this.pumpGhostcli().catch(() => undefined);
+      }
+      return want === RELAY_PIN ? undefined : want;
     }
+    if (t.runBy === "ghostcli") throw fail("GhostCLI does not offer that model.", 400);
     const known = want.startsWith(`${OPENCODE_PROVIDER}/`) || !!freeProviderOf(want);
     if (!known || !inboxModelAllowed(want, this.oc.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok)) throw fail("OpenCode Go does not offer that model.", 400);
     return want;
@@ -2416,7 +2690,8 @@ export class TaskInbox {
    */
   private offersModel(to: InboxTaskView["runBy"], model: string): boolean {
     if (to === "antigravity") return pickableModels(this.saved.models).some((x) => x.id === model || x.name === model);
-    if (to === "opencode") return model === RELAY_PIN || !!relayProviderOf(model) || model.startsWith(`${OPENCODE_PROVIDER}/`) || !!freeProviderOf(model);
+    if (to === "ghostcli") return !!relayProviderOf(model);
+    if (to === "opencode") return model.startsWith(`${OPENCODE_PROVIDER}/`) || !!freeProviderOf(model);
     return false;
   }
 
@@ -2488,6 +2763,13 @@ export class TaskInbox {
       await this.opencodeRun;
       return true;
     }
+    const gc = this.ghostcliStop;
+    if (gc?.id === id) {
+      gc.why = "stop";
+      gc.ctl.abort();
+      await this.ghostcliRun;
+      return true;
+    }
     const a = this.active;
     if (!a || a.id !== id) return false;
     a.why = "stop";
@@ -2511,15 +2793,16 @@ export class TaskInbox {
     await this.load();
     const t = this.find(id);
     if (!by) throw fail("Only your paired phone or this computer can queue a task.", 403);
-    if (t.runBy === "opencode" && (t.status === "waiting" || t.status === "deferred-quota" || t.status === "failed" || t.status === "partial")) {
+    if ((t.runBy === "opencode" || t.runBy === "ghostcli") && (t.status === "waiting" || t.status === "deferred-quota" || t.status === "failed" || t.status === "partial")) {
       // OpenCode Go takes the first waiting task in the list: queuing one moves it to the front. A failed or partial
       // one goes back to waiting (a partial run continues from its pushed branch).
       if (t.status === "failed" || t.status === "partial") Object.assign(t, { status: "waiting", resultWritten: false });
       const i = this.saved.tasks.indexOf(t);
       if (i > 0) this.saved.tasks.unshift(...this.saved.tasks.splice(i, 1));
-      t.note = "Next for OpenCode Go.";
+      if (t.status === "deferred-quota") delete t.retryAt;
+      t.note = t.runBy === "ghostcli" ? "Next for GhostCLI." : "Next for OpenCode Go.";
       await this.save();
-      void this.pumpOpencode();
+      void (t.runBy === "ghostcli" ? this.pumpGhostcli() : this.pumpOpencode());
       return this.withPlace(t);
     }
     if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : t.runBy === "claude" ? "Claude Code runs one task per Run; press Run on it." : t.runBy === "opencode" ? "This OpenCode Go task cannot be queued now (it is running or finished)." : "Claude runs this task; it has no queue here.", 409);
@@ -2881,7 +3164,7 @@ export class TaskInbox {
     // (25.11: with the paid day used up and Beam Free failing, the inbox sat idle though three free keys were in).
     const free = this.d.coder?.free ?? {};
     if (this.oc.useFree !== false && FREE_PROVIDERS.some((f) => f.id !== OPENCODE_PROVIDER && free[f.id]?.ready())) return true;
-    return this.oc.useRelay !== false && !!this.saved.relayHealth?.ok && RELAY_PROVIDERS.some((r) => free[r.id]?.ready());
+    return this.gcTakesHeavy && !!this.saved.relayHealth?.ok && RELAY_PROVIDERS.some((r) => free[r.id]?.ready());
   }
 
   /** The work loop's state now (work-loop.ts): running, paused until Antigravity can work again, or off. */
@@ -2907,6 +3190,7 @@ export class TaskInbox {
       await this.loopWork();
       await this.save();
       void this.pumpOpencode().catch(() => undefined);
+      void this.pumpGhostcli().catch(() => undefined);
       void this.pumpClaude().catch(() => undefined);
       void this.pump().catch(() => undefined);
     })().finally(() => {
@@ -3242,6 +3526,7 @@ export class TaskInbox {
     t.resultWritten = false;
     await this.save();
     if (t.runBy === "opencode") void this.pumpOpencode().catch(() => undefined);
+    if (t.runBy === "ghostcli") void this.pumpGhostcli().catch(() => undefined);
     if (t.runBy === "gemini") void this.pumpGemini().catch(() => undefined);
     if (t.runBy === "antigravity") this.makeAsk(t);
   }
@@ -3255,31 +3540,32 @@ export class TaskInbox {
    * @param to - The local model (self-work, through the board), Claude's Opus agent, or Antigravity (waits for Run).
    * @param o.again - Run a finished task again with the new executor (the user confirmed).
    */
-  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini" | "opencode" | "claude", o: { again?: boolean; relay?: boolean } = {}): Promise<InboxTaskView> {
+  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini" | "opencode" | "ghostcli" | "claude", o: { again?: boolean } = {}): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
     if ((t.status === "done" || t.status === "partial") && !o.again) throw fail("It is done.", 409);
     if (to === "gemini" && t.kind !== "research") throw fail("Free Gemini does only research tasks.", 409);
     if (to === "opencode" && t.kind === "research") throw fail("OpenCode Go does only code tasks.", 409);
+    // GhostCLI (Roee, 26.11): only tasks without sensitive content.
+    if (to === "ghostcli") {
+      const safe = safeForRelay(t);
+      if (!safe.ok) throw fail(`Not for GhostCLI: ${safe.why}`, 409);
+    }
     if (to === "claude" && t.kind === "research") throw fail("Claude Code here does only code tasks.", 409);
     this.lines.remove(id);
     delete t.boardState;
     t.runBy = to;
     t.executor = to;
-    // Given to GhostCLI (Roee, 26.11): an OpenCode task pinned to the relay's models; any other choice drops the pin.
-    if (o.relay && to === "opencode") {
-      const safe = safeForRelay(t);
-      if (!safe.ok) throw fail(`Not for GhostCLI: ${safe.why}`, 409);
-      t.model = RELAY_PIN;
-    } else if (t.model === RELAY_PIN || (t.model && !this.offersModel(to, t.model))) delete t.model;
-    t.status = to === "antigravity" || to === "gemini" || to === "opencode" || to === "claude" ? "waiting" : "queued";
+    if (t.model && !this.offersModel(to, t.model)) delete t.model;
+    delete t.retryAt;
+    t.status = to === "antigravity" || to === "gemini" || to === "opencode" || to === "ghostcli" || to === "claude" ? "waiting" : "queued";
     // A partial attempt's branch stays: the next attempt continues from it (resumeRef).
-    if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "antigravity" || to === "claude"))) t.branch = branchFor(t, to);
+    if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "ghostcli" || to === "antigravity" || to === "claude"))) t.branch = branchFor(t, to);
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;
-    t.note = t.model === RELAY_PIN ? "Runs only on GhostCLI (its models, no sensitive content)." : to === "claude" ? this.claudeNote() : to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
+    t.note = to === "ghostcli" ? "Runs on GhostCLI (its models, no sensitive content)." : to === "claude" ? this.claudeNote() : to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
     await this.save();
     // Antigravity asks "Run this?" on the PC and the phone, as for a new task.
@@ -3287,6 +3573,7 @@ export class TaskInbox {
     if (to === "claude" && !this.cs.askRun) void this.pumpClaude().catch(() => undefined);
     if (to === "gemini") void this.pumpGemini().catch(() => undefined);
     if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
+    if (to === "ghostcli") void this.pumpGhostcli().catch(() => undefined);
     return t;
   }
 
@@ -3311,8 +3598,11 @@ export class TaskInbox {
 }
 
 /** How long OpenCode Go waits after a 429 that does not say (its plan's shortest window is 5 hours). */
-/** A task's model, as shown on its card: the free service's name, else OpenCode Go. */
-const modelLabel = (model: string): string => `${freeProviderOf(model)?.name ?? "OpenCode Go"} · ${opencodeModelName(model)}`;
+/** The question a research run asks (Gemini's and GhostCLI's): the title, the goal, the acceptance and what is out of scope. */
+const researchQuestion = (t: Pick<InboxTaskSpec, "title" | "goal" | "acceptance" | "outOfScope">): string => [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
+
+/** A task's model, as shown on its card: GhostCLI's or the free service's name, else OpenCode Go. */
+const modelLabel = (model: string): string => `${relayProviderOf(model)?.name ?? freeProviderOf(model)?.name ?? "OpenCode Go"} · ${opencodeModelName(model).replace(/^ghostcli\//, "")}`;
 
 export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
 

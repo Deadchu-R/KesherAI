@@ -16,7 +16,7 @@ import type { ClaudeSettings, ClaudeState } from "./claude-code.js";
  * `claude`: a code task for Claude Code on this PC (claude-code.ts), signed in with the user's own subscription; it
  * waits for the user's Run tap by default. Never picked by `auto` (it spends the same limits as the Claude app).
  */
-export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini" | "opencode" | "claude";
+export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini" | "opencode" | "ghostcli" | "claude";
 
 /** How big a task is (research reports' "Size S/M/L"; picks the OpenCode Go model). */
 export type InboxSize = "S" | "M" | "L";
@@ -50,6 +50,57 @@ export interface OpencodeSettings {
    * models; outside the daily cap (Roee, 25.11: a one-month trial).
    */
   useRelay?: boolean;
+}
+
+/**
+ * Settings > Task inbox > GhostCLI (config `taskInbox.ghostcli`): the flat-rate relay as its own executor (Roee, 27.11:
+ * GhostCLI and OpenCode Go are different services). It runs code tasks with KesherAI's coding agent like OpenCode Go,
+ * but with its own on/off, daily cap, model order, 429 tracking and counters.
+ */
+export interface GhostcliSettings {
+  /** Off: no task runs on GhostCLI (given by hand or sent as a heavy task). */
+  enabled: boolean;
+  /** GhostCLI tasks a day (it is "unlimited" by its terms; this keeps one day from running away). */
+  dailyCap: number;
+  /** The models to try, in order (`ghostcli/<model>`); empty: the relay's own list, strongest first. */
+  models: string[];
+  /**
+   * Send heavy (M/L) OpenCode tasks without sensitive content to GhostCLI while it answers (they become GhostCLI tasks).
+   * Absent: the older `opencode.useRelay` setting decides.
+   */
+  takeHeavy?: boolean;
+}
+
+/** GhostCLI's defaults: on, 30 tasks a day, the relay's own best-first order. */
+export const GHOSTCLI_DEFAULTS: GhostcliSettings = { enabled: true, dailyCap: 30, models: [] };
+
+/** GhostCLI's state for its settings card and the queue (like {@link OpencodeState}, counted on its own). */
+export interface GhostcliState {
+  /** A GhostCLI connection exists and has a key. */
+  ready: boolean;
+  /** Tasks started today (UTC). */
+  used: number;
+  /** Every model is cooling down after a 429: no task starts before this (ms since epoch). */
+  until?: number;
+  /** Models cooling down after a 429: model id → when it is free again (ms). Only those still cooling. */
+  cooldowns?: Record<string, number>;
+  /** The models its connection lists (`ghostcli/<model>`), for the order picker. */
+  models: string[];
+  /** The last availability check: whether it answered, and when (ms). */
+  answering?: boolean;
+  checkedAt?: number;
+}
+
+/**
+ * A task's executor read from older saved data and task files: a task given to GhostCLI used to be an OpenCode task
+ * pinned to the relay (`executor: opencode` + `model: ghostcli/*` or a `ghostcli/<model>`); it is a GhostCLI task now.
+ *
+ * @param executor - The saved executor.
+ * @param model - The saved model, if any.
+ * @returns The executor to use.
+ */
+export function ghostcliCompat<E extends string>(executor: E, model: string | undefined): E | "ghostcli" {
+  return executor === "opencode" && !!model && /^ghostcli\//.test(model) ? "ghostcli" : executor;
 }
 
 /** The defaults: a cheap model for small work, a stronger (still cheap) one for the rest, 15 a day. */
@@ -546,6 +597,8 @@ export interface InboxSettings {
   dailyCap: number;
   /** OpenCode Go: the flat coding plan that takes S/M code tasks while Antigravity is out (absent: the defaults). */
   opencode?: OpencodeSettings;
+  /** GhostCLI: the flat-rate relay, its own executor (absent: the defaults, GHOSTCLI_DEFAULTS). */
+  ghostcli?: GhostcliSettings;
   /** Claude Code on this PC (absent: the defaults, CLAUDE_DEFAULTS). */
   claude?: ClaudeSettings;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
@@ -695,6 +748,8 @@ export interface InboxState {
   models?: InboxModel[];
   /** OpenCode Go now: its connection is set up with a key, today's count, and its limit's end when it answered 429. */
   opencode?: OpencodeState;
+  /** GhostCLI now: its connection, today's count, its models and cooldowns (its own executor). */
+  ghostcli?: GhostcliState;
   /** The relay's trial report (GhostCLI), once it ran a task. */
   relay?: RelayReport;
   /** Antigravity's quota as read on the PC (antigravity-quota.ts), when Antigravity runs. */
