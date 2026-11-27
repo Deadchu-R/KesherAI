@@ -74,6 +74,8 @@ const hubSeedSchema = z.object({
   boards: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(80).default([]), doneTotal: z.number().int().min(0).optional() })).max(4).default([]),
   /** The quotas snapshots the PCs report (items as in `ProviderQuota`, provider-quotas.ts; times as `{ "$inMs": "40m" }`; sent at the render's time). */
   quotas: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(24).default([]) })).max(4).default([]),
+  /** The Task chat's saved transcript (messages as in apps/hub/page/task-chat.ts `ChatMsg`; times as `{ "$agoMs": "5m" }`). */
+  taskChat: z.array(z.record(z.string(), z.unknown())).max(30).default([]),
   /** The browser is subscribed to Web Push (Settings › Notifications shows its switch on). */
   push: z.boolean().default(false),
 }).strict();

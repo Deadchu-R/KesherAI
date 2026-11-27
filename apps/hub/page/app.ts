@@ -34,6 +34,7 @@ import { listOrder, passes, runToWorkTask, toWorkTask, type WorkTask } from "../
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { dismissPc, reviewPcs, type SeenVersions } from "./pc-updated.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
+import { taskChatPanel } from "./task-chat.js";
 import { connectorSection, type ConnectionView } from "./connector.js";
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
@@ -735,6 +736,7 @@ function tasksTab(): HTMLElement {
     driveLine(),
     !device.paired ? pairThisCard() : null,
     waitingSection(waitingView),
+    device.paired ? taskChatPanel({ device, render: () => render() }) : null,
     ...nowNextSections(workView),
     workTabs(workView, items),
     h("div", { class: "row wrap filters" }, h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),

@@ -170,6 +170,8 @@ export interface HubPlan {
   boards: Array<{ pc: string; rev: number; items: Array<Record<string, unknown>>; doneTotal: number; at: number }>;
   /** The PCs' quotas snapshots, cleaned as the page cleans them (sealed and delivered after the welcome, like the boards). */
   quotas: Array<{ pc: string; items: ProviderQuota[]; at: number }>;
+  /** The Task chat's saved transcript (written to the page's IndexedDB `taskchat`). */
+  taskChat: Array<Record<string, unknown>>;
 }
 
 /**
@@ -194,7 +196,7 @@ export function hubPlan(seed: HubSeed, now: number): HubPlan {
     if (!seed.pcs.some((p) => p.id === q.pc)) throw new Error(`hub seed: the quotas are on PC "${q.pc}", which is not in "pcs"`);
     return { pc: q.pc, items: cleanProviderQuotas(q.items), at: now };
   });
-  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards, quotas };
+  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards, quotas, taskChat: seed.taskChat.map((m, i) => ({ id: `m${i + 1}`, at: now - (seed.taskChat.length - i) * 60_000, ...m })) };
 }
 
 /**
@@ -240,6 +242,7 @@ export const HUB_SEED_JS = `async (plan) => {
   });
   if (plan.device) await put("device", { deviceId: plan.deviceId, token: "design-token", hubKey, privateKey: me.privateKey, publicKey: me.publicKey, name: plan.device.name });
   await put("tasks", plan.tasks);
+  if (plan.taskChat.length) await put("taskchat", plan.taskChat);
   db.close();
   return { presence, envs, boardEnvs, hubKey };
 }`;

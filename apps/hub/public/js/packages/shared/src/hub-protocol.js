@@ -13,6 +13,7 @@ import { cleanAwayNote } from "./device-status.js";
 import { cleanTailscaleDirect } from "./direct-path.js";
 import { cleanRelayKeys } from "./relay-keys.js";
 import { cleanProviderQuotas } from "./provider-quotas.js";
+import { parseTaskChatAnswer, parseTaskChatAsk } from "./hub-task-chat.js";
 import { parseConnectorAnswer, parseConnectorQuery } from "./hub-connector.js";
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1;
@@ -82,7 +83,7 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false, connector: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -158,6 +159,8 @@ export const BODY_FOR_KIND = {
     quotas: "quotas",
     connector_query: "connector_query",
     connector_answer: "connector_answer",
+    taskchat: "taskchat",
+    taskchat_answer: "taskchat_answer",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -236,7 +239,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -432,6 +435,14 @@ export function parseSealedBody(x, kind) {
         case "connector_answer": {
             const a = parseConnectorAnswer(b);
             return a ? { type: "connector_answer", ...a } : null;
+        }
+        case "taskchat": {
+            const q = parseTaskChatAsk(b);
+            return q ? { type: "taskchat", ...q } : null;
+        }
+        case "taskchat_answer": {
+            const a = parseTaskChatAnswer(b);
+            return a ? { type: "taskchat_answer", ...a } : null;
         }
         case "cloud_started": {
             if (!isHubId(b.taskId))

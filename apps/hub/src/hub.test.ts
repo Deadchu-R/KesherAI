@@ -612,6 +612,32 @@ test("Run / Cancel commands: from a phone to a PC only (audited without content)
   assert.ok(audit.includes("relay-command") && !audit.includes("relay-command_result") && !audit.includes("agy-secret"));
 });
 
+test("Task chat: asks go from a phone to a PC only, answers from a PC to a phone only, sealed (the hub never reads the text)", async () => {
+  const { hub, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  for (const d of [pc, phone]) {
+    sockets.on.add(d.id);
+    await hub.onOpen(d.id);
+  }
+  const ask: SealedBody = { type: "taskchat", chatId: "c1", op: "say", text: "split the secret task", at: 1 };
+  const ok = await sealMessage({ from: phone.id, to: pc.id, kind: "taskchat" }, ask, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: ok }));
+  const got = sockets.frames(pc.id, "deliver").at(-1);
+  assert.ok(got?.t === "deliver" && got.env.id === ok.id && !JSON.stringify(got.env).includes("secret"));
+  assert.deepEqual(await openEnvelope(got.env, pc.keys.privateKey, phone.keys.publicKey), ask);
+  const bad = await sealMessage({ from: pc.id, to: phone.id, kind: "taskchat" }, ask, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: bad }));
+  assert.deepEqual(sockets.frames(pc.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: bad.id });
+  const answer: SealedBody = { type: "taskchat_answer", chatId: "c1", kind: "reply", text: "ok" };
+  const fake = await sealMessage({ from: phone.id, to: pc.id, kind: "taskchat_answer" }, answer, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
+  assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
+  const back = await sealMessage({ from: pc.id, to: phone.id, kind: "taskchat_answer" }, answer, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: back }));
+  assert.equal(sockets.frames(phone.id, "deliver").at(-1)?.t, "deliver");
+});
+
 test("agent-event rows have a total cap: the oldest go first, whatever the run", () => {
   const store = new MemoryStore();
   const add = (run: string, n: number) => store.addAgentEvent({ to: "p", from: "pc", run, n, env: "{}", createdAt: 1 }, 50);

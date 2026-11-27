@@ -72,6 +72,7 @@ import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-acti
 import type { KesherConfig } from "./config.js";
 import { hubBoardSnapshot } from "./hub-board.js";
 import { ConnectorDesk } from "./hub-connector.js";
+import { TaskChatDesk } from "./hub-task-chat.js";
 import { parseHubDiag, type HubDiagSnapshot } from "./hub-diag.js";
 import { pickRelay, relayList, type RelayProvider } from "./relay.js";
 import type { TaskBoard } from "./task-board.js";
@@ -178,6 +179,14 @@ export interface HubClientDeps {
    * (hub-connector.ts).
    */
   addTask?: (t: { title: string; goal: string; executor: string }) => Promise<InboxTaskView>;
+  /**
+   * The hub's Task chat (hub-task-chat.ts): a completion on the CPU pool's `chat` role, and whether that model is on
+   * this PC. Without it the chat answers "no small chat model on this PC".
+   */
+  taskChat?: {
+    complete: (messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, o: { maxTokens: number; temperature: number }) => Promise<string>;
+    hasModel?: () => boolean;
+  };
   /** Whether connected apps may answer approval cards (`mcpServer.allowApprovals`): the connector's `approve` needs it too. */
   allowApprovals?: () => boolean;
   /** One line to the app's log (the Claude connector notes each request here: op, task id, outcome). */
@@ -483,7 +492,21 @@ export class HubClient {
       },
       deps.now ?? Date.now,
     );
+    this.chat = new TaskChatDesk(
+      {
+        ...(deps.inboxTasks ? { inboxTasks: deps.inboxTasks } : {}),
+        ...(deps.taskChat ? { complete: deps.taskChat.complete, ...(deps.taskChat.hasModel ? { hasModel: deps.taskChat.hasModel } : {}) } : {}),
+        ...(deps.addTask ? { addTask: deps.addTask } : {}),
+        ...(deps.assign ? { assign: deps.assign } : {}),
+        ...(deps.inboxCommand ? { inboxCommand: deps.inboxCommand } : {}),
+        ...(deps.log ? { log: deps.log } : {}),
+      },
+      deps.now ?? Date.now,
+    );
   }
+
+  /** The hub's Task chat (hub-task-chat.ts): sealed from the owner's page, answered with the CPU pool's chat model. */
+  private readonly chat: TaskChatDesk;
 
   /**
    * One question of the Claude connector asked on this PC itself (KesherAI's own MCP server, for the Claude Desktop
@@ -1344,6 +1367,16 @@ export class HubClient {
         const a = stale ? this.desk.refuse(q, stale) : await this.desk.answer(q, cleanOptIn(this.s.optIn).connector);
         await this.sendSealed("hub", "connector_answer", { type: "connector_answer", ...a }, 60);
         return ack();
+      }
+      case "taskchat": {
+        // The owner's paired phone or hub page only; the answer is sealed back to that device.
+        const kind = this.devices.find((d) => d.id === env.from)?.kind;
+        ack();
+        if (kind !== "phone") return;
+        const { type: _type, ...q } = body;
+        const a = await this.chat.handle(q);
+        await this.sendSealed(env.from, "taskchat_answer", { type: "taskchat_answer", ...a }, HUB_LIMITS.approvalTtl);
+        return;
       }
       case "command": {
         // Run / Cancel from the owner's paired phone or hub page only (the same check as an approval answer).

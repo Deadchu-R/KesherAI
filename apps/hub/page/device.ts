@@ -8,7 +8,8 @@
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
 import { dropLocalPush } from "./push.js";
 import { get, put, type PcKeys } from "./kv.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubBoardCommand, type HubBoardItem, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import type { TaskChatAnswer } from "../../../packages/shared/src/hub-task-chat.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type SealedBody, type HubApproval, type HubBoardCommand, type HubBoardItem, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
@@ -855,6 +856,7 @@ export class HubDevice {
     if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
     if (body.type === "board") return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
     if (body.type === "quotas") return this.onQuotas(env.from, body.items, body.at);
+    if (body.type === "taskchat_answer") return void (env.from && this.chatListener?.(env.from, body));
     if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
     if (body.type === "relays") return this.onRelayKeys(env.from, body.keys, body.at);
@@ -918,6 +920,23 @@ export class HubDevice {
     this.boardActions.set(`${pc.id}/${taskId}`, { commandId });
     this.changed();
     return true;
+  }
+
+  /** The Task chat's listener (task-chat.ts): gets each sealed `taskchat_answer` and the PC it came from. */
+  chatListener?: (pcId: string, a: TaskChatAnswer) => void;
+
+  /**
+   * Seals one Task chat message to a PC and sends it (the hub relays ciphertext only).
+   *
+   * @param pc - The PC (on).
+   * @param body - The `taskchat` body.
+   * @returns Whether it was sent.
+   */
+  async sendTaskChat(pc: HubPresence, body: Extract<SealedBody, { type: "taskchat" }>): Promise<boolean> {
+    const id = this.ident;
+    if (!id || !this.connected || !pc.online) return false;
+    const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "taskchat", ttl: 300 }, body, id.privateKey, pc.publicKey);
+    return (await this.sendEnv(env)) !== undefined;
   }
 
   /** A PC's approvals snapshot: replaces the last one (an older one that arrives late is ignored). */

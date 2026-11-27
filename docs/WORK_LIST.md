@@ -543,6 +543,7 @@ split them into steps, reorder, set priority, assign an executor. No code, no sh
 - ⬜ Research to Gemini: r-20261127-01 (competitors' AI task chats, small CPU models with Hebrew + tool calls, GBNF/JSON-schema reliability, latency, safety, Language and weight) — queued in kesher-inbox 27.11.
 - ⬜ Gap list against the code (Claude): reuse watchdog-model.ts (CPU loan of the router GGUF), task-inbox actions (assign/queue/model/priority), hub-protocol (a new relay message pair: hub chat → PC → answer + proposed changes).
 - ⬜ Design boards (cloud doc 1MJnsdiaPC1WWwNt75DS1G): the hub chat (phone 390 + desktop), proposed-changes card with Apply / Undo, "thinking on the CPU" line, model not on this PC → one-tap download ask.
+- ✅ Build (27.11, no release yet): sealed kinds `taskchat` / `taskchat_answer` (packages/shared/src/hub-task-chat.ts, PC desk packages/core/src/hub-task-chat.ts on the CPU pool's chat role, panel apps/hub/page/task-chat.ts on the Tasks page); proposals only, Apply / Cancel, board HubTaskChat. Still open: a chat GGUF for the pool's chat slot, a check on the real PC, a Hebrew quality check.
 - ⬜ Build: PC side (task-chat.ts: fixed action list with a JSON-schema grammar, only the relevant tasks in the prompt, confirm for deletes), hub side (chat tab, streaming through the relay), tests, then a release.
 
 ## 27.11 (chat 4)

@@ -1090,8 +1090,9 @@ export class Hub {
     // A task-inbox report, the approvals waiting on a PC, its shared task board and its providers' quotas go from a PC to the owner's phones (and the hub page) only.
     if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board" || env.kind === "quotas") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     // An approval answer or a command (Run, Cancel) goes from a paired phone (or the hub page) to a PC only, at a human pace.
-    if (env.kind === "command_result" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
-    if (env.kind === "approval_answer" || env.kind === "command") {
+    if ((env.kind === "command_result" || env.kind === "taskchat_answer") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    // The task chat (sealed, the hub never reads it): from a paired phone or the hub page to a PC, at a human pace.
+    if (env.kind === "approval_answer" || env.kind === "command" || env.kind === "taskchat") {
       if (from.kind !== "phone" || to.kind !== "pc") return refuse("not-allowed", env.id);
       if (!this.limits.take(`command:${from.id}`, LIMITS.command)) return refuse("rate-limited", env.id);
     }

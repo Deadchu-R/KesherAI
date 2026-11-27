@@ -885,6 +885,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     // Another device wrote to the user's Google Drive: pull now (tasks-sync.ts).
     onSync: () => services.tasksSync?.onPing(),
+    // The hub's Task chat answers with the CPU pool's `chat` model (hub-task-chat.ts); proposals only, applied by the owner.
+    taskChat: {
+      complete: (messages, o) => {
+        const cpu = services.cpuModels;
+        if (!cpu?.enabled()) return Promise.reject(new Error("no cpu model"));
+        return cpu.complete("chat", messages, o);
+      },
+      hasModel: () => services.cpuModels?.enabled() === true,
+    },
     // The Claude connector's "+ Task" (only while Settings › Kesher Cloud › "Claude connector may read and run" is on).
     addTask: (t) => taskInbox.add(t),
     // The connector's approval cards also need "let the connected app answer approval cards" (Settings › MCP server).

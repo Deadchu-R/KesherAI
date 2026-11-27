@@ -13,6 +13,7 @@ import { cleanAwayNote, type AwayNote } from "./device-status.js";
 import { cleanTailscaleDirect, type TailscaleDirect } from "./direct-path.js";
 import { cleanRelayKeys, type RelayKeys } from "./relay-keys.js";
 import { cleanProviderQuotas, type ProviderQuota } from "./provider-quotas.js";
+import { parseTaskChatAnswer, parseTaskChatAsk, type TaskChatAnswer, type TaskChatAsk } from "./hub-task-chat.js";
 import { parseConnectorAnswer, parseConnectorQuery, type ConnectorAnswer, type ConnectorQuery } from "./hub-connector.js";
 
 /** The protocol version every frame and envelope carries. */
@@ -93,9 +94,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas" | "connector_query" | "connector_answer";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas" | "connector_query" | "connector_answer" | "taskchat" | "taskchat_answer";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -280,7 +281,11 @@ export type SealedBody =
   /** Hub to a PC whose `connector` opt-in is on: one question of the Claude connector (hub-connector.ts). Never queued. */
   | ({ type: "connector_query" } & ConnectorQuery)
   /** That PC's answer, sealed to the hub; opened in memory for that one MCP call, never stored or logged. */
-  | ({ type: "connector_answer" } & ConnectorAnswer);
+  | ({ type: "connector_answer" } & ConnectorAnswer)
+  /** The owner's page to a PC: a message to the hub's task chat, or Apply / Cancel of a proposal (hub-task-chat.ts). Sealed; the hub never reads it. */
+  | ({ type: "taskchat" } & TaskChatAsk)
+  /** The PC's answer to the task chat (a reply with a proposal, the result of Apply, or why not), sealed to the page. */
+  | ({ type: "taskchat_answer" } & TaskChatAnswer);
 
 /**
  * One ask as the phone's notification shows it, with the answer it needs: Run / Not now (`run`, an Antigravity Run
@@ -539,6 +544,8 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   quotas: "quotas",
   connector_query: "connector_query",
   connector_answer: "connector_answer",
+  taskchat: "taskchat",
+  taskchat_answer: "taskchat_answer",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -619,7 +626,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -793,6 +800,14 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     case "connector_answer": {
       const a = parseConnectorAnswer(b);
       return a ? { type: "connector_answer", ...a } : null;
+    }
+    case "taskchat": {
+      const q = parseTaskChatAsk(b);
+      return q ? { type: "taskchat", ...q } : null;
+    }
+    case "taskchat_answer": {
+      const a = parseTaskChatAnswer(b);
+      return a ? { type: "taskchat_answer", ...a } : null;
     }
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;

@@ -799,6 +799,8 @@ export class HubDevice {
             return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
         if (body.type === "quotas")
             return this.onQuotas(env.from, body.items, body.at);
+        if (body.type === "taskchat_answer")
+            return void (env.from && this.chatListener?.(env.from, body));
         if (body.type === "command_result")
             return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
         if (body.type === "inbox_task")
@@ -873,6 +875,22 @@ export class HubDevice {
         this.boardActions.set(`${pc.id}/${taskId}`, { commandId });
         this.changed();
         return true;
+    }
+    /** The Task chat's listener (task-chat.ts): gets each sealed `taskchat_answer` and the PC it came from. */
+    chatListener;
+    /**
+     * Seals one Task chat message to a PC and sends it (the hub relays ciphertext only).
+     *
+     * @param pc - The PC (on).
+     * @param body - The `taskchat` body.
+     * @returns Whether it was sent.
+     */
+    async sendTaskChat(pc, body) {
+        const id = this.ident;
+        if (!id || !this.connected || !pc.online)
+            return false;
+        const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "taskchat", ttl: 300 }, body, id.privateKey, pc.publicKey);
+        return (await this.sendEnv(env)) !== undefined;
     }
     /** A PC's approvals snapshot: replaces the last one (an older one that arrives late is ignored). */
     onApprovals(from, items, at) {

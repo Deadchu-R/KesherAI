@@ -328,3 +328,17 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .q-age { margin-top: 2px; }
 .q-note { margin: 4px 4px 16px; }
 @media (max-width: 640px) { .q-list { grid-template-columns: 1fr; padding-inline: 10px; } .q-link { padding-inline: 10px; } }
+/* Task chat on the Tasks page (task-chat.ts, HubTaskChat): messages, proposal cards with Apply / Cancel. */
+.tchat { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.tc-head { justify-content: space-between; text-align: start; min-height: 40px; font-weight: 600; }
+.tc-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; padding-block: 2px; }
+.tc-msg { max-width: min(92%, 640px); padding: 8px 11px; border-radius: 12px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.tc-me { align-self: flex-end; background: #23263a; border-color: #343a5c; }
+.tc-pc { align-self: flex-start; background: #1c1c20; }
+.tc-bad { border-color: #4a2a2c; } .tc-err { color: var(--bad); }
+.tc-prop { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: #15151a; border: 1px dashed #3a3d52; }
+.tc-acts { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
+.tc-off { padding: 8px 10px; border-radius: 10px; background: #1f1a14; border: 1px solid #4a3a26; color: var(--warn); }
+.tc-send { align-items: flex-end; gap: 8px; } .tc-send .tc-input { flex: 1; min-width: 0; }
+.tc-clear { align-self: flex-start; }
+@media (max-width: 640px) { .tchat { padding-inline: 10px; } .tc-msg { max-width: 100%; } .tc-list { max-height: 50vh; } }
