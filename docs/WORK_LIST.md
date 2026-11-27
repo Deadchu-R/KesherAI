@@ -117,7 +117,7 @@ Order (from the deep research c-20261121-38, RESEARCH_LOG 2026-11-21; S first):
 - ✅ A2 (S): live turn line — elapsed, tok/s, "step 2/5: tool", waiting-for-approval badge (desktop + phone).
 - ✅ A7 (S) (built e4665d9; measure on the PC still open): local speed — prompt-cache reuse between turns and n-gram prompt lookup in llama.cpp, measured on the PC before/after.
 - ✅ A6 (S) (already existed: COMPACT_AT 0.8): context ring suggests compaction at 80%.
-- ⬜ A6b (S/M): bidi pass — `<bdi>` around mixed runs, code/math LTR, logical CSS in chat, docs panel, tool cards.
+- ✅ A6b (S/M): bidi pass — `<bdi>` around mixed runs, code/math LTR, logical CSS in chat, docs panel, tool cards.
 - ✅ A1 (M): type while it answers — queue under the composer, Alt+Enter steers at the next tool step.
 - ✅ A3 (M): declarative tool cards (name, short parameters, live state, structured result).
 - ✅ B2 (M) (ba39551; plugin/package code not compiled yet): Play-mode VRAM standby — when Unity/Unreal enters Play, unload the local model, reload after.
