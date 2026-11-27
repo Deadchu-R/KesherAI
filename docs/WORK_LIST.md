@@ -530,6 +530,7 @@ Like Skyscanner, but on the PC and private ("like incognito"): the sites should 
 - ⬜ Flights search with all of Skyscanner's parameters: from/to (incl. "anywhere", nearby airports), dates or flexible (whole month, cheapest day calendar), one way / return / multi-city, passengers and ages, cabin, stops, times, duration, airlines/alliances, bags, price; sort by price/time/best.
 - ⬜ Stays: Booking, Hostelworld (and Airbnb, Agoda, Hotels.com if possible): dates, guests, area on a map, price, rating, dorm/private, cancellation.
 - ⬜ A full view to compare and book: results list + price calendar + map + filters + search tools; booking happens on the site itself (KesherAI never pays or types card details).
+- Sources (Roee 27.11): official/free APIs, the sites read as a guest in a fresh cookie-free browser, and services with a free tier; anything paid only as an optional key he enters.
 - ⬜ Private by design: runs locally on the PC, a fresh isolated browser profile per search, no cookies kept, no account, nothing sent to KesherAI's cloud.
 - ⬜ Automation: a watch that searches every X time (route, dates, max price) and notifies when a cheaper option appears (price history per watch).
 - ⬜ In chat: takes context from the conversation ("a week in Rome in March, under 300€") and shows the whole view inside the chat itself (cards, calendar, map), plus "open in the travel page".

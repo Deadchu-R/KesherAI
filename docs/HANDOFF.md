@@ -144,6 +144,10 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
     4. Inbox runs flooding the chat list → build per r-20261126-06 (runs inside the task, "continue as chat").
     5. Travel skill idea (WORK_LIST "Idea: travel skill"): research first (Gemini), then design boards.
     6. Hub: Antigravity quota already on its chip; Kaggle batch worker follow-ups; updates in parts.
+  - Roee's answers 27.11: (a) GhostCLI: load it with EVERY safe (non-sensitive) code task, nonstop, during the trial;
+    (b) travel skill sources: official/free APIs + reading the sites as a guest in a fresh cookie-free browser + paid
+    services with a free tier — anything paid only as an OPTIONAL key he enters; (c) the next chat starts with the owed
+    design boards, then the queue (merge a-02, rerun a-03), then the travel research to Gemini.
   - Antigravity quotas: a 5-hour window + a weekly one per group (Gemini / Claude+GPT); KesherAI shows them. Gemini 4 Carbon/Argon/Neon show 0% (not on his plan).
   - PC API cheat sheet (built-in browser at http://127.0.0.1:7420): /api/task-inbox (state, tasks, agQuota, agQuotaWhy, relay), /tasks/:id (+/queue, /run, /skip, /reassign {to}, PUT /model {model}), /api/free-cloud, /api/chat (SSE), /api/logs/search?source=kesher-main&q=…, /api/version, /api/guard. Results of runs: branch kesher-inbox results/<id>.md.
   - Release recipe: in a clean clone: pull --rebase → lint → build → hub build:page → full tests (NODE_OPTIONS=--max-old-space-size=4096) → bump all package.json → commit as Roee Tal <Deadchu-R@users.noreply.github.com> → push main → `git push -qf origin HEAD:release` → send_later ~20 min to check `gh run list -b release` and /api/version → updates 2/3, 3/3.
