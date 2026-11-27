@@ -183,6 +183,21 @@ export function parseClaudeLine(line: string): ClaudeEvent[] {
     const i = (j.rate_limit_info ?? {}) as Record<string, unknown>;
     const u = typeof i.utilization === "number" ? i.utilization : undefined;
     const at = epochMs(i.resetsAt ?? i.resets_at);
+    // Subscription sessions also carry every window (`unifiedWindows`: five_hour, seven_day…), each with its
+    // utilization: one event per window, so a single small answer refreshes both percents.
+    const uw = i.unifiedWindows && typeof i.unifiedWindows === "object" ? (i.unifiedWindows as Record<string, unknown>) : undefined;
+    if (uw) {
+      const out: ClaudeEvent[] = [];
+      for (const [window, v] of Object.entries(uw)) {
+        if (window !== "five_hour" && window !== "seven_day") continue;
+        const w = (v ?? {}) as Record<string, unknown>;
+        const wu = typeof w.utilization === "number" ? w.utilization : undefined;
+        const wat = epochMs(w.resetsAt ?? w.resets_at);
+        if (wu === undefined || !wat) continue;
+        out.push({ kind: "limit", window, used: wu <= 1 ? wu * 100 : wu, resetsAt: wat, ...(typeof i.status === "string" ? { status: i.status } : {}) });
+      }
+      if (out.length) return out;
+    }
     // utilization is a fraction (0–1); a value above 1 is taken as a percent already.
     return [{ kind: "limit", ...(typeof (i.rateLimitType ?? i.rate_limit_type) === "string" ? { window: String(i.rateLimitType ?? i.rate_limit_type) } : {}), ...(u !== undefined ? { used: u <= 1 ? u * 100 : u } : {}), ...(at ? { resetsAt: at } : {}), ...(typeof i.status === "string" ? { status: i.status } : {}) }];
   }

@@ -5,6 +5,8 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
+import { ClaudeUsageWatch } from "./claude-usage.js";
+import { claudeUsageRoutes } from "./routes/claude-usage.js";
 import { hostname } from "node:os";
 import { LinkWatch } from "./link-watch.js";
 import { LinkBeaconPoster } from "./link-beacon-post.js";
@@ -1026,6 +1028,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     removeBackgroundReady: () => bgRemover.status().installed,
   };
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
+  // The Claude plan's usage (Roee 27.11): checked every 30 minutes when Claude Code is installed and signed in.
+  const claudeUsage = new ClaudeUsageWatch({ root: paths.root, log: (l) => app.log.info(l) });
+  claudeUsage.start();
+  app.addHook("onClose", async () => claudeUsage.stop());
+  await claudeUsageRoutes(app, claudeUsage);
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });
   services.deviceKeys = deviceKeys;
