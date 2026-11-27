@@ -383,6 +383,10 @@ export const KesherConfigSchema = z.object({
   toolCap: z.number().int().min(8).max(80).optional(),
   /** Model size per turn: simple messages go to a smaller model loaded beside the main one. On unless false. */
   smallTurns: z.boolean().optional(),
+  /** "Keep answers short like Claude" (agent turn-shape.ts): on local models, one rewrite of a long step-by-step recap or a wrong-language answer. On unless false. */
+  shortAnswers: z.boolean().optional(),
+  /** The length, in lines, above which a recap answer is rewritten. Unset: 25. */
+  shortAnswerLines: z.number().int().min(10).max(100).optional(),
   /**
    * "Auto" as a chat model (model-router.ts): new chats start on Auto, each model's strengths as the user set them
    * (unset: from its family), and the kinds of message that may go to a cloud model.

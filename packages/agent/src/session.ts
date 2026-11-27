@@ -21,6 +21,7 @@ import { applyTodo, latestTodo, takeSteers, todoProgress, todoReply } from "@kes
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
+import { TURN_SHAPE_PROMPT, shapeFollowUp, silentToolStart } from "./turn-shape.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
@@ -100,6 +101,12 @@ export interface AgentSessionOptions {
    * answered in another one or mixed alphabets. Undefined leaves the answer as it is.
    */
   polishAnswer?: (answer: string, userText: string, signal: AbortSignal) => Promise<string | undefined>;
+  /**
+   * "Keep answers short like Claude" (turn-shape.ts): read on each final answer. Returns the length threshold in lines
+   * when the check applies (the setting is on and the model is local), undefined otherwise. The check costs no model
+   * call; a rewrite is asked for at most once per message.
+   */
+  shortAnswers?: () => { maxLines: number } | undefined;
   /** Whether a stored file exists, so a link to a made-up file id is taken out of the answer (answer-links.ts). */
   assetExists?: (id: string) => boolean | Promise<boolean>;
   modelId: string;
@@ -294,12 +301,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly finalStepReport: boolean;
   /** Notes for the model's next turn (a background helper's report), added before it is asked. */
   private readonly inbox: string[] = [];
+  /** Tool turns whose first output started a tool with no sentence before it (turn-shape.ts; recorded only). */
+  silentStarts = 0;
   private readonly onChange?: (s: AgentSession) => void;
   private statusValue: AgentStatus = "idle";
   /** When the status last changed (ms since 1970). */
   private statusSince = Date.now();
   private readonly reviewerOf?: () => Reviewer | undefined;
   private readonly polishAnswer?: AgentSessionOptions["polishAnswer"];
+  private readonly shortAnswers?: AgentSessionOptions["shortAnswers"];
   private readonly assetExists?: AgentSessionOptions["assetExists"];
   private abort?: AbortController;
   private turn = 0;
@@ -426,6 +436,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.reviewerOf = opts.reviewer;
     this.polishAnswer = opts.polishAnswer;
+    this.shortAnswers = opts.shortAnswers;
     this.assetExists = opts.assetExists;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.helperName = opts.helperName;
@@ -1122,7 +1133,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    */
   contextView(): ContextView {
     const tok = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
-    const system = this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt;
+    const system = this.basePrompt();
     const tools = this.specs().map((t) => ({ name: t.name, tokens: tok(JSON.stringify(t).length) }));
     const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     const msgs = shortenOldToolOutputs(this.pruned().messages);
@@ -1172,13 +1183,22 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * The system prompt for this turn: the caller's, the plan-mode note, and the turn-shape block when the turn has tools
+   * that do work (turn-shape.ts).
+   */
+  private basePrompt(): string {
+    const shape = offersTodo(this.specs().map((t) => t.name), false) ? `\n\n${TURN_SHAPE_PROMPT}` : "";
+    return this.mode === "plan" ? `${this.systemPrompt}${shape}\n\n${PLAN_NOTE}` : `${this.systemPrompt}${shape}`;
+  }
+
+  /**
    * The system prompt and a caller's view of the conversation (viewMessages), its oldest messages left out until it
    * fits the model's window. No summary is made: a summary would read the stored conversation.
    *
    * @param view - The messages to send.
    */
   private fitView(view: AgentMessage[]): AgentMessage[] {
-    const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
+    const system: AgentMessage = { role: "system", content: this.basePrompt() };
     const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     let msgs = view;
     // Cut at a user message, so no answer or tool result is left without what it answers.
@@ -1191,7 +1211,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {
-    const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
+    const system: AgentMessage = { role: "system", content: this.basePrompt() };
     const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
     // One tool output may not take more than a quarter of the window (found on the PC: a whole ScriptNodes.tsx read
     // kept a 24K local model over its limit even after the older steps were summarised).
@@ -1240,7 +1260,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       this.push({ type: "compacted", upTo: cut, summary });
     }
     const recent = msgs.slice(cut);
-    return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...(sizeOf(recent) > budget * 0.8 ? shortenOldToolOutputs(recent, 1) : recent)];
+    return [{ role: "system", content: `${this.basePrompt()}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...(sizeOf(recent) > budget * 0.8 ? shortenOldToolOutputs(recent, 1) : recent)];
   }
 
   /**
@@ -1398,6 +1418,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       let nudges = 0;
       // A turn cut off at the token limit gets one nudge to answer briefly (see `truncated` below).
       let cutNudged = false;
+      // The turn-shape rewrite (turn-shape.ts) is asked for once per message.
+      let reshaped = false;
+      // Whether this message's first output already started a tool (to record a start with no sentence before it).
+      let firstOutputSeen = false;
       let reviews = 0;
       const team = this.team?.() ?? [];
       const planner = team.find((m) => m.role === "planner");
@@ -1481,6 +1505,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           this.messages.push({ role: "user", content: "[KesherAI] You ran out of room while thinking. Do not think any more: answer briefly now, or make the next tool call with short arguments." });
           continue;
         }
+        if (!firstOutputSeen) {
+          firstOutputSeen = true;
+          // Recorded only, nothing is injected: a tool turn that starts with no sentence before its first tool.
+          if (silentToolStart(result.text, result.toolCalls.length)) this.silentStarts++;
+        }
         let shown = result.text;
         // The final answer without links the app cannot open (invented players and file addresses).
         if (result.toolCalls.length === 0 && shown) shown = await neutralizeLinks(shown, this.assetExists);
@@ -1502,6 +1531,19 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             this.push({ type: "note", text: nudge.note });
             this.messages.push({ role: "user", content: nudge.message });
             continue;
+          }
+          // "Keep answers short like Claude": one rewrite, local models only, when the answer recaps its steps at
+          // length or is in the wrong script (the checks cost no model call).
+          const shape = !reshaped && !abort.signal.aborted ? this.shortAnswers?.() : undefined;
+          if (shape) {
+            const asked = [...this.messages].reverse().find((m) => m.role === "user" && !(typeof m.content === "string" && m.content.startsWith("[KesherAI]")));
+            const fix = shapeFollowUp(shown, typeof asked?.content === "string" ? asked.content : "", shape.maxLines);
+            if (fix) {
+              reshaped = true;
+              this.push({ type: "note", text: fix.kind === "hebrew" ? "The answer was not in Hebrew: asked to rewrite it once." : "The answer was long and listed its steps: asked to shorten it once." });
+              this.messages.push({ role: "user", content: fix.message });
+              continue;
+            }
           }
           if (reviewer && reviews < 2) {
             reviews++;

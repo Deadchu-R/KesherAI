@@ -1095,3 +1095,29 @@ test("todo: a chat without tools that do work is not offered it", async () => {
   await waitFor(session, (e) => e.type === "assistant");
   assert.ok(!seen[0]!.tools.some((t) => t.name === "todo"));
 });
+
+test("turn shape: a long recap answer is rewritten once, and only when the setting applies", async () => {
+  const recap = "First I read the file. Then I edited it.\n" + Array.from({ length: 30 }, () => "more detail here").join("\n");
+  for (const on of [true, false]) {
+    const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+    const { model, seen } = scripted([{ text: recap }, { text: recap }, { text: "unused" }]);
+    const session = new AgentSession({ id: "s", modelId: "m", model, mode: "ask", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", shortAnswers: () => (on ? { maxLines: 25 } : undefined) });
+    session.send("do it");
+    await waitFor(session, (e) => e.type === "status" && e.status === "idle" && session.events.filter((x) => x.type === "assistant").length >= (on ? 2 : 1));
+    // On: the model is asked once more (the second answer is also long, but there is no second retry); off: never.
+    assert.equal(seen.length, on ? 2 : 1, `model turns, on=${on}`);
+    if (on) assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /Shorten your last answer/);
+    assert.match(seen[0]!.messages[0]!.content as string, /How to shape a turn/);
+  }
+});
+
+test("turn shape: a Hebrew user gets one Hebrew rewrite request for a Latin answer", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const en = "I created the file and the tests pass. The summary is ready for you to read now.";
+  const { model, seen } = scripted([{ text: en }, { text: "יצרתי את הקובץ והבדיקות עוברות." }]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "ask", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", shortAnswers: () => ({ maxLines: 25 }) });
+  session.send("תכין לי קובץ");
+  await waitFor(session, (e) => e.type === "assistant" && e.text.startsWith("יצרתי"));
+  assert.equal(seen.length, 2);
+  assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /in Hebrew/);
+});

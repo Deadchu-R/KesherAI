@@ -951,9 +951,9 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
   // The model team (design ModelTeam): which model translates an answer written in another language than the user's.
   // Also the token budget's per-turn tool cap (budget.ts in the agent package) and model size per turn.
-  const team = () => ({ translator: s.config.translator ?? "main", toolCap: s.config.toolCap ?? DEFAULT_TOOL_CAP, smallTurns: s.config.smallTurns !== false });
+  const team = () => ({ translator: s.config.translator ?? "main", toolCap: s.config.toolCap ?? DEFAULT_TOOL_CAP, smallTurns: s.config.smallTurns !== false, shortAnswers: s.config.shortAnswers !== false, shortAnswerLines: s.config.shortAnswerLines ?? 25 });
   app.get("/api/model-team", async () => team());
-  app.put<{ Body: { translator?: string; toolCap?: number; smallTurns?: boolean } }>("/api/model-team", async (req, reply) => {
+  app.put<{ Body: { translator?: string; toolCap?: number; smallTurns?: boolean; shortAnswers?: boolean; shortAnswerLines?: number } }>("/api/model-team", async (req, reply) => {
     if (req.body?.translator !== undefined) {
       const t = String(req.body.translator).trim();
       if (!t || t.length > 300) return reply.code(400).send({ error: "Choose a translator." });
@@ -965,6 +965,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       s.config.toolCap = n;
     }
     if (typeof req.body?.smallTurns === "boolean") s.config.smallTurns = req.body.smallTurns;
+    if (typeof req.body?.shortAnswers === "boolean") s.config.shortAnswers = req.body.shortAnswers;
+    if (req.body?.shortAnswerLines !== undefined) {
+      const n = Number(req.body.shortAnswerLines);
+      if (!Number.isInteger(n) || n < 10 || n > 100) return reply.code(400).send({ error: "The length is a whole number of lines from 10 to 100." });
+      s.config.shortAnswerLines = n;
+    }
     await s.saveConfig();
     return team();
   });

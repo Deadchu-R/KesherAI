@@ -964,6 +964,18 @@ export class ConversationManager {
         const turnOf = modelTurnFor(this.deps.registry, pick === "main" ? model : this.deps.translatorModel ? await this.deps.translatorModel(pick) : pick);
         return answerInUserLanguage(answer, userText, async (system, text) => (await turnOf({ messages: [{ role: "system", content: system }, { role: "user", content: text }], tools: [] }, signal, () => undefined)).text);
       },
+      // "Keep answers short like Claude" (agent turn-shape.ts): local models only (a cloud model already shapes its turn), when the setting is on.
+      shortAnswers: () => {
+        if (this.deps.config.shortAnswers === false) return undefined;
+        const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
+        if (model.startsWith("agent/")) return undefined;
+        try {
+          if (this.deps.registry.resolve(model).provider.location === "cloud") return undefined;
+        } catch {
+          // An unknown model is treated as local.
+        }
+        return { maxLines: this.deps.config.shortAnswerLines ?? 25 };
+      },
       // Smart auto approvals (F10): the chat's own model reviews a plain command first, when turned on in Settings.
       reviewer: () => {
         const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;

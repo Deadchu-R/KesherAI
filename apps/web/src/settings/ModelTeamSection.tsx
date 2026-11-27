@@ -16,14 +16,16 @@ export function ModelTeamSection() {
   const [translator, setTranslator] = useState<string | null>(null);
   const [toolCap, setToolCap] = useState(24);
   const [smallTurns, setSmallTurns] = useState(true);
+  const [shortAnswers, setShortAnswers] = useState(true);
   const [models, setModels] = useState<Model[]>([]);
   // Downloaded translation models (TranslateGemma…): chosen by file, loaded beside the main model when needed.
   const [files, setFiles] = useState<Array<{ path: string; name: string }>>([]);
   useEffect(() => {
-    void api<{ translator: string; toolCap?: number; smallTurns?: boolean }>("/api/model-team").then((r) => {
+    void api<{ translator: string; toolCap?: number; smallTurns?: boolean; shortAnswers?: boolean }>("/api/model-team").then((r) => {
       setTranslator(r.translator);
       if (r.toolCap) setToolCap(r.toolCap);
       setSmallTurns(r.smallTurns !== false);
+      setShortAnswers(r.shortAnswers !== false);
     }, () => undefined);
     void api<{ models: Model[] }>("/api/models").then((r) => setModels(r.models.filter((m) => (m.category ?? "chat") === "chat")), () => undefined);
     void api<Array<{ path: string; name: string; gguf?: boolean; source?: string }>>("/api/models/local").then((r) => setFiles(r.filter((m) => m.gguf && m.source === "KesherAI" && /translat/i.test(m.name)).map((m) => ({ path: m.path, name: m.name.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") }))), () => undefined);
@@ -36,6 +38,10 @@ export function ModelTeamSection() {
   const saveSmall = (on: boolean) => {
     setSmallTurns(on);
     void api("/api/model-team", { method: "PUT", body: { smallTurns: on } }).catch((e: Error) => toast(e.message));
+  };
+  const saveShort = (on: boolean) => {
+    setShortAnswers(on);
+    void api("/api/model-team", { method: "PUT", body: { shortAnswers: on } }).catch((e: Error) => toast(e.message));
   };
   const saveCap = (n: number) => {
     setToolCap(n);
@@ -67,6 +73,11 @@ export function ModelTeamSection() {
         <span className="grow">⚡ {L("הודעות פשוטות למודל הקטן", "Simple messages to the small model")}</span>
       </label>
       <p className="muted small">{L("כשמודל קטן טעון ליד הראשי (מודלים > צ'אט), הודעה קצרה ופשוטה (שלום, תודה, שאלה קצרה) נענית בו, מהר יותר. קוד, קבצים וכלים נשארים אצל המודל הראשי.", "When a small model is loaded beside the main one (Models > Chat), a short, simple message (hello, thanks, a short question) is answered by it, faster. Code, files and tools stay with the main model.")}</p>
+      <label className="row">
+        <input type="checkbox" checked={shortAnswers} onChange={(e) => saveShort(e.target.checked)} />
+        <span className="grow">✂️ {L("תשובות קצרות כמו של Claude", "Keep answers short like Claude")}</span>
+      </label>
+      <p className="muted small">{L("במודל מקומי: אם התשובה הסופית ארוכה ומונה את כל השלבים שנעשו, או שנכתבה באנגלית למי שכתב בעברית, המודל מתבקש פעם אחת לכתוב אותה מחדש: מה יצא, הקובץ, והצעד הבא.", "On a local model: when the final answer is long and lists every step taken, or is in English for someone who wrote Hebrew, the model is asked once to rewrite it: what came out, the file, and the next step.")}</p>
     </section>
   );
 }
