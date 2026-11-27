@@ -602,3 +602,17 @@ in a fresh guest profile of KesherAI's browser, never the user's Chrome, never m
   - ✅ S: approvals view (MCP App `ui://kesher/approvals`) with tools `kesher_approvals` / `kesher_approve` on the hub connector (Allow / Deny / Allow for 10 minutes; needs the connector opt-in AND "let the connected app answer approval cards"; dangerous commands and screen control stay the user's); pictures in tools/design/out/connector/. ⬜ L: model jobs gallery view (image/audio/video previews, cancel/retry); ⬜ S: a search/toolset entry so Claude picks the right tool as the list grows.
   - ✅ M: Claude Desktop extension (.mcpb) for the local MCP server: built on request, "Download for Claude Desktop" in Settings › MCP server, the same six task tools as the hub connector on the local server (docs/CLAUDE_CONNECTOR.md › Claude Desktop (local)). ⬜ S: check the manifest with `mcpb validate` and a real install in Claude Desktop (Roee). ⬜ S: phone smoke test of the connector in the Claude Android app.
 - ⬜ r-20261127-01 and -03 failed again on search (every engine blocked or irrelevant; Gemini fallback result not visible in the note): check the Gemini Google Search fallback on the PC, then rerun.
+
+## Chats like Claude — from the 28.11 gap research
+Ordered by user impact (RESEARCH_LOG "2026-11-28 night — chats like Claude, gap research"). Each ships checked in remote (phone) too.
+- ⬜ S: done-gate in `session.ts`: a final answer while `todo` has open items gets one nudge (max 2 per message), plus the open steps appended to the newest tool result (recitation); add a chat-checks scenario `stops-with-open-todo`; measure the rate on Qwen 27B / 9B before and after.
+- ⬜ S: sampling presets per model family for agent turns (Qwen top_k 20, top_p 0.95, temperature by thinking mode; confirm values on the model cards), sent through `llamaCppFields`, switch in Settings › Engine, off for other providers.
+- ⬜ M: a foreground `run_command` that reaches its timeout moves to the background (id returned, `command_output` / `command_stop` work) instead of being killed; "Run in background" button on a running command card (desktop and phone).
+- ⬜ S: "Shall I...?" detector: a final answer that only asks permission for a clear, non-destructive request gets one re-prompt to act; never when `ask_user` was used or the action is destructive.
+- ⬜ M: parallel dispatch of read-only tool calls from one model step (`Promise.all`, order of results kept, limit 3 on CPU-only machines); measure steps and seconds per task.
+- ⬜ S: static prefill budget test: fails when the system prompt plus core tool specs grow past a byte limit; log `prompt_n` vs cached tokens per turn and compare before/after `capTools` re-ranking.
+- ⬜ S: grammar-constrained retry (GBNF from the tool schema) only after an invalid-JSON tool call, per-build flag.
+- ⬜ S: phone push text carries a short result excerpt; ⬜ M: Scheduled page (upcoming and past runs, pause / resume / run now) and a confirm card (name, schedule, instructions) before `schedule_task` saves.
+- ⬜ S: audit the 20.11 gap-list rows C9 (media view), C11 (download chip under made files), C12 ("remembered" chip with undo): mark built ones done, list the rest.
+- ⬜ S: tools return what changed (hash or diff) for `write_file` and command exit codes, so a claim of success can be checked; ⬜ S: background-command stop on low memory (Windows `os.freemem` polling).
+- ⬜ S: default-model advice: prefer dense 27B over 35B-A3B MoE for agent chats in the model picker note (measure with the chat-checks runner first).
