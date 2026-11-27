@@ -520,6 +520,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const chatTimers = new ChatTimers(join(paths.root, "timers.json"), {
     send: (convId, text) => services.conversations.send(convId, text),
     exists: async (convId) => !!library.summary(convId),
+    // A check-back's turn tells the phone when it ends, however short (like a message written on the phone).
+    onCheckBack: (convId) => notifier.messageFromPhone(convId),
   });
   void chatTimers.start();
   // While an update waits for a free moment no new agent run starts (inbox, work loop, routines): update-drain.ts.

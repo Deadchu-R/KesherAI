@@ -19,7 +19,14 @@ export interface ChatTimer {
   /** When (ms since 1970). */
   due: number;
   setAt: number;
+  /** "checkback" when the model asked with check_back_later (a note to itself; its turn notifies the phone). */
+  kind?: "checkback";
 }
+
+/** At most this many waiting check-backs per chat. */
+export const CHECKBACKS_PER_CHAT = 5;
+/** A check-back is 1 minute to 12 hours ahead. */
+export const CHECKBACK_MAX_MINUTES = 720;
 
 /** At most this many waiting timers per chat. */
 export const TIMERS_PER_CHAT = 10;
@@ -62,6 +69,8 @@ export interface TimerDeps {
   send(convId: string, text: string): Promise<unknown>;
   /** Whether the chat still exists. */
   exists(convId: string): Promise<boolean>;
+  /** A check-back is about to go into a chat (its turn's end then notifies the phone, even when short). */
+  onCheckBack?(convId: string): void;
 }
 
 /** Keeps the waiting timers and fires them on time. */
@@ -107,12 +116,16 @@ export class ChatTimers {
   /**
    * Sets a timer.
    *
+   * @param kind - "checkback" for check_back_later (its own limit of 5 per chat).
    * @returns The timer, or an error message.
    */
-  async add(convId: string, prompt: string, due: number): Promise<ChatTimer | string> {
-    if (!prompt.trim()) return "Say what the chat should do when the timer fires (prompt).";
-    if (this.list(convId).length >= TIMERS_PER_CHAT) return `This chat already has ${TIMERS_PER_CHAT} timers waiting. Cancel one first.`;
-    const t: ChatTimer = { id: randomUUID().slice(0, 8), convId, prompt: prompt.trim().slice(0, 2000), due, setAt: this.now() };
+  async add(convId: string, prompt: string, due: number, kind?: "checkback"): Promise<ChatTimer | string> {
+    if (!prompt.trim()) return kind ? "Say what to check when you come back (note)." : "Say what the chat should do when the timer fires (prompt).";
+    const mine = this.list(convId);
+    if (kind === "checkback" ? mine.filter((x) => x.kind === "checkback").length >= CHECKBACKS_PER_CHAT : mine.length >= TIMERS_PER_CHAT) {
+      return kind ? `This chat already has ${CHECKBACKS_PER_CHAT} check-backs waiting. Cancel one first.` : `This chat already has ${TIMERS_PER_CHAT} timers waiting. Cancel one first.`;
+    }
+    const t: ChatTimer = { id: randomUUID().slice(0, 8), convId, prompt: prompt.trim().slice(0, 2000), due, setAt: this.now(), ...(kind ? { kind } : {}) };
     this.list_.push(t);
     await this.save();
     return t;
@@ -145,7 +158,10 @@ export class ChatTimers {
       try {
         if (!(await this.deps.exists(t.convId))) continue;
         const late = now - t.due > 5 * 60_000 ? " (late: KesherAI was closed when it was due)" : "";
-        await this.deps.send(t.convId, `⏰ Timer${late}: ${t.prompt}`);
+        if (t.kind === "checkback") {
+          this.deps.onCheckBack?.(t.convId);
+          await this.deps.send(t.convId, `[KesherAI] Check-back${late}: ${t.prompt}`);
+        } else await this.deps.send(t.convId, `⏰ Timer${late}: ${t.prompt}`);
       } catch {
         // the chat is gone or cannot take a message now; the timer is not tried again
       }
@@ -205,6 +221,29 @@ export function timerTools(timers: ChatTimers, convId: string, notify: (title: s
         const t = await timers.add(convId, String(input.prompt ?? ""), due);
         if (typeof t === "string") throw new Error(t);
         return { output: `Timer set ${whenText(t.due, now())}. The user can see and cancel it in this chat.` };
+      },
+    },
+    {
+      risk: "read",
+      spec: {
+        name: "check_back_later",
+        description:
+          "Come back to this chat later, like \"I'll check back in 20 minutes\": after `minutes` you get a new turn that starts with your `note`. Use it while you wait for a build, an install, a download or another long job, instead of checking again and again in a loop, and keep working on other things meanwhile. The user sees the waiting check-back in the chat and can cancel it; the turn follows the chat's mode and approvals. Up to 5 waiting per chat.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            minutes: { type: "number", description: "1 to 720: how long from now." },
+            note: { type: "string", description: "What to check when you come back, written to yourself (what you waited for and what to do next)." },
+          },
+          required: ["minutes", "note"],
+        },
+      },
+      async run(input) {
+        const m = Math.round(Number(input.minutes));
+        if (!Number.isFinite(m) || m < 1 || m > CHECKBACK_MAX_MINUTES) throw new Error(`minutes must be a whole number from 1 to ${CHECKBACK_MAX_MINUTES}.`);
+        const t = await timers.add(convId, String(input.note ?? ""), now() + m * 60_000, "checkback");
+        if (typeof t === "string") throw new Error(t);
+        return { output: `You will check back ${whenText(t.due, now())}. The user can see and cancel it in this chat. Carry on with other work meanwhile.` };
       },
     },
     {

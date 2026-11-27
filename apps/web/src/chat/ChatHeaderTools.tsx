@@ -118,7 +118,7 @@ export function exportChat(id: string, kind: "md" | "pdf"): void {
 }
 
 /** A timer the model set in this chat (chat-timers.ts). */
-interface WaitingTimer { id: string; prompt: string; due: number }
+interface WaitingTimer { id: string; prompt: string; due: number; kind?: "checkback" }
 
 /**
  * The model's waiting timers in this chat ("check the build in an hour"), shown only when there are some: a clock
@@ -148,7 +148,21 @@ export function TimersButton({ convId }: { convId: string }) {
       () => setTimers((x) => x.filter((y) => y.id !== id)),
       (e: Error) => toast(e.message),
     );
+  // The soonest check_back_later: "⏰ checks back at 19:40 · Cancel" (the label is hidden on a phone, the time and Cancel stay).
+  const next = timers.find((x) => x.kind === "checkback");
+  const chip = next && (
+    <span className="checkback-chip" title={next.prompt} dir="auto">
+      <span aria-hidden>⏰</span>
+      <span className="checkback-label">{he ? "חוזר לבדוק ב-" : "checks back at "}</span>
+      <b>{new Date(next.due).toLocaleTimeString(he ? "he-IL" : undefined, { hour: "2-digit", minute: "2-digit" })}</b>
+      <button type="button" className="checkback-cancel" onClick={() => cancel(next.id)} aria-label={he ? "ביטול הבדיקה החוזרת" : "Cancel the check-back"}>
+        · {he ? "ביטול" : "Cancel"}
+      </button>
+    </span>
+  );
   return (
+    <>
+    {chip}
     <Menu
       trigger={<><LineIcon name="bell" size={16} /> {timers.length}</>}
       triggerClassName="pane-btn"
@@ -163,6 +177,7 @@ export function TimersButton({ convId }: { convId: string }) {
         </MenuItem>
       ))}
     </Menu>
+    </>
   );
 }
 

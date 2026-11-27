@@ -90,7 +90,7 @@ export const CHAT_TOOL_GROUPS: readonly ChatToolGroup[] = [
   { id: "files", he: "קבצים וקוד", en: "Files and code", about: "read, write and run files, code and programs", tools: /^(read_file|view_image|write_file|edit_file|list_files|code_map|find_symbol|search|check_code|run_command|build_executable|check_tools|install_tool|download_file)$/, words: ["קוד", "קובץ", "קבצ", "סקריפט", "תוכנית", "תריץ", "הרץ", "תבנה", "פייתון", "code", "file", "script", "program", "run ", "build", "exe", "python", "folder"] },
   { id: "memory", he: "זיכרון וידע", en: "Memory and knowledge", about: "remember or recall facts about the user, search their knowledge base", tools: /^(remember|recall|forget|search_knowledge)$/, words: ["זכור", "תזכור", "זיכרון", "זוכר", "remember", "memory", "recall", "forget"] },
   { id: "helpers", he: "סוכני עזר", en: "Helper agents", about: "hand parts of a big task to helper agents working in parallel", tools: /^(delegate|helper_\w+|ask_member|ask_model|split_across_computers)$/, words: ["סוכנ", "עוזרים", "במקביל", "agents", "helpers", "in parallel", "delegate"] },
-  { id: "timers", he: "טיימרים ותזכורות", en: "Timers and reminders", about: "set a timer or a reminder", tools: /^(set_timer|notify_user)$/, words: ["טיימר", "תזכורת", "תזכיר", "timer", "remind", "alarm"] },
+  { id: "timers", he: "טיימרים ותזכורות", en: "Timers and reminders", about: "set a timer or a reminder", tools: /^(set_timer|check_back_later|notify_user)$/, words: ["תחזור אליי", "check back", "טיימר", "תזכורת", "תזכיר", "timer", "remind", "alarm"] },
 ];
 
 /**

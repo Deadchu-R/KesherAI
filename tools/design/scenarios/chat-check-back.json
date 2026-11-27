@@ -1,0 +1,111 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-27T16:00:00Z",
+ "boards": [
+  {
+   "id": "ChatCheckBack",
+   "title": "צ'אט: \"אחזור לבדוק בעוד 20 דקות\" — שבב ⏰ בראש הצ'אט עם ביטול (גם בטלפון); בסיום התור הטלפון מקבל התראה",
+   "titleEn": "Chat: \"I'll check back in 20 minutes\" — a ⏰ chip at the top of the chat with Cancel (phone too); the phone gets a notification when that turn ends",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 700,
+    "phone": 800
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בניית האפליקציה",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תבנה את הגרסה ותגיד לי כשהיא מוכנה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הבנייה רצה ברקע. אחזור לבדוק בעוד 20 דקות, ובינתיים אכתוב את הערות העדכון."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/timers*",
+     "json": {
+      "timers": [
+       {
+        "id": "a1",
+        "convId": "c1",
+        "prompt": "Check the build and tell the user it is ready",
+        "due": {
+         "$inMs": "20m"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "checkback"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".checkback-chip"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".checkback-chip"
+    }
+   ]
+  }
+ ]
+}

@@ -76,3 +76,37 @@ test("notify_user: one a minute per chat, across turns", async () => {
   assert.match((await set.run({ in: "45m", prompt: "Check" }, ctx)).output, /in 45 minutes/);
   await assert.rejects(set.run({ in: "1s", prompt: "Check" }, ctx), /30 seconds/);
 });
+
+test("check_back_later: 1..720 minutes, 5 waiting per chat, kept on disk, fires as a [KesherAI] turn and tells the phone", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-checkback-"));
+  const file = join(dir, "timers.json");
+  let now = T0;
+  const sent: Array<[string, string]> = [];
+  const phone: string[] = [];
+  const deps = { send: async (c: string, t: string) => void sent.push([c, t]), exists: async () => true, onCheckBack: (c: string) => void phone.push(c) };
+  const timers = new ChatTimers(file, deps, () => now);
+  const tool = timerTools(timers, "c1", async () => undefined, () => now).find((t) => t.spec.name === "check_back_later")!;
+  const run = (input: Record<string, unknown>) => tool.run(input as never, {} as never);
+  await assert.rejects(run({ minutes: 0, note: "x" }), /1 to 720/);
+  await assert.rejects(run({ minutes: 721, note: "x" }), /1 to 720/);
+  await assert.rejects(run({ minutes: 5, note: "  " }), /note/);
+  for (let i = 1; i <= 5; i++) await run({ minutes: i * 10, note: `Build ${i}` });
+  await assert.rejects(run({ minutes: 5, note: "one too many" }), /5 check-backs/);
+  // Another chat and plain timers have their own limits.
+  assert.ok(typeof (await timers.add("c2", "x", T0 + 60_000, "checkback")) !== "string");
+  assert.ok(typeof (await timers.add("c1", "plain", T0 + 60_000)) !== "string");
+  // A restart keeps them on disk.
+  const again = new ChatTimers(file, deps, () => now);
+  await again.start();
+  again.stop();
+  assert.equal(again.list("c1").length, 6);
+  now = T0 + 11 * 60_000;
+  await again.tick();
+  assert.deepEqual(sent.filter(([c]) => c === "c1").map(([, t]) => t).sort(), ["[KesherAI] Check-back: Build 1", "⏰ Timer (late: KesherAI was closed when it was due): plain"]);
+  assert.ok(phone.includes("c1"));
+  // Due while KesherAI was closed: still fires, marked late.
+  now = T0 + 3 * 3_600_000;
+  await again.tick();
+  assert.ok(sent.some(([, t]) => /^\[KesherAI\] Check-back \(late: KesherAI was closed when it was due\): Build 5$/.test(t)));
+  assert.equal(again.list("c1").length, 0);
+});
