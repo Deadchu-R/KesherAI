@@ -31,6 +31,8 @@ async function setup() {
   const procs: Fake[] = [];
   const killed: Array<number | undefined> = [];
   let t = 1_000_000;
+  /** What the "OS" says each pid's process started at (restart tests); unknown pids are gone. */
+  const osStart = new Map<number, number>();
   const mk = () =>
     new BackgroundCommands({
       dir,
@@ -45,9 +47,10 @@ async function setup() {
         killed.push(pid);
         (child as unknown as Fake | undefined)?.kill();
       },
+      startedAtOf: async (pid) => osStart.get(pid),
       now: () => t,
     });
-  return { dir, sent, woke, procs, killed, mk, tick: (ms: number) => (t += ms) };
+  return { dir, sent, woke, procs, killed, osStart, mk, tick: (ms: number) => (t += ms) };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 30));
@@ -141,6 +144,7 @@ test("on restart a command still marked running is killed by pid and marked ende
   const s = await setup();
   const first = s.mk();
   const c = await first.run("c1", "npm run dev", "/p");
+  s.osStart.set(c.pid!, c.startedAt + 300); // the same process, still running
   const second = s.mk();
   await second.start();
   assert.deepEqual(s.killed, [c.pid]);
@@ -179,4 +183,17 @@ test("run_command wrap: background starts one, plain calls pass through", async 
   assert.equal(w.risk, "exec");
   assert.equal(bg.wrap("c1", { ...orig, spec: { ...orig.spec, name: "read_file" } }).spec.name, "read_file");
   await assert.rejects(w.run({ command: "x", background: true }, { ...ctx, workspace: undefined as unknown as string }), /no project folder/);
+});
+
+test("on restart a pid the OS gave to another program (or a gone process) is never killed", async () => {
+  const s = await setup();
+  const first = s.mk();
+  const a = await first.run("c1", "npm run dev", "/p");
+  await first.run("c1", "npm run build", "/p");
+  s.osStart.set(a.pid!, a.startedAt + 3_600_000); // pid reused by a program started an hour later
+  // b: gone (no start time)
+  const second = s.mk();
+  await second.start();
+  assert.deepEqual(s.killed, []);
+  assert.ok(second.list("c1").every((c) => c.state === "ended"));
 });

@@ -59,8 +59,30 @@ export interface BackgroundDeps {
   spawn?(command: string, cwd: string, env: Record<string, string>): ChildProcess;
   /** Kills a process and its children (default: killTree). */
   kill?(pid: number | undefined, child?: ChildProcess): void;
+  /** When a running process started (ms), or undefined when it is gone or unknown (default: processStartedAt). */
+  startedAtOf?(pid: number): Promise<number | undefined>;
   /** The clock (tests). */
   now?(): number;
+}
+
+/**
+ * When the process with this pid started (ms since epoch), from the OS: PowerShell on Windows, `ps` elsewhere.
+ * Undefined when there is no such process or the OS does not say.
+ *
+ * @param pid - The process id.
+ * @returns The start time, or undefined.
+ */
+export async function processStartedAt(pid: number): Promise<number | undefined> {
+  if (!Number.isInteger(pid) || pid <= 0) return undefined;
+  const { execFile } = await import("node:child_process");
+  const run = (cmd: string, args: string[]) =>
+    new Promise<string>((res) => execFile(cmd, args, { timeout: 5000, windowsHide: true }, (err, out) => res(err ? "" : String(out).trim())));
+  const out =
+    process.platform === "win32"
+      ? await run("powershell.exe", ["-NoProfile", "-Command", `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).StartTime.ToUniversalTime().ToString('o')`])
+      : await run("ps", ["-o", "lstart=", "-p", String(pid)]);
+  const t = out ? Date.parse(out) : NaN;
+  return Number.isFinite(t) ? t : undefined;
 }
 
 /** @returns "2m 14s", "45s" or "1h 05m" for a length in milliseconds. */
@@ -99,7 +121,7 @@ export class BackgroundCommands {
 
   /**
    * Reads the saved list: a command still marked running was running when KesherAI went down. Its process is killed
-   * by pid (it may have outlived us) and it is marked "ended with KesherAI".
+   * by pid only when that pid is still the same process (start time matches), and it is marked "ended with KesherAI".
    */
   start(): Promise<void> {
     this.loaded ??= (async () => {
@@ -111,7 +133,12 @@ export class BackgroundCommands {
       }
       for (const c of this.list_) {
         if (c.state !== "running") continue;
-        if (c.pid) (this.deps.kill ?? killTree)(c.pid);
+        // Kill only the very process we started: the OS may have given its pid to another program since (a crash, a
+        // restart). Same pid AND it started within 10 s of our start; anything else is left alone.
+        if (c.pid) {
+          const began = await (this.deps.startedAtOf ?? processStartedAt)(c.pid).catch(() => undefined);
+          if (began !== undefined && Math.abs(began - c.startedAt) <= 10_000) (this.deps.kill ?? killTree)(c.pid);
+        }
         c.state = "ended";
         c.endedAt = this.now();
       }
