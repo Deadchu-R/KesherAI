@@ -2173,6 +2173,233 @@
      "wait": ".acard"
     }
    ]
+  },
+  {
+   "id": "HubAgQuotaChip",
+   "title": "ענן Kesher: משימות — מכסת Antigravity על השבב שלו (אחוז שנשאר / מתי מתחדש), ומשימה של GhostCLI",
+   "titleEn": "Kesher Cloud: Tasks — Antigravity quota on its chip (share left / when it resets), and a GhostCLI task",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".wfilters"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "priority": 1,
+       "boardId": "t30",
+       "agQuota": {
+        "left": 0.44
+       }
+      }
+     },
+     {
+      "title": "להוסיף סינון ליומן השימוש",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "opencode",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "1m"
+       },
+       "steps": 9,
+       "estSteps": 14,
+       "model": "ghostcli/claude-opus-5-5",
+       "kind": "code",
+       "startedAt": {
+        "$agoMs": "12m"
+       }
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "priority": 1,
+       "queuePos": 1,
+       "agQuota": {
+        "left": 0.44
+       }
+      }
+     },
+     {
+      "title": "להמיר את חבילת Unity ל-2020.3",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 12,
+       "kind": "conversion",
+       "priority": 2,
+       "queuePos": 2,
+       "agQuota": {
+        "left": 0.44
+       }
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 4,
+       "model": "qwen3-8b",
+       "kind": "code",
+       "priority": 4,
+       "queuePos": 3
+      }
+     },
+     {
+      "title": "לבדוק מתחרים בעורך וידאו",
+      "status": "deferred",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "15m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 5,
+       "kind": "research"
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t1",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 8,
+       "model": "Gemini 3 Pro",
+       "startedAt": {
+        "$agoMs": "7m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       }
+      ]
+     }
+    ]
+   }
   }
  ]
 }

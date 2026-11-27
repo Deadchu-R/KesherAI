@@ -535,3 +535,16 @@ Like Skyscanner, but on the PC and private ("like incognito"): the sites should 
 - ⬜ Automation: a watch that searches every X time (route, dates, max price) and notifies when a cheaper option appears (price history per watch).
 - ⬜ In chat: takes context from the conversation ("a week in Rome in March, under 300€") and shows the whole view inside the chat itself (cards, calendar, map), plus "open in the travel page".
 - ⬜ Design-doc boards first (desktop + phone), then build.
+
+## Hub task chat on a small CPU model (Roee, 27.11 13:15)
+A chat in the Kesher Cloud hub (also in the phone app) that talks to a small model on the PC, CPU only (`-ngl 0`, the
+watchdog/router model's way: loaded on demand, unloaded after idle). Its only job: organize the task list — add tasks,
+split them into steps, reorder, set priority, assign an executor. No code, no shell; deletes ask first.
+- ⬜ Research to Gemini: r-20261127-01 (competitors' AI task chats, small CPU models with Hebrew + tool calls, GBNF/JSON-schema reliability, latency, safety, Language and weight) — queued in kesher-inbox 27.11.
+- ⬜ Gap list against the code (Claude): reuse watchdog-model.ts (CPU loan of the router GGUF), task-inbox actions (assign/queue/model/priority), hub-protocol (a new relay message pair: hub chat → PC → answer + proposed changes).
+- ⬜ Design boards (cloud doc 1MJnsdiaPC1WWwNt75DS1G): the hub chat (phone 390 + desktop), proposed-changes card with Apply / Undo, "thinking on the CPU" line, model not on this PC → one-tap download ask.
+- ⬜ Build: PC side (task-chat.ts: fixed action list with a JSON-schema grammar, only the relevant tasks in the prompt, confirm for deletes), hub side (chat tab, streaming through the relay), tests, then a release.
+
+## 27.11 (chat 4)
+- ✅ Design boards owed to the cloud doc: InboxStatusList, InboxModelChip, InboxWhoGhost, InboxTaskProgress, HubAgQuotaChip (scenarios task-inbox-status.json + hub.json), published 27.11.
+- ⬜ GhostCLI load (Roee 27.11: usage tracking per option is very important; send to GhostCLI while it works, as much as its terms allow): queued o-20261127-01 usage page, -02 usage meter, -03 runs inside the task (r-20261126-06), -04 logs l-01, -05 logs l-03/l-04 — all executor opencode, model ghostcli/*. Review their ocgo/* branches.

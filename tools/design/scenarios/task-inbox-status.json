@@ -1,0 +1,436 @@
+{
+ "group": "סוכנים · Agents",
+ "mocks": [
+  {
+   "url": "**/api/task-inbox",
+   "json": {
+    "settings": {
+     "enabled": true,
+     "paused": false,
+     "repo": "D:/Projects/KesherAI",
+     "branch": "kesher-inbox",
+     "fetchMinutes": 10,
+     "dailyCap": 10,
+     "maxMinutes": 30,
+     "model": "",
+     "allowedPaths": [],
+     "forbiddenPaths": [],
+     "commands": [
+      "pnpm -s typecheck"
+     ],
+     "notWhileGame": true,
+     "notWhileEditor": false,
+     "gpuBusyPercent": 0
+    },
+    "today": {
+     "date": "2026-11-20",
+     "used": 3
+    },
+    "busy": {
+     "free": true,
+     "reasons": []
+    },
+    "runHere": true,
+    "project": "KesherAI",
+    "lastFetch": {
+     "$agoMs": "2m"
+    },
+    "tasks": [
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "id": "t-0501",
+      "title": "להוסיף סינון לפי רמה ביומן השימוש",
+      "status": "running",
+      "runBy": "opencode",
+      "model": "ghostcli/*",
+      "modelUsed": "ghostcli/claude-opus-5-5",
+      "steps": 9,
+      "startedAt": {
+       "$agoMs": "12m"
+      },
+      "stepLog": [
+       {
+        "tool": "read_file",
+        "target": "apps/web/src/pages/UsageLogPage.tsx",
+        "at": {
+         "$agoMs": "6m"
+        }
+       },
+       {
+        "tool": "grep",
+        "target": "level",
+        "at": {
+         "$agoMs": "4m"
+        }
+       },
+       {
+        "tool": "edit_file",
+        "target": "apps/web/src/pages/UsageLogPage.tsx",
+        "at": {
+         "$agoMs": "2m"
+        }
+       },
+       {
+        "tool": "bash",
+        "target": "pnpm -s typecheck",
+        "at": {
+         "$agoMs": "1m"
+        }
+       }
+      ],
+      "plan": [
+       {
+        "content": "לקרוא את הדף",
+        "status": "completed"
+       },
+       {
+        "content": "להוסיף את הסינון",
+        "status": "completed"
+       },
+       {
+        "content": "להריץ typecheck",
+        "status": "in_progress"
+       }
+      ],
+      "files": [
+       {
+        "path": "apps/web/src/pages/UsageLogPage.tsx",
+        "added": 31,
+        "removed": 4
+       }
+      ],
+      "goal": "להוסיף סינון לפי רמה ביומן השימוש",
+      "branch": "agy/t-0501",
+      "from": "claude"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "id": "t-0502",
+      "title": "להמיר את חבילת Unity ל-2020.3",
+      "status": "waiting",
+      "runBy": "antigravity",
+      "model": "Claude Opus 4.6 (Thinking)",
+      "goal": "להמיר את חבילת Unity ל-2020.3",
+      "branch": "agy/t-0502",
+      "from": "claude"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "id": "t-0503",
+      "title": "להוסיף תצוגה מקדימה לסצנה",
+      "status": "deferred-quota",
+      "runBy": "antigravity",
+      "autoRetries": 2,
+      "lastFail": {
+       "at": {
+        "$agoMs": "40m"
+       },
+       "status": "deferred-quota",
+       "note": "המכסה של Antigravity נגמרה (Claude+GPT), מתחדשת ב-18:00"
+      },
+      "goal": "להוסיף תצוגה מקדימה לסצנה",
+      "branch": "agy/t-0503",
+      "from": "claude"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "id": "t-0504",
+      "title": "לתקן אזהרות לינט בחבילת core",
+      "status": "failed",
+      "runBy": "local",
+      "lastFail": {
+       "at": {
+        "$agoMs": "1h"
+       },
+       "status": "failed",
+       "note": "typecheck נכשל: 2 שגיאות ב-inbox-runner.ts"
+      },
+      "goal": "לתקן אזהרות לינט בחבילת core",
+      "branch": "agy/t-0504",
+      "from": "self-work"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "id": "t-0505",
+      "title": "מחקר: איך מתחרים מציגים מכסות",
+      "status": "done",
+      "runBy": "gemini",
+      "kind": "research",
+      "modelUsed": "gemini-flash-latest",
+      "goal": "מחקר: איך מתחרים מציגים מכסות",
+      "branch": "agy/t-0505",
+      "from": "claude"
+     }
+    ],
+    "models": [
+     {
+      "id": "m1",
+      "name": "Claude Opus 4.6 (Thinking)",
+      "available": true
+     },
+     {
+      "id": "m2",
+      "name": "Claude Sonnet 4.6 (Thinking)",
+      "available": true
+     },
+     {
+      "id": "m3",
+      "name": "Gemini 3 Pro (High)",
+      "available": true
+     },
+     {
+      "id": "m4",
+      "name": "Gemini 3 Flash",
+      "available": true
+     },
+     {
+      "id": "m5",
+      "name": "GPT-OSS 120B (Medium)",
+      "available": true
+     }
+    ],
+    "agQuota": {
+     "at": {
+      "$agoMs": "5m"
+     },
+     "models": [
+      {
+       "name": "Gemini 3 Pro (High)",
+       "left": 0.99
+      },
+      {
+       "name": "Gemini 3 Flash",
+       "left": 1
+      },
+      {
+       "name": "Claude Opus 4.6 (Thinking)",
+       "left": 0,
+       "resetAt": {
+        "$inMs": "8h"
+       }
+      },
+      {
+       "name": "Claude Sonnet 4.6 (Thinking)",
+       "left": 0,
+       "resetAt": {
+        "$inMs": "8h"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "url": "**/api/task-inbox/work-list",
+   "json": {
+    "items": []
+   }
+  },
+  {
+   "url": "**/api/task-inbox/tasks/t-0501",
+   "json": {
+    "executor": "auto",
+    "risk": "low",
+    "base": "main",
+    "allowedPaths": [
+     "apps/web/"
+    ],
+    "forbiddenPaths": [],
+    "check": "pnpm -s typecheck",
+    "maxMinutes": 30,
+    "maxFiles": 6,
+    "id": "t-0501",
+    "title": "להוסיף סינון לפי רמה ביומן השימוש",
+    "status": "running",
+    "runBy": "opencode",
+    "model": "ghostcli/*",
+    "modelUsed": "ghostcli/claude-opus-5-5",
+    "steps": 9,
+    "startedAt": {
+     "$agoMs": "12m"
+    },
+    "stepLog": [
+     {
+      "tool": "read_file",
+      "target": "apps/web/src/pages/UsageLogPage.tsx",
+      "at": {
+       "$agoMs": "6m"
+      }
+     },
+     {
+      "tool": "grep",
+      "target": "level",
+      "at": {
+       "$agoMs": "4m"
+      }
+     },
+     {
+      "tool": "edit_file",
+      "target": "apps/web/src/pages/UsageLogPage.tsx",
+      "at": {
+       "$agoMs": "2m"
+      }
+     },
+     {
+      "tool": "bash",
+      "target": "pnpm -s typecheck",
+      "at": {
+       "$agoMs": "1m"
+      }
+     }
+    ],
+    "plan": [
+     {
+      "content": "לקרוא את הדף",
+      "status": "completed"
+     },
+     {
+      "content": "להוסיף את הסינון",
+      "status": "completed"
+     },
+     {
+      "content": "להריץ typecheck",
+      "status": "in_progress"
+     }
+    ],
+    "files": [
+     {
+      "path": "apps/web/src/pages/UsageLogPage.tsx",
+      "added": 31,
+      "removed": 4
+     }
+    ],
+    "goal": "להוסיף סינון לפי רמה ביומן השימוש",
+    "branch": "agy/t-0501",
+    "from": "claude"
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "InboxStatusList",
+   "title": "תיבת משימות: מסננים (פתוחות/הכל/ממתינות/רצות/שאלה/הסתיימו + ספק), מכסת Antigravity, פס התקדמות וצעד נוכחי, \"למה לא הצליחה\"",
+   "titleEn": "Task inbox: filters (open/all/waiting/running/ask/ended + provider), Antigravity quota, progress bar and step, \"why it did not succeed\"",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 1000,
+    "phone": 2100
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-filters"
+    },
+    {
+     "wait": ".tinbox-agq"
+    }
+   ]
+  },
+  {
+   "id": "InboxModelChip",
+   "title": "תיבת משימות: כפתור המודל בשורת Antigravity פותח את רשימת המודלים (אוטומטי או מודל מסוים)",
+   "titleEn": "Task inbox: the model chip on an Antigravity row opens the model list (Auto or a set model)",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 1000,
+    "phone": 2100
+   },
+   "steps": [
+    {
+     "wait": ".model-pick"
+    },
+    {
+     "click": ".model-pick > button >> nth=0"
+    },
+    {
+     "wait": ".model-pick .assign-list"
+    }
+   ]
+  },
+  {
+   "id": "InboxWhoGhost",
+   "title": "תיבת משימות: \"מי מבצע\" עם 👻 GhostCLI (ריליי, ניסיון — רק משימות לא רגישות)",
+   "titleEn": "Task inbox: \"Who does it\" with 👻 GhostCLI (relay, trial — non-sensitive tasks only)",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 1100,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has-text('t-0502')"
+    },
+    {
+     "top": ".tinbox-row:has-text('t-0502')"
+    },
+    {
+     "click": ".tinbox-row:has-text('t-0502') .assign:not(.model-pick) > button"
+    },
+    {
+     "wait": ".assign-list"
+    }
+   ]
+  },
+  {
+   "id": "InboxTaskProgress",
+   "title": "משימה רצה על GhostCLI: פס התקדמות, \"צעד X מתוך ~N\", הצעדים האחרונים כשורות קריאות",
+   "titleEn": "A task running on GhostCLI: progress bar, \"step X of ~N\", the last steps as readable lines",
+   "route": "#/task-inbox/t-0501",
+   "height": {
+    "desktop": 1100,
+    "phone": 1800
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-task"
+    }
+   ]
+  }
+ ]
+}
