@@ -74,11 +74,12 @@ export class ReadMemo {
    * @param file - The file's size and time now.
    * @param shown - Whether the earlier result is still in what the model reads in full (not pruned or shortened).
    * @param rel - The path as the model wrote it.
-   * @param outline - The file's outline ("" for none).
+   * @param outlineOf - Makes the file's outline ("" for none); called only when a note is made.
    */
-  repeat(key: string, file: { size: number; mtimeMs: number }, shown: (callId: string) => boolean, rel: string, outline: string): string | undefined {
+  async repeat(key: string, file: { size: number; mtimeMs: number }, shown: (callId: string) => boolean, rel: string, outlineOf: () => Promise<string>): Promise<string | undefined> {
     const was = this.seen.get(key);
     if (!was || was.size !== file.size || was.mtimeMs !== file.mtimeMs || !shown(was.callId)) return undefined;
+    const outline = await outlineOf();
     return [
       `[KesherAI] Not read again: you already read exactly this part of ${rel} at step ${was.step} (result id "${was.callId}") and the file has not changed since. Its text is in that earlier result above.`,
       "Act on it now (edit_file, or read a DIFFERENT range, or search for a name), instead of reading the same part again.",

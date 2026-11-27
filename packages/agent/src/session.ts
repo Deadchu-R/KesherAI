@@ -27,8 +27,9 @@ import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TO
 const PLAN_NOTE =
   "PLAN MODE is on. Do not change anything: no file edits, no commands that change things (those tools are refused). Look around with the read-only tools (list, read and search files) until you understand what is needed, ask the user with ask_user if a choice is theirs, then call present_plan with a clear, numbered plan. After that, stop and wait.";
 import { stat } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
-import { displayPath } from "./workspace.js";
+import { isAbsolute, relative, resolve as resolvePath, sep } from "node:path";
+import { displayPath, resolveForTool } from "./workspace.js";
+import { OUTLINE_MIN_LINES, ReadMemo, fileOutline } from "./read-memo.js";
 import { neutralizeLinks } from "./answer-links.js";
 
 /**
@@ -375,6 +376,29 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.queueChanged();
     return steer.length;
   }
+  /** Commands the model was already told it only wrote and did not run (one nudge each). */
+  private nudgedCommands = new Set<string>();
+  /** What read_file returned in this session (a repeated identical read of an unchanged file gets a note; read-memo.ts). */
+  private readMemo = new ReadMemo();
+  /** The tool results sent to the model in full on its last call (see fitContext). */
+  private sentInFull = new Set<string>();
+  /**
+   * Refuses a file change outside what the run may change (the task inbox's allowed paths): given the path relative to
+   * the workspace (with `/`), it returns the refusal to tell the model, or undefined to go on. See {@link setWriteGuard}.
+   */
+  private writeGuard?: (path: string) => string | undefined;
+
+  /**
+   * Limits which files the write tools may change in this session (the task inbox: its allowed paths). A refused call
+   * fails at once with the guard's message, so the model can change course instead of the whole run being thrown away
+   * at commit time.
+   *
+   * @param guard - Takes the path relative to the workspace (with `/`; "" for a path outside it) and returns why it is refused, or undefined.
+   */
+  setWriteGuard(guard: ((path: string) => string | undefined) | undefined): void {
+    this.writeGuard = guard;
+  }
+
   /** Pictures the tool that just ran returned, for its tool message. */
   private pendingImages?: Array<{ mimeType: string; data: string }>;
   /** The same failure seen in this run, by its key (the loop guard). */
@@ -1013,6 +1037,17 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       };
     }
     void nudges;
+    // The model said it would run a check (typecheck, lint, tests) and ended its turn without calling run_command: in an
+    // unattended run nothing ran and the run ends there (task inbox, 27.11: "repeating typecheck and lint commands without
+    // executing them"). Tell it plainly, once per command.
+    const proposed = this.tools.has("run_command") ? proposedCommand(finalText) : undefined;
+    if (proposed && !this.nudgedCommands.has(proposed)) {
+      this.nudgedCommands.add(proposed);
+      return {
+        note: `KesherAI told the model that \`${proposed}\` was only written, not run.`,
+        message: `[KesherAI] You wrote that you would run \`${proposed}\`, but you did not call run_command, so it did NOT run and you have no result. Call run_command with it now (or say why it cannot run), read its output, fix what it reports, then finish with your report.`,
+      };
+    }
     const handsOff =
       /save (the|this) (code|file)|copy (the|this) code|open (a |the )?(command prompt|terminal|cmd|powershell)|in (a |the |your )?(terminal|command prompt|cmd)|run:?\s*`?(python|py |node|java|npm|pip|pyinstaller)|pip install|pyinstaller --|run the following|type the following|install python from|שמור את הקוד|העתק את הקוד|פתח (את )?(שורת הפקודה|הטרמינל)|בטרמינל|הקלד|הרץ את הפקודה|הרץ:/i.test(finalText);
     if (handsOff && this.tools.has("run_command")) {
@@ -1074,6 +1109,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    */
   private async fitContext(signal: AbortSignal): Promise<AgentMessage[]> {
     const out = this.viewMessages ? this.fitView(this.viewMessages(this.messages)) : await this.fitContextRaw(signal);
+    // The tool results the model got in full this time (a repeated read is answered with a note only when it did).
+    const stored = new Map(this.messages.filter((m) => m.role === "tool" && m.toolCallId).map((m) => [m.toolCallId!, m.content]));
+    this.sentInFull = new Set(out.filter((m) => m.role === "tool" && m.toolCallId && stored.get(m.toolCallId) === m.content).map((m) => m.toolCallId!));
     // Local models drift into English after long tool runs: say the user's language again, last thing in the instructions.
     const note = languageNote([...this.messages].reverse().find((m) => m.role === "user")?.content ?? "");
     if (note && out[0]?.role === "system") out[0] = { ...out[0], content: `${out[0].content}\n\n${note}` };
@@ -1670,6 +1708,38 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
     const tool = this.tools.get(call.name);
     if (!tool) return fail(`There is no tool called "${call.name}".`);
+    const step = this.readMemo.tick();
+    // A write outside what this run may change is refused now, with what it may change (not found only at commit time).
+    if (this.writeGuard && tool.risk === "write" && typeof call.arguments.path === "string") {
+      const abs = isAbsolute(call.arguments.path) ? resolvePath(call.arguments.path) : resolvePath(this.workspace ?? ".", call.arguments.path);
+      const rel = this.workspace ? relative(resolvePath(this.workspace), abs) : call.arguments.path;
+      const inside = !!this.workspace && rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+      const why = this.writeGuard(inside ? rel.split(sep).join("/") : "");
+      if (why) return fail(why);
+    }
+    // The same read of an unchanged file, while its earlier result is still in view: a short note, not the text again.
+    let readKey: { key: string; file: { size: number; mtimeMs: number } } | undefined;
+    if (call.name === "read_file" && typeof call.arguments.path === "string") {
+      try {
+        const abs = await resolveForTool(this.workspace, this.grants, call.arguments.path);
+        const st = await stat(abs);
+        if (st.isFile()) {
+          readKey = { key: ReadMemo.key(abs, call.arguments), file: { size: st.size, mtimeMs: st.mtimeMs } };
+          const rel = call.arguments.path;
+          const outline = async () => {
+            const text = st.size < 5 * 1024 * 1024 ? await readFile(abs, "utf8").catch(() => "") : "";
+            return text.split("\n").length >= OUTLINE_MIN_LINES ? fileOutline(text, rel, 40) : "";
+          };
+          const note = await this.readMemo.repeat(readKey.key, readKey.file, (id) => this.sentInFull.has(id), rel, outline);
+          if (note) {
+            this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output: note });
+            return note;
+          }
+        }
+      } catch {
+        // The tool itself reports a missing or unreadable file.
+      }
+    }
     // Loop guard: the same changing action with the same arguments a third time for one message is refused
     // (seen live: a model started the same build and the same game again and again).
     if (tool.risk === "exec" || tool.risk === "write") {
@@ -1782,6 +1852,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
     try {
       const out = await tool.run(call.arguments, ctx);
+      if (readKey) this.readMemo.record(readKey.key, readKey.file, call.id, step);
       const output = truncate(out.output);
       if (out.images?.length) this.pendingImages = out.images;
       this.push({
@@ -1804,6 +1875,20 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       return fail(err instanceof Error ? err.message : String(err));
     }
   }
+}
+
+/**
+ * A command the model's last answer says it will run (first person, "let me run `pnpm typecheck`") without having run
+ * it: the turn ended with text only, so nothing ran.
+ *
+ * @param text - The model's last answer.
+ * @returns The command (at most 160 characters), or undefined.
+ */
+export function proposedCommand(text: string): string | undefined {
+  const tail = text.slice(-1500);
+  if (!/\b(I'll|I will|I am going to|I'm going to|let me|let's|now I|next,? I|I need to|I should)\b[^.\n]{0,60}\b(run|execute|re-?run|check|verify)\b/i.test(tail)) return undefined;
+  const cmd = /`{1,3}(?:\w*\n)?\s*((?:pnpm|npm|npx|yarn|node|tsc|eslint|vitest|jest|pytest|python|py|dotnet|cargo|go|make|cmake|gradle|mvn)\b[^`\n]{0,150})/i.exec(tail);
+  return cmd?.[1]?.trim().slice(0, 160);
 }
 
 /**

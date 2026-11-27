@@ -94,8 +94,9 @@ export interface TaskInboxDeps {
     /**
      * `onStep` gets the step count and, when known, the step itself (tool and arguments) for the run guard.
      * `attach` is called once with a function that sends a user message into the running chat (the rescue hint).
+     * `paths`: what the task may change; a write tool call outside them is refused when it is made (not at commit time).
      */
-    run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number, step?: AgentStep) => void; attach?: (send: (text: string) => Promise<void>) => void }) => Promise<{ text: string }>;
+    run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number, step?: AgentStep) => void; attach?: (send: (text: string) => Promise<void>) => void; paths?: { allowed: readonly string[]; forbidden: readonly string[] } }) => Promise<{ text: string }>;
   };
   /**
    * Claude Code on this PC (claude-exec.ts; absent: none can run), signed in with the user's own subscription. `check`:
@@ -1129,7 +1130,7 @@ export class TaskInbox {
       if (!t) return;
       if (await this.drainNote(t)) return;
       // A task given to GhostCLI does not wait for OpenCode Go's own limits or the relay's health check: it tries now.
-      const no = t.model === RELAY_PIN ? (this.oc.enabled ? undefined : "OpenCode Go is off (Settings > Task inbox).") : this.opencodeBlocked();
+      const no = t.model === RELAY_PIN || relayProviderOf(t.model ?? "") ? (this.oc.enabled ? undefined : "OpenCode Go is off (Settings > Task inbox).") : this.opencodeBlocked();
       if (no) {
         if (t.note !== no) {
           t.note = no;
@@ -1170,10 +1171,12 @@ export class TaskInbox {
     // A flat-rate relay (GhostCLI) for tasks without sensitive content: first for medium and large tasks (what it is paid
     // for), after the free services for small ones. Its prompt is scanned like a training service's.
     const relayOk = this.oc.useRelay !== false && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    const pinned = t.model === RELAY_PIN;
+    // Given to GhostCLI: the whole relay (RELAY_PIN) or one of its models (picked with the model button: tried first).
+    const pinned = t.model === RELAY_PIN || !!relayProviderOf(t.model ?? "");
     // Given to GhostCLI, the relay setting does not matter (the user chose it), but the content checks still do.
     const pinnedOk = pinned && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    const relays = pinned ? (pinnedOk ? await this.relayModels(c, true) : []) : relayOk ? await this.relayModels(c) : [];
+    const relayList = pinned ? (pinnedOk ? await this.relayModels(c, true) : []) : relayOk ? await this.relayModels(c) : [];
+    const relays = pinned && t.model !== RELAY_PIN && pinnedOk ? [t.model!, ...relayList.filter((m) => m !== t.model)] : relayList;
     if (pinned && !relays.length) {
       // Given to GhostCLI, but it cannot take it: its prompt holds sensitive content, or no GhostCLI key or model is there.
       t.note = pinnedOk ? "GhostCLI has no model to offer now (check its key in Settings > Connections)." : "Not sent to GhostCLI: the task's text looks sensitive (the privacy scan found something).";
@@ -1271,6 +1274,7 @@ export class TaskInbox {
               prompt,
               model,
               signal: run.ctl.signal,
+              paths: { allowed: t.allowedPaths, forbidden: t.forbiddenPaths },
               attach: (fn) => {
                 send = fn;
               },
@@ -2371,13 +2375,49 @@ export class TaskInbox {
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("The task is running; its model cannot change now.", 409);
     const want = model.trim();
-    if (want) {
+    if (!want) delete t.model;
+    else if (t.runBy === "opencode") t.model = this.opencodeModelChoice(t, want);
+    else {
       const m = pickableModels(this.saved.models).find((x) => x.id === want || x.name === want);
       if (!m) throw fail("Antigravity does not offer that model.", 400);
       t.model = m.name;
-    } else delete t.model;
+    }
     await this.save();
     return t;
+  }
+
+  /**
+   * Checks a model picked for a task run by the coding agent (OpenCode Go, the free services, the GhostCLI relay): the
+   * relay pin or one of the relay's models only for a task that passes the relay's content check (as "Who does it" →
+   * GhostCLI), else a model the task inbox may use (the plan's models and the free services' free ones).
+   *
+   * @param t - The task.
+   * @param want - The model id, or {@link RELAY_PIN}.
+   * @returns The model to keep on the task.
+   * @throws 409 when the task may not go to the relay, 400 for a model the coding agent does not offer.
+   */
+  private opencodeModelChoice(t: InboxTaskView, want: string): string {
+    if (want === RELAY_PIN || relayProviderOf(want)) {
+      const safe = safeForRelay(t);
+      if (!safe.ok) throw fail(`Not for GhostCLI: ${safe.why}`, 409);
+      return want;
+    }
+    const known = want.startsWith(`${OPENCODE_PROVIDER}/`) || !!freeProviderOf(want);
+    if (!known || !inboxModelAllowed(want, this.oc.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok)) throw fail("OpenCode Go does not offer that model.", 400);
+    return want;
+  }
+
+  /**
+   * Whether an executor offers a task's picked model (so a reassigned task does not keep a model the new one has not:
+   * 27.11, a task moved from Antigravity to OpenCode kept "GPT-OSS 120B (Medium)" and ran with it).
+   *
+   * @param to - The executor.
+   * @param model - The task's model.
+   */
+  private offersModel(to: InboxTaskView["runBy"], model: string): boolean {
+    if (to === "antigravity") return pickableModels(this.saved.models).some((x) => x.id === model || x.name === model);
+    if (to === "opencode") return model === RELAY_PIN || !!relayProviderOf(model) || model.startsWith(`${OPENCODE_PROVIDER}/`) || !!freeProviderOf(model);
+    return false;
   }
 
   /** One permission request: the policy decides, or the user does (the task waits; denied after 30 minutes). */
@@ -3232,7 +3272,7 @@ export class TaskInbox {
       const safe = safeForRelay(t);
       if (!safe.ok) throw fail(`Not for GhostCLI: ${safe.why}`, 409);
       t.model = RELAY_PIN;
-    } else if (t.model === RELAY_PIN) delete t.model;
+    } else if (t.model === RELAY_PIN || (t.model && !this.offersModel(to, t.model))) delete t.model;
     t.status = to === "antigravity" || to === "gemini" || to === "opencode" || to === "claude" ? "waiting" : "queued";
     // A partial attempt's branch stays: the next attempt continues from it (resumeRef).
     if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "antigravity" || to === "claude"))) t.branch = branchFor(t, to);

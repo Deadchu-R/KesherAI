@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isFreeOpencodeModel, OPENCODE_DEFAULTS, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
+import { KNOWN_MODELS, RELAY_PIN, isFreeOpencodeModel, OPENCODE_DEFAULTS, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
 import { inboxSnapshot } from "./agent-activity.js";
 import { UsageLog } from "./usage-log.js";
 import { OPENCODE_LIMIT_MS, TaskInbox, type RunCmd, type TaskInboxDeps } from "./inbox-runner.js";
@@ -767,6 +767,55 @@ test("ghostcli: a task given to GhostCLI runs on it with the automatic relay off
     assert.deepEqual(runs.filter((r) => r.title.includes("c-20261126-41")).map((r) => r.model), ["ghostcli/claude-opus-5-5"]);
     assert.ok(runs.every((r) => !r.title.includes("c-20261126-42") || !r.model.startsWith("ghostcli/")));
     assert.equal((await inbox.task("c-20261126-41")).status, "done");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("model button: an OpenCode task takes the GhostCLI pin or a plan/free model (relay only when safe), not Antigravity's names", async () => {
+  const { root, repo } = await setup({ "c-20261127-51": TASK("c-20261127-51", "opencode"), "c-20261127-52": TASK("c-20261127-52", "opencode").replace("Add a clear button", "Rotate the API token") });
+  const { coder } = fakeCoder({ free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: false } });
+  try {
+    await inbox.sync();
+    assert.equal((await inbox.setModel("c-20261127-51", RELAY_PIN)).model, RELAY_PIN);
+    assert.equal((await inbox.setModel("c-20261127-51", "ghostcli/claude-sonnet-5")).model, "ghostcli/claude-sonnet-5");
+    assert.equal((await inbox.setModel("c-20261127-51", "opencode-go/mimo-v2.6-pro")).model, "opencode-go/mimo-v2.6-pro");
+    await assert.rejects(inbox.setModel("c-20261127-51", KNOWN_MODELS.flash), /OpenCode Go does not offer that model/);
+    await assert.rejects(inbox.setModel("c-20261127-52", RELAY_PIN), /Not for GhostCLI/);
+    assert.equal((await inbox.setModel("c-20261127-51", "")).model, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reassign: a model the new executor does not offer is cleared (Antigravity's name does not follow the task to OpenCode)", async () => {
+  const { root, repo } = await setup({ "c-20261127-53": TASK("c-20261127-53", "antigravity") });
+  const { coder } = fakeCoder();
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: false } });
+  try {
+    await inbox.sync();
+    assert.equal((await inbox.setModel("c-20261127-53", KNOWN_MODELS.flash)).model, KNOWN_MODELS.flash);
+    assert.equal((await inbox.reassign("c-20261127-53", "opencode")).model, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("opencode: the coder gets the task's allowed and forbidden paths (its write guard refuses others when they are made)", async () => {
+  const { root, repo } = await setup({ "c-20261127-54": TASK("c-20261127-54", "opencode") });
+  const { coder } = fakeCoder();
+  const seen: unknown[] = [];
+  const run = coder.run;
+  coder.run = (o) => {
+    seen.push(o.paths);
+    return run(o);
+  };
+  const { inbox } = inboxFor(repo, root, coder);
+  try {
+    await syncAndRun(inbox);
+    const t = await inbox.task("c-20261127-54");
+    assert.deepEqual(seen[0], { allowed: t.allowedPaths, forbidden: t.forbiddenPaths });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

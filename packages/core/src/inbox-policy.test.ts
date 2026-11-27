@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import type { AcpPermission } from "./acp.js";
-import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
+import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff, writeGuardFor } from "./inbox-policy.js";
 import { INBOX_DEFAULTS } from "./task-inbox.js";
 
 const WT = join("/", "w", "repo", ".kesher", "worktrees", "agy-c-1-1");
@@ -165,4 +165,13 @@ test("only docs/research/*.md counts as a research report", () => {
   assert.ok(!isResearchReport("docs/RESEARCH_LOG.md"));
   assert.ok(!isResearchReport("apps/x.ts"));
   assert.ok(!isResearchReport("docs/research/x.ts"));
+});
+
+test("inbox policy: the write guard allows the task's paths and refuses others with what it may change", () => {
+  const g = writeGuardFor(["apps/web/**", "docs/**"], ["docs/secret/**"]);
+  assert.equal(g("apps/web/src/a.tsx"), undefined);
+  assert.match(g("integrations/unreal/X/KesherAIBridgeModule.cpp") ?? "", /may not change integrations\/unreal\/X\/KesherAIBridgeModule\.cpp\. It may change only files under: apps\/web\/\*\*, docs\/\*\*/);
+  assert.match(g("docs/secret/a.md") ?? "", /never: docs\/secret\/\*\*/);
+  assert.match(g(".env") ?? "", /may not change \.env/);
+  assert.match(g("") ?? "", /outside the project folder/);
 });

@@ -148,6 +148,25 @@ export function pathAllowed(path: string, allowed: string[], forbidden: string[]
 }
 
 /**
+ * The coding agent's write guard for a task (AgentSession.setWriteGuard): a change outside the allowed paths, inside a
+ * forbidden one or to a secret file is refused when the tool call is made, with a short message that names what the
+ * task may change, so the model changes course instead of the whole run being thrown away at commit time.
+ *
+ * @param allowed - The task's allowed paths (globs).
+ * @param forbidden - Its forbidden paths (globs).
+ * @returns The guard: takes a path relative to the worktree ("" for one outside it), returns the refusal or undefined.
+ */
+export function writeGuardFor(allowed: readonly string[], forbidden: readonly string[]): (path: string) => string | undefined {
+  const a = [...allowed];
+  const f = [...forbidden];
+  return (path) => {
+    if (path && pathAllowed(path, a, f)) return undefined;
+    const what = path || "a path outside the project folder";
+    return `Refused: this task may not change ${what}. It may change only files under: ${a.join(", ")}${f.length ? ` (never: ${f.join(", ")})` : ""}. Do the work inside those paths, or leave this part out and say so in your report.`;
+  };
+}
+
+/**
  * Read-only commands a research task may run in its worktree (listing and reading the project to know what exists):
  * a research run once ended at once after "Get-ChildItem docs/research" was refused, and wrote nothing.
  */

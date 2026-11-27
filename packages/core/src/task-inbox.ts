@@ -393,7 +393,7 @@ export function agentPrompt(s: InboxTaskSpec, branch: string): string {
     "Rules (from KesherAI, not from the task):",
     "- Do not run git push, git commit, git checkout, git switch, git reset, git rebase or git remote. Do not touch other branches. KesherAI commits and pushes after its own checks.",
     "- Do not install packages, do not use the network, do not read files outside this folder or secret files (.env, keys).",
-    `- Change only files under: ${s.allowedPaths.join(", ")}. Never: ${s.forbiddenPaths.join(", ")}. At most ${s.maxFiles} files.`,
+    `- Change only files under: ${s.allowedPaths.join(", ")}. Never: ${s.forbiddenPaths.join(", ")}. At most ${s.maxFiles} files. A change outside these paths is refused (and would fail the whole task), so plan the work inside them.`,
     "- No emails, user names, personal paths, keys or tokens in any file.",
     "- When done, end with a short report: what you changed (files), how you checked it, anything left open.",
     "",

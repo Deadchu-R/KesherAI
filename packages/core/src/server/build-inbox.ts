@@ -18,6 +18,7 @@ import type { FreeCloudPool } from "../free-cloud.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
 import { TaskInbox, isQuotaError, type RunCmd, type TaskInboxDeps } from "../inbox-runner.js";
+import { writeGuardFor } from "../inbox-policy.js";
 import type { Notifier } from "../notify.js";
 import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
@@ -135,7 +136,7 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
         ];
       }),
     ),
-    run: async ({ worktree, title, prompt, model, signal, onStep, attach }) => {
+    run: async ({ worktree, title, prompt, model, signal, onStep, attach, paths }) => {
       // Only models the inbox may use run here (the free ones of OpenRouter, Z.ai, ...): a last guard. The runner has
       // already checked the task itself for the services that may train; here only the setting is known.
       // The relay's models pass here: the runner already checked the task with safeForRelay and the relay's last answer.
@@ -145,6 +146,8 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
       const session = async () => (await chats.open(c.id))?.session;
       // No one watches it: its questions and access requests are answered at once, as for self-work.
       (await session())?.setUnattended(true);
+      // A write outside the task's allowed paths is refused when it is made, naming what it may change (inbox-policy's rule).
+      if (paths?.allowed.length) (await session())?.setWriteGuard(writeGuardFor(paths.allowed, paths.forbidden));
       signal.addEventListener("abort", () => chats.stop(c.id), { once: true });
       await chats.send(c.id, prompt);
       // The run guard's rescue hint joins the running turn at its next step (steer).
