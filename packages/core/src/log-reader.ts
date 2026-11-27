@@ -124,13 +124,58 @@ export async function readTail(file: string, max = READ_BYTES): Promise<LogText>
  * @param platform - The system (default this one).
  */
 export function isInside(folder: string, file: string, platform: NodeJS.Platform = process.platform): boolean {
-  const p = platform === "win32" ? path.win32 : path.posix;
-  const fix = (s: string) => (platform === "win32" ? s.toLowerCase() : s);
-  const rel = p.relative(fix(p.resolve(folder)), fix(p.resolve(file)));
-  return rel === "" || (!rel.startsWith("..") && !p.isAbsolute(rel));
-}
-
-/** File names never read: keys, passwords and settings that hold secrets. */
+    const p = platform === "win32" ? path.win32 : path.posix;
+    const fix = (s: string) => (platform === "win32" ? s.toLowerCase() : s);
+    const rel = p.relative(fix(p.resolve(folder)), fix(p.resolve(file)));
+    return rel === "" || (!rel.startsWith("..") && !p.isAbsolute(rel));
+  }
+  
+  /** A file path found in a log line, with optional line and column numbers. */
+  export interface FileLink {
+    /** The matched text in the original line. */
+    match: string;
+    /** The absolute path (resolved on Windows or POSIX). */
+    file: string;
+    /** The line number, when present. */
+    line?: number;
+    /** The column number, when present. */
+    col?: number;
+  }
+  
+  /**
+   * Finds file paths in a log line and parses them into structured links. Supports:
+   * - POSIX: `/home/user/file.ts:10` or `/home/user/file.ts:10:5`
+   * - Windows: `C:\Users\me\file.cs(10,5)` or `C:/Users/me/file.cs:10`
+   * - Relative paths are ignored (must be absolute to open safely).
+   *
+   * @param line - The log line text.
+   * @returns An array of file links found, in order of appearance.
+   */
+  export function parseFileLinks(line: string): FileLink[] {
+    const out: FileLink[] = [];
+    // Match absolute POSIX paths with optional :line or :line:col
+    const posixRe = /(\/[^\s:*?"<>|]+?)(?::(\d+)(?::(\d+))?)?(?=[)\]\s,;:'"`]|$)/g;
+    // Match Windows drive-letter paths with (line,col) or :line or :line:col
+    const winRe = /([A-Za-z]:\\[^\s:*?"<>|]+?)(?:\((\d+),(\d+)\)|:(\d+)(?::(\d+))?)?(?=[)\]\s,;:'"`]|$)/g;
+    let m: RegExpExecArray | null;
+    while ((m = posixRe.exec(line))) {
+      const file = m[1];
+      if (!file || !file.includes(".")) continue; // skip bare dirs
+      out.push({ match: m[0], file, line: m[2] ? Number(m[2]) : undefined, col: m[3] ? Number(m[3]) : undefined });
+    }
+    while ((m = winRe.exec(line))) {
+      const file = m[1];
+      if (!file || !file.includes(".")) continue;
+      const ln = m[2] ? Number(m[2]) : m[4] ? Number(m[4]) : undefined;
+      const cl = m[3] ? Number(m[3]) : m[5] ? Number(m[5]) : undefined;
+      out.push({ match: m[0], file, line: ln, col: cl });
+    }
+    // Sort by position in the original line to preserve order
+    out.sort((a, b) => line.indexOf(a.match) - line.indexOf(b.match));
+    return out;
+  }
+  
+  /** File names never read: keys, passwords and settings that hold secrets. */
 const SECRET_NAME = /(^\.env(\..*)?$)|(^id_[a-z0-9]+$)|\.(pem|key|p12|pfx|kdbx|keystore|jks)$|credential|secret|password|token|cookies?(\.sqlite)?$/i;
 
 /**
@@ -608,4 +653,33 @@ export function summaryPrompt(list: ReadonlyArray<LogPattern & { sourceName: str
   const rows = list.map((p) => `- [${p.sourceName}] ×${p.count}${p.rising ? " (rising)" : ""}${p.label ? ` (marked ${p.label})` : ""}: ${clip(p.sample, 300)}`);
   const ask = he ? "סכם את השגיאות האלה מהשעה האחרונה: מה החשוב ביותר, מה קשור למה, ומה לעשות קודם. עד 8 שורות." : "Summarize these errors from the last hour: what matters most, what is related, and what to do first. At most 8 lines.";
   return { system: he ? SYSTEM_HE : SYSTEM_EN, user: `${ask}\n\n${clip(rows.join("\n"), 8000)}` };
+}
+
+/** A log entry tagged with its source name, for merged views. */
+export interface MergedLogEntry extends LogEntry {
+  /** The log source this entry came from. */
+  sourceName: string;
+}
+
+/**
+ * Merges parsed log entries from multiple sources into one time-ordered list.
+ * Entries without a timestamp are placed at the end, preserving their relative order.
+ *
+ * @param sources - Map of source name to its parsed log entries.
+ * @returns The merged entries, sorted by timestamp ascending.
+ */
+export function mergeLogs(sources: ReadonlyMap<string, readonly LogEntry[]>): MergedLogEntry[] {
+  const all: MergedLogEntry[] = [];
+  for (const [name, entries] of sources) {
+    for (const e of entries) {
+      all.push({ ...e, sourceName: name });
+    }
+  }
+  all.sort((a, b) => {
+    if (a.t === undefined && b.t === undefined) return 0;
+    if (a.t === undefined) return 1;
+    if (b.t === undefined) return -1;
+    return a.t - b.t;
+  });
+  return all;
 }

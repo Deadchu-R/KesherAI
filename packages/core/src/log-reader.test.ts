@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkAddedFile, explainPrompt, inboxRunLines, isInside, LogReader, readTail, selfWorkLines, summaryPrompt, usageLines } from "./log-reader.js";
+import { checkAddedFile, explainPrompt, inboxRunLines, isInside, LogReader, parseFileLinks, readTail, selfWorkLines, summaryPrompt, usageLines } from "./log-reader.js";
 import { parseLog } from "./log-parse.js";
 
 test("isInside: Windows paths in any case and slash; no escape with .. or a sibling prefix", () => {
@@ -131,4 +131,31 @@ test("usage log lines: event, task, model, reason and numbers in the message; ex
   const [a, b] = parseLog(usageLines(['{"at":1764000000000,"level":"error","executor":"opencode","model":"go/beam-free","task":"r-1","event":"stop","why":"no progress for 20 min","numbers":{"steps":40}}', "not json", '{"at":1764000001000,"level":"suggestion","executor":"local","event":"saving"}'].join("\n")).join("\n"));
   assert.deepEqual([a!.level, a!.cat, a!.msg, a!.t], ["error", "opencode", "stop r-1 (go/beam-free): no progress for 20 min [steps=40]", 1764000000000]);
   assert.deepEqual([b!.level, b!.msg], ["info", "saving (suggestion)"]);
+});
+
+test("parseFileLinks: POSIX, Windows and compiler formats with line and column", () => {
+  const links = parseFileLinks(
+    [
+      "see /home/me/app.ts:42",
+      "open C:\\Users\\me\\app.ts:10:5",
+      "error in src/x.js line 7 col 3",
+      "no link here",
+      "/abs/path.log:1",
+    ].join("\n"),
+    "linux",
+  );
+  assert.equal(links.length, 4);
+  assert.deepEqual(links[0], { path: "/home/me/app.ts", line: 42, column: undefined });
+  assert.deepEqual(links[1], { path: "C:\\Users\\me\\app.ts", line: 10, column: 5 });
+  assert.deepEqual(links[2], { path: "src/x.js", line: 7, column: 3 });
+  assert.deepEqual(links[3], { path: "/abs/path.log", line: 1, column: undefined });
+});
+
+test("parseFileLinks: respects platform for absolute paths", () => {
+  const win = parseFileLinks("C:\\x.ts:2", "win32");
+  assert.equal(win.length, 1);
+  assert.equal(win[0]!.path, "C:\\x.ts");
+  const posix = parseFileLinks("/x.ts:2", "linux");
+  assert.equal(posix.length, 1);
+  assert.equal(posix[0]!.path, "/x.ts");
 });
