@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| r-20261127-10 | Research: a private travel skill — flight and stay prices in ILS with phone alerts | [r-20261127-10.md](r-20261127-10.md) |
 | r-20261127-08 | Research (short): a private, local flights-and-stays search like Skyscanner | [r-20261127-08.md](r-20261127-08.md) |
 | r-20261127-06 | Research: what makes Claude, ChatGPT agent and Gemini agent chats feel capable (for KesherAI's chat) | [r-20261127-06.md](r-20261127-06.md) |
 | r-20261127-07 | Research: a private travel skill — flight and stay prices in ILS with phone alerts | [r-20261127-07.md](r-20261127-07.md) |
