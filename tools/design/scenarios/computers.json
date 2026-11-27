@@ -290,6 +290,115 @@
           "wait": ".phone-set-note"
         }
       ]
+    },
+    {
+      "id": "ConnectWhy",
+      "title": "למה אין חיבור: מחשב שמופעל מחדש לעדכון (\"המחשב מופעל מחדש לעדכון 0.6.498\") ומחשב כבוי, עם \"למה?\" שמסביר ומה לעשות (אותן סיבות כמו בגיליון באפליקציית הטלפון)",
+      "titleEn": "Why it does not connect: a PC restarting for update 0.6.498 and one offline, each with \"Why?\" (the reason and what to do, as in the phone sheet)",
+      "route": "#/",
+      "viewports": [
+        "phone",
+        "desktop"
+      ],
+      "height": {
+        "desktop": 1000,
+        "phone": 1300
+      },
+      "mocks": [
+        {
+          "url": "**/api/devices",
+          "method": "GET",
+          "json": {
+            "connected": true,
+            "share": true,
+            "syncSettings": false,
+            "me": {
+              "id": "d-home",
+              "name": "PC-Haifa"
+            },
+            "running": false,
+            "step": null,
+            "checking": [],
+            "lastRun": null,
+            "error": null,
+            "devices": [
+              {
+                "id": "d-home",
+                "name": "PC-Haifa",
+                "platform": "win32",
+                "me": true,
+                "online": true,
+                "models": 4,
+                "lastSeen": {
+                  "$ago": "1m"
+                },
+                "version": "0.6.442"
+              },
+              {
+                "id": "d-lap",
+                "name": "Laptop-TLV",
+                "platform": "win32",
+                "me": false,
+                "online": true,
+                "models": 2,
+                "lastSeen": {
+                  "$ago": "2m"
+                },
+                "version": "0.6.441",
+                "providerId": "device-lap"
+              },
+              {
+                "id": "d-old",
+                "name": "Studio",
+                "platform": "linux",
+                "me": false,
+                "online": false,
+                "models": 0,
+                "lastSeen": {
+                  "$ago": "5h"
+                },
+                "version": "0.6.430"
+              },
+              {
+                "id": "d-sleep",
+                "name": "Laptop-Work",
+                "platform": "win32",
+                "me": false,
+                "online": false,
+                "models": 0,
+                "lastSeen": {
+                  "$ago": "2m"
+                },
+                "version": "0.6.442",
+                "providerId": "device-sleep",
+                "asleepSince": {
+                  "$ago": "2m"
+                },
+                "asleepNote": {
+                  "update": "0.6.498"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "click": ".bar-status"
+        },
+        {
+          "wait": ".pcs-why"
+        },
+        {
+          "click": ".pcs-why summary >> nth=0"
+        },
+        {
+          "click": ".pcs-why summary >> nth=1"
+        },
+        {
+          "waitMs": 300
+        }
+      ]
     }
   ]
 }

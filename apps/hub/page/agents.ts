@@ -301,7 +301,7 @@ function groupHead(name: string, icon: string, pc: HubPresence | undefined, coun
     h("span", { "aria-hidden": "true" }, icon),
     h("b", null, name),
     pc ? h("span", { class: `dot ${on ? (pc.busy ? "busy" : "on") : "off"}`, "aria-hidden": "true" }) : null,
-    pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : pc.away ? "💤 " + awayText({ at: pc.away.at, note: pc.away.note }, Date.now(), getLocale() === "he") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null,
+    pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : pc.away ? (pc.away.note?.update ? "🔄 " : "💤 ") + awayText({ at: pc.away.at, note: pc.away.note }, Date.now(), getLocale() === "he") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null,
     h("span", { class: "grow" }),
     h("span", { class: "tag t-off" }, String(count)),
   );

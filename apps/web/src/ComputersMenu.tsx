@@ -4,11 +4,25 @@ import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { COMPUTERS_EVENT, refreshComputers } from "./computers";
-import { ACTIVE_COMPUTER_EVENT, activeComputer, computerLine, setActiveComputer, sortComputers, type ComputerRow } from "./active-computer";
+import { ACTIVE_COMPUTER_EVENT, activeComputer, computerLine, computerWhy, setActiveComputer, sortComputers, type ComputerRow } from "./active-computer";
 import { computerState } from "@kesher/shared";
 import "./computers-menu.css";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/** "Why?" under a computer that cannot be used now: the reason and what to do (the phone app's words). */
+function why(r: ComputerRow) {
+  const v = computerWhy(r);
+  if (!v) return null;
+  return (
+    <details className="pcs-why">
+      <summary>{L("למה?", "Why?")}</summary>
+      <span className="muted small" dir="auto">
+        {L(`${v.title.he}. ${v.fix.he}`, `${v.title.en}. ${v.fix.en}`)}
+      </span>
+    </details>
+  );
+}
 
 /**
  * The one list of computers for the whole app (not per chat): the connected one and the user's other computers
@@ -56,6 +70,7 @@ export function ComputersPanel() {
               <span className="muted small" dir="auto">
                 {computerLine(r, inUse, Date.now(), he)}
               </span>
+              {why(r)}
             </div>
             <div className="pcs-acts">
               {!r.me && r.providerId && r.online && !inUse && <button type="button" onClick={() => setActiveComputer(r.providerId!)}>{L("השתמש בו בכל הצ'אטים", "Use for all chats")}</button>}

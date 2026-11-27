@@ -67,7 +67,7 @@ const hubSeedSchema = z.object({
   signedIn: z.boolean().default(true),
   owner: z.record(z.string(), z.unknown()).optional(),
   device: z.object({ name: z.string().min(1).max(60) }).optional(),
-  pcs: z.array(z.object({ id: z.string().regex(/^[\w-]{1,64}$/), name: z.string().min(1).max(60), online: z.boolean().default(true), kind: z.enum(["pc", "claude-chat"]).default("pc") })).max(8).default([]),
+  pcs: z.array(z.object({ id: z.string().regex(/^[\w-]{1,64}$/), name: z.string().min(1).max(60), online: z.boolean().default(true), kind: z.enum(["pc", "claude-chat"]).default("pc"), away: z.object({ update: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,6}$/).optional() }).optional() })).max(8).default([]),
   tasks: z.array(z.record(z.string(), z.unknown())).max(50).default([]),
   agents: z.array(z.object({ pc: z.string(), runId: z.string().regex(/^[\w-]{1,64}$/), state: z.record(z.string(), z.unknown()).default({}), events: z.array(z.record(z.string(), z.unknown())).max(50).default([]) })).max(30).default([]),
   /** The shared task boards the PCs report (items as in `HubBoardItem`; times as `{ "$agoMs": "5m" }`; the rest is filled in). */

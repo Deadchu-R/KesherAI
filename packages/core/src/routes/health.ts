@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { modelTurnFor } from "../conversations.js";
-import { branding } from "@kesher/shared";
+import { attemptLines, branding, cleanAttempts } from "@kesher/shared";
 import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { heavyGate } from "../heavy-gate.js";
@@ -114,6 +114,19 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
     if (typeof b.error !== "string" || !b.error) return reply.code(400).send({ error: "No crash to report." });
     const when = typeof b.at === "number" && Number.isFinite(b.at) && Math.abs(b.at) < 8.64e15 ? new Date(b.at).toISOString() : "unknown time";
     s.faults.add({ kind: "phone", where: `${String(b.device ?? "phone").slice(0, 80)} · ${String(b.where ?? "").slice(0, 80)} · ${when}`, message: `${b.error.slice(0, 500)}\n${String(b.stack ?? "").slice(0, 1400)}` });
+    return { ok: true };
+  });
+
+  /**
+   * The phone app's connection log (the last 50 attempts: which address kind, ok or not, the status and the reason the
+   * "why it does not connect" sheet showed), sent when it reaches this computer again, so a lost link can be read from
+   * here. Kinds and results only, never addresses or keys (connect-why.ts cleans it).
+   */
+  app.post<{ Body: { device?: string; attempts?: unknown } }>("/api/faults/phone-connect", async (req, reply) => {
+    const attempts = cleanAttempts(req.body?.attempts);
+    if (!attempts.length) return reply.code(400).send({ error: "No attempts to report." });
+    const failed = attempts.filter((a) => !a.ok).length;
+    s.faults.add({ kind: "phone", where: `${String(req.body?.device ?? "phone").slice(0, 80)} · connection log · ${failed}/${attempts.length} failed`, message: attemptLines(attempts).join("\n").slice(-1990) }); // the newest fit the log's 2000 characters
     return { ok: true };
   });
 

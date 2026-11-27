@@ -24,6 +24,7 @@
     "capacitor-kesher-screen": "file:./plugins/screen",
     "capacitor-kesher-share": "file:./plugins/share",
     "capacitor-kesher-speech": "file:./plugins/speech",
+    "capacitor-kesher-tailscale": "file:./plugins/tailscale",
     "capacitor-kesher-updater": "file:./plugins/updater",
     "capacitor-kesher-wake-on-lan": "file:./plugins/wake-on-lan"
   },

@@ -33,3 +33,11 @@ test("ago: minutes, hours, days", () => {
   assert.equal(agoText("2026-11-18T12:00:00Z", now, false), "3 days ago");
   assert.equal(agoText("nope", now, false), "");
 });
+
+test("an away note for an update keeps a version only, and says restarting instead of sleep", () => {
+  assert.deepEqual(cleanAwayNote({ update: "0.6.498", tasks: 1 }), { tasks: 1, update: "0.6.498" });
+  assert.deepEqual(cleanAwayNote({ update: "0.6.498; rm -rf" }), {});
+  const now = Date.parse("2026-11-27T15:52:00Z");
+  assert.equal(awayText({ at: "2026-11-27T15:50:00Z", note: { update: "0.6.498" } }, now, false), "PC restarting for update 0.6.498 · 2 min ago");
+  assert.match(awayText({ at: "2026-11-27T15:50:00Z", note: { update: "0.6.498" } }, now, true), /^המחשב מופעל מחדש לעדכון 0\.6\.498/);
+});

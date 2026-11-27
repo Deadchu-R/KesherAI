@@ -217,7 +217,7 @@ function groupHead(name, icon, pc, count) {
     if (pc?.kind === "claude-chat") {
         return h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, icon), h("b", null, name), pc.lastSeen ? h("span", { class: "sm mut" }, L("דיווח אחרון ", "last report ") + when(pc.lastSeen)) : null, h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(count)));
     }
-    return h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, icon), h("b", null, name), pc ? h("span", { class: `dot ${on ? (pc.busy ? "busy" : "on") : "off"}`, "aria-hidden": "true" }) : null, pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : pc.away ? "💤 " + awayText({ at: pc.away.at, note: pc.away.note }, Date.now(), getLocale() === "he") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null, h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(count)));
+    return h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, icon), h("b", null, name), pc ? h("span", { class: `dot ${on ? (pc.busy ? "busy" : "on") : "off"}`, "aria-hidden": "true" }) : null, pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : pc.away ? (pc.away.note?.update ? "🔄 " : "💤 ") + awayText({ at: pc.away.at, note: pc.away.note }, Date.now(), getLocale() === "he") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null, h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(count)));
 }
 /**
  * The agents list (HubAgents / PhoneHubAgents), or the open run's detail.

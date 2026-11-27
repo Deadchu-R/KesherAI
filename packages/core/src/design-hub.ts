@@ -163,7 +163,7 @@ export interface HubPlan {
   device?: { name: string };
   nowIso: string;
   optIn: typeof PC_OPT_IN;
-  pcs: Array<{ id: string; name: string; kind: string; online: boolean }>;
+  pcs: Array<{ id: string; name: string; kind: string; online: boolean; away?: { update?: string } }>;
   tasks: Array<Record<string, unknown>>;
   agents: Array<{ pc: string; runId: string; state: Record<string, unknown>; events: Array<Record<string, unknown>> }>;
   /** The PCs' shared task boards, whole (sealed to this device and delivered after the welcome). */
@@ -212,7 +212,9 @@ export const HUB_SEED_JS = `async (plan) => {
   for (const pc of plan.pcs) {
     const k = await c.generateHubKeys(false);
     keys[pc.id] = k;
-    presence.push({ id: pc.id, name: pc.name, kind: pc.kind, publicKey: k.publicKey, online: pc.online, lastSeen: plan.nowIso, busy: false, optIn: plan.optIn, agents: [] });
+    // A PC that said it went away (asleep, or restarting for an update) two minutes ago, as the hub lists it.
+    const away = pc.away && !pc.online ? { away: { at: new Date(Date.parse(plan.nowIso) - 120000).toISOString(), note: pc.away } } : {};
+    presence.push({ id: pc.id, name: pc.name, kind: pc.kind, publicKey: k.publicKey, online: pc.online, lastSeen: plan.nowIso, busy: false, optIn: plan.optIn, agents: [], ...away });
   }
   const envs = [];
   let seq = 1;

@@ -5,6 +5,7 @@
   <script src="vendor/address.js"></script>
   <script src="vendor/path.js"></script>
   <script src="link-beacon.js"></script>
+  <script src="connect-why.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121213" />
   <link rel="stylesheet" href="theme.css" />
@@ -165,7 +166,9 @@
   const KEY = "kesherai-server";
   const $ = (id) => document.getElementById(id);
   let lang = localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en");
-  const tr = { checking: { he: "מתחבר…", en: "Connecting…" }, cancel: { he: "ביטול", en: "Cancel" },
+  /** What the last try learned for the "why" sheet: the hub page's word about the PC, or a new address that failed. */
+  let whyHint = {};
+  const tr = { why: { he: "למה אין חיבור?", en: "Why no connection?" }, checking: { he: "מתחבר…", en: "Connecting…" }, cancel: { he: "ביטול", en: "Cancel" },
     fail: { he: "אין תשובה מהמחשב. בדוק שהוא דלוק, ש-KesherAI פתוח, ושהטלפון באותה רשת או ב-Tailscale. בפעם הראשונה ב-Windows: הפעל במחשב את scripts\\windows\\allow-phone.cmd מתיקיית KesherAI (פותח את חומת האש).", en: "No answer from the computer. Check that it is on, KesherAI is open, and the phone is on the same network or on Tailscale. First time on Windows: on the computer, run scripts\\windows\\allow-phone.cmd from the KesherAI folder (it opens the firewall)." },
     bad: { he: "הקישור לא תקין. העתק אותו שוב מהגדרות ← טלפון.", en: "That link is not valid. Copy it again from Settings → Phone." },
     wake: { he: "הער את המחשב", en: "Wake the computer" },
@@ -326,6 +329,7 @@
         if (entry) { entry.links = c.links; saveComputers(list); }
         return connect(linkFor(c, found.url));
       }
+      if (found && !c.links.includes(found.url)) whyHint = { addressChanged: true };
     }
     if (!cancelled) connect(linkFor(c, c.links[0])); // shows the error and the wake button
   }
@@ -540,6 +544,8 @@
         } catch { /* it stays shown here */ }
       }
       if (token) await rememberComputer(url, token);
+      // The connection log (the attempts that failed since the last time), for the computer's fault log.
+      if (token) await globalThis.KesherWhy?.sendLog(url.origin, token, deviceName()).catch(() => undefined);
       // Her name and form of address: one setting for the computer and the phone (the computer's wins; the phone
       // fills in what the computer has not set yet).
       try {
@@ -571,6 +577,19 @@
       if (cancelled) return;
       $("status").textContent = tr.fail[lang];
       $("status").className = "error";
+      // Why it does not connect: the checks, the reason and its fix, Connect Tailscale and the hub (connect-why.js).
+      if (globalThis.KesherWhy) {
+        const saved = loadComputers().find((x) => x.token === token || x.shared === token);
+        const c = saved || { token, links: [url.origin] };
+        const opts = { hint: whyHint, onRetry: () => (saved ? connectComputer(saved) : connect(link)), ...(url.searchParams.get("wake") ? { onWake: () => wake(url) } : {}) };
+        whyHint = {};
+        const why = document.createElement("button");
+        why.type = "button";
+        why.textContent = tr.why[lang];
+        why.onclick = () => globalThis.KesherWhy.explain(c, { ...opts, auto: false });
+        $("status").append(document.createElement("br"), why);
+        void globalThis.KesherWhy.explain(c, opts);
+      }
       // A Kesher Cloud hub is known: the Cloud tab works without the computer (design: AndroidCloudCard).
       if (localStorage.getItem("kesherai-hub")) $("cloudCard").hidden = false;
       // The computer may be asleep: offer to wake it when the link carries its network card's address.
@@ -860,6 +879,11 @@
     // the person connects with one tap, which also sends its details to the computer.
     await crashChecked;
     if (lastCrash) return;
+    // "Why?" on the hub page's "PC is off" line: the sheet, with what the hub knows about the PC.
+    const whyQ = new URLSearchParams(location.search);
+    if (whyQ.get("why") === "1" && recent && globalThis.KesherWhy) {
+      return globalThis.KesherWhy.explain(recent, { hint: { pc: whyQ.get("pc"), ver: whyQ.get("ver"), seen: whyQ.get("seen") }, onRetry: () => connectComputer(recent) });
+    }
     if (launch) return connect(launch);
     // A computer tab in the side menu: open that saved computer (its addresses in turn).
     // From the Cloud tab when the hub did not answer: straight to the computer through Tailscale.
@@ -888,6 +912,8 @@
       $("status").className = "";
       $("status").textContent = tr.checking[lang];
       const answers = await Promise.all(tries.map((t) => fetch(`${t.base}/api/health`, { headers: t.token ? { authorization: `Bearer ${t.token}` } : {}, signal: AbortSignal.timeout(3000) }).then((r) => r.ok, () => false)));
+      // Logged even though nothing is shown (she stays on the phone): read on the computer when it answers again.
+      if (!answers.some(Boolean)) tries.forEach((t) => globalThis.KesherWhy?.record({ via: globalThis.KesherWhy.viaOf(t.base), ok: false }));
       if (answers.some(Boolean)) {
         sessionStorage.setItem("kesherai-pc-ok", "1");
         return recent ? connectComputer(recent) : connect(saved);

@@ -97,6 +97,9 @@ importers:
       capacitor-kesher-speech:
         specifier: file:./plugins/speech
         version: file:apps/android/plugins/speech(@capacitor/core@8.6.0)
+      capacitor-kesher-tailscale:
+        specifier: file:./plugins/tailscale
+        version: file:apps/android/plugins/tailscale(@capacitor/core@8.6.0)
       capacitor-kesher-updater:
         specifier: file:./plugins/updater
         version: file:apps/android/plugins/updater(@capacitor/core@8.6.0)
@@ -2487,6 +2490,11 @@ packages:
 
   capacitor-kesher-speech@file:apps/android/plugins/speech:
     resolution: {directory: apps/android/plugins/speech, type: directory}
+    peerDependencies:
+      '@capacitor/core': ^8.0.0
+
+  capacitor-kesher-tailscale@file:apps/android/plugins/tailscale:
+    resolution: {directory: apps/android/plugins/tailscale, type: directory}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -7308,6 +7316,10 @@ snapshots:
       '@capacitor/core': 8.6.0
 
   capacitor-kesher-speech@file:apps/android/plugins/speech(@capacitor/core@8.6.0):
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  capacitor-kesher-tailscale@file:apps/android/plugins/tailscale(@capacitor/core@8.6.0):
     dependencies:
       '@capacitor/core': 8.6.0
 

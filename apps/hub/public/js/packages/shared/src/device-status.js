@@ -15,7 +15,8 @@ export function cleanAwayNote(x) {
     const count = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.min(MAX_COUNT, Math.floor(v)) : undefined);
     const downloads = count(n.downloads);
     const tasks = count(n.tasks);
-    return { ...(downloads ? { downloads } : {}), ...(tasks ? { tasks } : {}), ...(n.selfWork === true ? { selfWork: true } : {}) };
+    const update = typeof n.update === "string" && /^\d{1,4}\.\d{1,4}\.\d{1,6}$/.test(n.update) ? n.update : undefined;
+    return { ...(downloads ? { downloads } : {}), ...(tasks ? { tasks } : {}), ...(n.selfWork === true ? { selfWork: true } : {}), ...(update ? { update } : {}) };
 }
 /**
  * The status of a computer: answering is online; not answering but it said it was going to sleep is asleep; the
@@ -50,7 +51,8 @@ export function agoText(iso, now, he) {
     return he ? `לפני ${d} ימים` : `${d} days ago`;
 }
 /**
- * The line for a computer that went to sleep: "PC went to sleep · 2 min ago · 3 downloads paused".
+ * The line for a computer that went to sleep: "PC went to sleep · 2 min ago · 3 downloads paused" (or "PC restarting
+ * for update 0.6.N · …" when it went away to install an update).
  *
  * @param away - When it said so, and what was running.
  * @param now - Now (ms).
@@ -58,7 +60,9 @@ export function agoText(iso, now, he) {
  */
 export function awayText(away, now, he) {
     const n = away.note ?? {};
-    const parts = [he ? "המחשב נכנס לשינה" : "PC went to sleep", agoText(away.at, now, he)];
+    // Restarting for an update is not sleep: say so, with the version, so nobody waits for a wake-up.
+    const first = n.update ? (he ? `המחשב מופעל מחדש לעדכון ${n.update}` : `PC restarting for update ${n.update}`) : he ? "המחשב נכנס לשינה" : "PC went to sleep";
+    const parts = [first, agoText(away.at, now, he)];
     if (n.downloads)
         parts.push(he ? `${n.downloads} ${n.downloads === 1 ? "הורדה מושהית" : "הורדות מושהות"}` : `${n.downloads} download${n.downloads === 1 ? "" : "s"} paused`);
     if (n.tasks)

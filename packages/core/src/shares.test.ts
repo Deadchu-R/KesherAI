@@ -107,3 +107,22 @@ test("the phone app's crash report goes to the fault log (behind the key from ou
     await server.app.close();
   }
 });
+
+test("the phone app's connection log goes to the fault log, kinds and results only", async () => {
+  const { createKesherServer } = await import("./server.js");
+  const server = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-phone-connect-")), autodetect: false, pluginRoots: [] });
+  try {
+    const attempts = [{ at: Date.UTC(2026, 10, 27, 15, 51), via: "tailscale", ok: false, reason: "tailscale-off", url: "http://100.64.0.9:7420" }, { at: Date.UTC(2026, 10, 27, 15, 52), via: "home", ok: true, status: 200 }];
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone-connect", payload: { attempts }, remoteAddress: "203.0.113.9" })).statusCode, 401);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone-connect", payload: { attempts: [] } })).statusCode, 400);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/faults/phone-connect", payload: { device: "Pixel", attempts } })).statusCode, 200);
+    await new Promise((r) => setTimeout(r, 200));
+    const faults = (await server.app.inject({ method: "GET", url: "/api/faults" })).json() as Array<{ kind: string; where: string; message: string }>;
+    const f = faults.find((x) => x.where.includes("connection log"))!;
+    assert.match(f.where, /Pixel · connection log · 1\/2 failed/);
+    assert.match(f.message, /15:51:00Z tailscale fail tailscale-off\n.*home ok 200/);
+    assert.doesNotMatch(f.message, /100\.64/, "no addresses in the log");
+  } finally {
+    await server.app.close();
+  }
+});

@@ -1,4 +1,4 @@
-import { awayText, computerState, type AwayNote } from "@kesher/shared";
+import { awayText, computerState, diagnoseConnection, type AwayNote, type ConnectVerdict } from "@kesher/shared";
 
 /**
  * The computer the whole app works with, one choice for every chat (not one per chat). "" means the computer this
@@ -74,6 +74,18 @@ export function computerLine(r: ComputerRow, inUse: boolean, now: number, he: bo
   const state = computerState(r);
   const status = state === "online" ? (he ? "זמין" : "Online") : state === "asleep" ? awayText({ at: r.asleepSince, note: r.asleepNote }, now, he) : [he ? "לא זמין" : "Offline", lastSeenText(r.lastSeen, now, he)].filter(Boolean).join(" · ");
   return [r.me ? (he ? "המחשב המחובר" : "Connected computer") : "", status, r.version ? `v${r.version}` : "", inUse ? (he ? "בשימוש בכל הצ'אטים" : "Used for all chats") : ""].filter(Boolean).join(" · ");
+}
+
+/**
+ * Why another computer cannot be used now (connect-why.ts, the same reasons the phone app shows): restarting for an
+ * update, asleep, or offline, with what to do. Null for one that is online, and for the connected one.
+ *
+ * @param r - The computer.
+ */
+export function computerWhy(r: ComputerRow): ConnectVerdict | null {
+  if (r.me || r.online) return null;
+  const pcOnHub = r.asleepNote?.update ? "restarting" : computerState(r) === "asleep" ? "asleep" : "offline";
+  return diagnoseConnection({ internet: true, pcOnHub, ...(r.asleepNote?.update ? { pcUpdate: r.asleepNote.update } : {}) });
 }
 
 /**

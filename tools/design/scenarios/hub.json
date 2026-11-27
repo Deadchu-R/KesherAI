@@ -2657,6 +2657,7 @@
      }
     ]
    }
-  }
+  },
+  {"id": "ConnectWhyHub", "title": "ענן Kesher בטלפון: המחשב מופעל מחדש לעדכון 0.6.498 · נראה לאחרונה · \"למה?\" פותח באפליקציה את גיליון הבדיקות", "titleEn": "Kesher Cloud on the phone: the PC is restarting for update 0.6.498 · last seen · \"Why?\" opens the checks sheet in the app", "route": "#", "viewports": ["phone"], "hub": {"device": {"name": "הטלפון"}, "pcs": [{"id": "pc-home", "name": "PC-Haifa", "online": false, "away": {"update": "0.6.498"}}]}, "height": {"phone": 900}, "steps": [{"wait": ".off-banner"}, {"waitMs": 300}]}
  ]
 }

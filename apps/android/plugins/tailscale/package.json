@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-kesher-tailscale",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Asks the Tailscale app to connect (its CONNECT_VPN broadcast) or opens it, from the KesherAI Android app.",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

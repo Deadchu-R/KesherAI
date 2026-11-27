@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeComputer, computerLine, lastSeenText, setActiveComputer, sortComputers, startComputer } from "./active-computer.js";
+import { activeComputer, computerLine, computerWhy, lastSeenText, setActiveComputer, sortComputers, startComputer } from "./active-computer.js";
 
 /** A tiny localStorage for the test (node has none). */
 function fakeStorage(): void {
@@ -59,4 +59,12 @@ test("computer line: online, asleep (when and what was running), offline (last s
   assert.equal(computerLine({ ...pc, asleepSince: "2026-11-21T11:58:00Z", asleepNote: { downloads: 3 } }, false, now, false), "PC went to sleep · 2 min ago · 3 downloads paused · v0.6.1");
   assert.equal(computerLine({ ...pc, asleepSince: "2026-11-21T11:58:00Z" }, false, now, true), "המחשב נכנס לשינה · לפני 2 דק' · v0.6.1");
   assert.equal(computerLine({ ...pc, lastSeen: "2026-11-21T11:30:00Z" }, true, now, false), "Offline · seen 30 min ago · v0.6.1 · Used for all chats");
+});
+
+test("computerWhy: restarting for an update, asleep, offline; nothing for one that is online", () => {
+  const base = { id: "d1", name: "PC", me: false, online: false };
+  assert.equal(computerWhy({ ...base, online: true }), null);
+  assert.equal(computerWhy({ ...base, asleepSince: "2026-11-27T15:50:00Z", asleepNote: { update: "0.6.498" } })?.reason, "pc-restarting");
+  assert.equal(computerWhy({ ...base, asleepSince: "2026-11-27T15:50:00Z" })?.reason, "pc-asleep");
+  assert.equal(computerWhy(base)?.reason, "pc-offline");
 });

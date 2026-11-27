@@ -193,6 +193,8 @@ function watchCore(url: string): void {
 // ---------- automatic updates for installed copies ----------
 let autoUpdating = false;
 let readyInstaller: { file: string; version?: string } | undefined;
+/** The version this app is quitting to install (told to the hub with "going away"), once an install has started. */
+let updatingTo: string | undefined;
 let refreshTrayMenu: () => void = () => undefined;
 
 /** Runs a downloaded installer: silently on Windows (then the app starts again), opened on a Mac. */
@@ -205,6 +207,7 @@ async function runInstaller(file: string): Promise<void | { exited: Promise<numb
   if (process.platform === "linux") return linuxUpdate(file);
   // The new version starts by itself: keep the tunnel so the phone's link keeps working.
   if (server) server.services.restarting = true;
+  updatingTo = latestSeen;
   // NSIS: /S installs without questions, --force-run opens the new version when done.
   const child = spawn(file, process.platform === "win32" ? ["/S", "--force-run"] : [], { detached: true, stdio: "ignore" });
   child.unref();
@@ -232,6 +235,7 @@ async function runInstaller(file: string): Promise<void | { exited: Promise<numb
 async function linuxUpdate(file: string): Promise<void> {
   const restart = (execPath?: string) => {
     if (server) server.services.restarting = true;
+    updatingTo = latestSeen;
     app.relaunch(execPath ? { execPath, args: process.argv.slice(1).filter((a) => !a.startsWith("--updated")) } : undefined);
     quitting = true;
     app.quit();
@@ -1075,7 +1079,8 @@ app.whenReady().then(async () => {
     watchCore(coreUrl);
     setupTray(coreUrl);
     // Going to sleep or shutting down: tell my other computers at once, so they stop waiting on this one; and when back.
-    const announce = (state: "asleep" | "awake") => fetch(`${coreUrl.replace(/\/$/, "")}/api/devices/announce`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ state }), signal: AbortSignal.timeout(3000) }).catch(() => undefined);
+    // Going away to install an update says which version, so the phone and the hub show "restarting for 0.6.N".
+    const announce = (state: "asleep" | "awake") => fetch(`${coreUrl.replace(/\/$/, "")}/api/devices/announce`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ state, ...(state === "asleep" && updatingTo ? { update: updatingTo } : {}) }), signal: AbortSignal.timeout(3000) }).catch(() => undefined);
     announceAway = () => announce("asleep");
     powerMonitor.on("suspend", () => void announce("asleep"));
     powerMonitor.on("shutdown", () => void announce("asleep"));
@@ -1143,6 +1148,7 @@ app.on("before-quit", (event) => {
   // A downloaded update installs as the app closes (silently on Windows).
   if (readyInstaller && process.platform === "win32") {
     const { file } = readyInstaller;
+    updatingTo = readyInstaller.version;
     readyInstaller = undefined;
     spawn(file, process.platform === "win32" ? ["/S"] : [], { detached: true, stdio: "ignore" }).unref();
   }

@@ -12,6 +12,8 @@ export interface AwayNote {
   tasks?: number;
   /** Self-work was running. */
   selfWork?: boolean;
+  /** It is restarting to install this version (e.g. "0.6.498"), not going to sleep: back in a minute or two. */
+  update?: string;
 }
 
 /** One computer's status in a list. */
@@ -30,7 +32,8 @@ export function cleanAwayNote(x: unknown): AwayNote {
   const count = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 1 ? Math.min(MAX_COUNT, Math.floor(v)) : undefined);
   const downloads = count(n.downloads);
   const tasks = count(n.tasks);
-  return { ...(downloads ? { downloads } : {}), ...(tasks ? { tasks } : {}), ...(n.selfWork === true ? { selfWork: true } : {}) };
+  const update = typeof n.update === "string" && /^\d{1,4}\.\d{1,4}\.\d{1,6}$/.test(n.update) ? n.update : undefined;
+  return { ...(downloads ? { downloads } : {}), ...(tasks ? { tasks } : {}), ...(n.selfWork === true ? { selfWork: true } : {}), ...(update ? { update } : {}) };
 }
 
 /**
@@ -64,7 +67,8 @@ export function agoText(iso: string | undefined, now: number, he: boolean): stri
 }
 
 /**
- * The line for a computer that went to sleep: "PC went to sleep · 2 min ago · 3 downloads paused".
+ * The line for a computer that went to sleep: "PC went to sleep · 2 min ago · 3 downloads paused" (or "PC restarting
+ * for update 0.6.N · …" when it went away to install an update).
  *
  * @param away - When it said so, and what was running.
  * @param now - Now (ms).
@@ -72,7 +76,9 @@ export function agoText(iso: string | undefined, now: number, he: boolean): stri
  */
 export function awayText(away: { at?: string; note?: AwayNote }, now: number, he: boolean): string {
   const n = away.note ?? {};
-  const parts = [he ? "המחשב נכנס לשינה" : "PC went to sleep", agoText(away.at, now, he)];
+  // Restarting for an update is not sleep: say so, with the version, so nobody waits for a wake-up.
+  const first = n.update ? (he ? `המחשב מופעל מחדש לעדכון ${n.update}` : `PC restarting for update ${n.update}`) : he ? "המחשב נכנס לשינה" : "PC went to sleep";
+  const parts = [first, agoText(away.at, now, he)];
   if (n.downloads) parts.push(he ? `${n.downloads} ${n.downloads === 1 ? "הורדה מושהית" : "הורדות מושהות"}` : `${n.downloads} download${n.downloads === 1 ? "" : "s"} paused`);
   if (n.tasks) parts.push(he ? `${n.tasks} ${n.tasks === 1 ? "משימה נעצרה" : "משימות נעצרו"}` : `${n.tasks} task${n.tasks === 1 ? "" : "s"} stopped`);
   if (n.selfWork) parts.push(he ? "עבודה עצמית נעצרה" : "self-work stopped");

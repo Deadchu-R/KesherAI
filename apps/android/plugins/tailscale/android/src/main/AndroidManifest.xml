@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 11+ hides other apps unless they are named: the Tailscale app, to send it a broadcast and open it. -->
+    <queries>
+        <package android:name="com.tailscale.ipn" />
+    </queries>
+</manifest>

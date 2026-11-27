@@ -46,11 +46,12 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   /** This computer is going to sleep or shutting down (from the desktop app), or woke up: tell the others. Local only. */
-  app.post<{ Body: { state?: string } }>("/api/devices/announce", async (req, reply) => {
+  app.post<{ Body: { state?: string; update?: string } }>("/api/devices/announce", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only this computer can say that." });
     const state = req.body?.state === "awake" ? "awake" : "asleep";
-    // What is running here goes with "asleep" (counts only): "3 downloads paused" on the phone.
-    const note: AwayNote = state === "asleep" ? await awayNote(s) : {};
+    // What is running here goes with "asleep" (counts only): "3 downloads paused" on the phone. Restarting for an
+    // update adds the version, so the phone says "restarting for 0.6.N" instead of "asleep" (cleanAwayNote checks it).
+    const note: AwayNote = state === "asleep" ? cleanAwayNote({ ...(await awayNote(s)), update: req.body?.update }) : {};
     // The hub (a live link only, instant) and the user's other computers (Google devices), together.
     s.hub?.announceAway(state, note);
     await s.devices.announce(state, true, note);

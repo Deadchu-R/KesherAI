@@ -8,3 +8,6 @@
 .pcs-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pcs-dialog { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; }
 .updated-ver { gap: 2px; }
+/* "Why?" under a computer that cannot be used now (connect-why.ts). */
+.pcs-why summary { cursor: pointer; font-size: 12px; color: var(--accent); min-height: 24px; }
+.pcs-why .small { display: block; line-height: 1.4; }

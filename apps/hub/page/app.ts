@@ -23,6 +23,7 @@ import { RUN_ALL_KEY } from "../../../packages/shared/src/run-undo.js";
 import { runAllButton, runWithUndo } from "./run-button.js";
 import { pathLine, relayLine } from "./direct.js";
 import type { HubProbe } from "../../../packages/shared/src/direct-path.js";
+import { diagnoseConnection } from "../../../packages/shared/src/connect-why.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
@@ -361,13 +362,20 @@ function whereBar(): HTMLElement | null {
 /** The amber line when no PC is on. */
 function pcOffBanner(): HTMLElement | null {
   if (!pcOff() || device.remembered) return null;
+  // The PC that was seen last says why it is away: restarting for an update, asleep, or simply off (connect-why.ts).
+  const last = [...pcs()].sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""))[0];
+  const pcOnHub = last?.away?.note?.update ? "restarting" : last?.away ? "asleep" : "offline";
+  const why = diagnoseConnection({ internet: true, hub: true, pcOnHub, ...(last?.away?.note?.update ? { pcUpdate: last.away.note.update } : {}) });
+  // In the phone app, "Why?" opens its connection sheet with what the hub knows (index.html reads these).
+  const whyHref = app.appOrigin ? `${app.appOrigin}/index.html?why=1&pc=${pcOnHub}${last?.away?.note?.update ? `&ver=${encodeURIComponent(last.away.note.update)}` : ""}${lastPcSeen() ? `&seen=${encodeURIComponent(lastPcSeen()!)}` : ""}` : undefined;
   return h(
     "div",
-    { class: "off-banner", role: "status" },
+    { class: "off-banner", role: "status", title: L(why.fix.he, why.fix.en) },
     dot("off"),
-    h("span", null, L("המחשב כבוי · עבודה דרך הענן", "The PC is off · working through the cloud")),
+    h("span", null, L(`${why.title.he} · עבודה דרך הענן`, `${why.title.en} · working through the cloud`)),
     h("span", { class: "grow" }),
     lastPcSeen() ? h("span", { class: "mut xs" }, L("נראה לאחרונה ", "Last seen ") + when(lastPcSeen())) : null,
+    whyHref ? h("a", { class: "acc xs", href: whyHref }, L("למה?", "Why?")) : null,
     app.appOrigin ? h("a", { class: "acc xs", href: `${app.appOrigin}/index.html` }, L("נסה שוב", "Try again")) : null,
   );
 }
