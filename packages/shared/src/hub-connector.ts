@@ -14,9 +14,9 @@ import { parseAssignTo, type AssignTo } from "./task-assign.js";
 import type { StepNote } from "./task-steps.js";
 
 /** What the connector may ask a PC for (anything else is refused before it is sealed, and again on the PC). */
-export type ConnectorOp = "tasks" | "task" | "quotas" | "agents" | "add" | "action";
+export type ConnectorOp = "tasks" | "task" | "quotas" | "agents" | "add" | "action" | "approvals" | "approve";
 
-export const CONNECTOR_OPS: readonly ConnectorOp[] = ["tasks", "task", "quotas", "agents", "add", "action"];
+export const CONNECTOR_OPS: readonly ConnectorOp[] = ["tasks", "task", "quotas", "agents", "add", "action", "approvals", "approve"];
 
 /** The task actions the hub page already offers, and nothing else: Run, add to / take out of the queue, Stop, "Who does it". */
 export type ConnectorAction = "run" | "queue" | "unqueue" | "stop" | "assign";
@@ -41,6 +41,13 @@ export const CONNECTOR_LIMITS = {
   agents: 16,
   /** A new task's goal, in characters (the inbox's own cap). */
   goalChars: 6000,
+  /** Approval cards one `approvals` answer lists (the oldest first). */
+  approvals: 10,
+  /** An approval's preview and reason, in characters (the card on the PC keeps the whole text). */
+  previewChars: 700,
+  reasonChars: 240,
+  /** The longest "Allow for a while" the connector may ask for, in minutes (the view offers 10). */
+  maxAllowMinutes: 60,
   /** A row's title in a list. */
   titleChars: 120,
   /** The plain answer, in characters, before it is sealed. */
@@ -76,6 +83,11 @@ export interface ConnectorQuery {
   action?: ConnectorAction;
   to?: AssignTo;
   confirm?: boolean;
+  /** `approve`: the chat and the request (from `approvals`), the decision, and for `allow` how long to keep allowing that tool in that chat. */
+  conversationId?: string;
+  requestId?: string;
+  decision?: "allow" | "deny";
+  forMinutes?: number;
 }
 
 /** A task as the connector lists it: short fields only, never the goal's text. */
@@ -115,6 +127,28 @@ export interface ConnectorAgent {
   task?: { taskId: string; title: string; steps?: number; estSteps?: number; now?: StepNote };
 }
 
+/** An approval card waiting on the PC (a chat's step), as the connector shows it: text fields short and scrubbed. */
+export interface ConnectorApproval {
+  conversationId: string;
+  requestId: string;
+  /** The chat's title. */
+  title: string;
+  /** The tool that asks (`run_command`, `edit_file`…). */
+  tool: string;
+  /** What will happen (a command or a diff), cut. */
+  preview: string;
+  /** Why it asks, in a sentence, cut. */
+  reason: string;
+  /** A sub-agent that asks. */
+  who?: string;
+  /** Whether "Allow for a while" applies to it. */
+  forWhile?: boolean;
+  /** True when only the user may allow it, in KesherAI (a dangerous command, screen control): Deny still works. */
+  locked?: boolean;
+  /** When it asked (ISO time). */
+  at?: string;
+}
+
 /** The PC's answer (sealed to the hub). `ok: false` carries why in `text` (a short line). */
 export interface ConnectorAnswer {
   queryId: string;
@@ -124,6 +158,9 @@ export interface ConnectorAnswer {
   task?: ConnectorTaskDetail;
   quotas?: ProviderQuota[];
   agents?: ConnectorAgent[];
+  /** `approvals`: what waits, and whether the PC lets the connector answer it (Settings › Use KesherAI from other apps). */
+  approvals?: ConnectorApproval[];
+  canAnswer?: boolean;
   /** When the PC built it (ms). */
   at: number;
 }
@@ -179,6 +216,14 @@ export function parseConnectorQuery(x: unknown): ConnectorQuery | null {
       const to = parseAssignTo(q.to);
       return to ? { ...base, taskId: q.taskId, action, to, ...(q.confirm === true ? { confirm: true } : {}) } : null;
     }
+    case "approvals":
+      return base;
+    case "approve": {
+      if (typeof q.conversationId !== "string" || !ID.test(q.conversationId) || typeof q.requestId !== "string" || !ID.test(q.requestId)) return null;
+      if (q.decision !== "allow" && q.decision !== "deny") return null;
+      const minutes = q.decision === "allow" ? num(q.forMinutes) : undefined;
+      return { ...base, conversationId: q.conversationId, requestId: q.requestId, decision: q.decision, ...(minutes ? { forMinutes: Math.min(minutes, CONNECTOR_LIMITS.maxAllowMinutes) } : {}) };
+    }
   }
 }
 
@@ -223,6 +268,17 @@ export function parseConnectorAnswer(x: unknown): ConnectorAnswer | null {
     }
   }
   if (Array.isArray(a.quotas)) out.quotas = cleanProviderQuotas(a.quotas);
+  if (Array.isArray(a.approvals)) {
+    out.approvals = a.approvals.slice(0, CONNECTOR_LIMITS.approvals).flatMap((x): ConnectorApproval[] => {
+      if (!x || typeof x !== "object") return [];
+      const r = x as Record<string, unknown>;
+      if (typeof r.conversationId !== "string" || !ID.test(r.conversationId) || typeof r.requestId !== "string" || !ID.test(r.requestId)) return [];
+      // The preview keeps its lines (other control characters become spaces).
+      const preview = (typeof r.preview === "string" ? r.preview : "").replace(/\p{Cc}/gu, (c) => (c === "\n" || c === "\t" ? c : " ")).slice(0, CONNECTOR_LIMITS.previewChars);
+      return [{ conversationId: r.conversationId, requestId: r.requestId, title: str(r.title, CONNECTOR_LIMITS.titleChars).trim(), tool: str(r.tool, 60).trim() || "tool", preview, reason: str(r.reason, CONNECTOR_LIMITS.reasonChars).trim(), ...optStr("who", r.who, 80), ...(r.forWhile === true ? { forWhile: true } : {}), ...(r.locked === true ? { locked: true } : {}), ...optStr("at", r.at, 40) }];
+    });
+  }
+  if (typeof a.canAnswer === "boolean") out.canAnswer = a.canAnswer;
   if (Array.isArray(a.agents)) {
     out.agents = a.agents.slice(0, CONNECTOR_LIMITS.agents).flatMap((g): ConnectorAgent[] => {
       if (!g || typeof g !== "object") return [];
@@ -245,7 +301,7 @@ export function parseConnectorAnswer(x: unknown): ConnectorAnswer | null {
  * @returns The same answer, small enough to seal.
  */
 export function fitConnectorAnswer(a: ConnectorAnswer): ConnectorAnswer {
-  const out: ConnectorAnswer = { ...a, ...(a.tasks ? { tasks: [...a.tasks] } : {}), ...(a.task ? { task: { ...a.task, stepLog: [...a.task.stepLog] } } : {}), ...(a.quotas ? { quotas: [...a.quotas] } : {}) };
+  const out: ConnectorAnswer = { ...a, ...(a.tasks ? { tasks: [...a.tasks] } : {}), ...(a.task ? { task: { ...a.task, stepLog: [...a.task.stepLog] } } : {}), ...(a.quotas ? { quotas: [...a.quotas] } : {}), ...(a.approvals ? { approvals: [...a.approvals] } : {}) };
   let cut = 0;
   const size = () => JSON.stringify(out).length;
   // Room for the "left out" note added below.
@@ -254,6 +310,7 @@ export function fitConnectorAnswer(a: ConnectorAnswer): ConnectorAnswer {
       out.tasks.shift();
       cut++;
     } else if (out.task?.stepLog.length) out.task.stepLog.shift();
+    else if (out.approvals?.length) out.approvals.pop();
     else if (out.quotas?.length) out.quotas.pop();
     else if (out.agents?.length) out.agents.pop();
     else break;
@@ -288,6 +345,7 @@ export function mapConnectorText(a: ConnectorAnswer, fn: (s: string) => string):
       ? { task: { ...row(a.task), ...(a.task.branch ? { branch: fn(a.task.branch) } : {}), ...(a.task.result ? { result: fn(a.task.result) } : {}), ...(a.task.cause ? { cause: fn(a.task.cause) } : {}), stepLog: a.task.stepLog.map(step) } }
       : {}),
     ...(a.quotas ? { quotas: a.quotas.map((q) => ({ ...q, name: fn(q.name), ...(q.model ? { model: fn(q.model) } : {}), ...(q.health ? { health: { ...q.health, model: fn(q.health.model) } } : {}), ...(q.movedTo ? { movedTo: q.movedTo.map((m) => ({ ...m, name: fn(m.name) })) } : {}) })) } : {}),
+    ...(a.approvals ? { approvals: a.approvals.map((x) => ({ ...x, title: fn(x.title), tool: fn(x.tool), preview: fn(x.preview), reason: fn(x.reason), ...(x.who ? { who: fn(x.who) } : {}) })) } : {}),
     ...(a.agents
       ? { agents: a.agents.map((g) => ({ ...g, ...(g.label ? { label: fn(g.label) } : {}), ...(g.task ? { task: { ...g.task, title: fn(g.task.title), ...(g.task.now ? { now: step(g.task.now) } : {}) } } : {}) })) }
       : {}),

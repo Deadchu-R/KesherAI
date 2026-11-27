@@ -8,6 +8,7 @@
  * {@link Hub.sendConnectorTask}). Every call is written to the hub's activity log (tool name and connection only).
  */
 import { CONNECTOR_ACTIONS, CONNECTOR_EXECUTORS, mapConnectorText, redactLeaks, type ConnectorAnswer } from "../../../packages/shared/src/hub.js";
+import { agentsText, approvalsText, quotasText, taskText, tasksText } from "../../../packages/shared/src/connector-text.js";
 import { MCP_APP_MIME, VIEW_URIS, VIEWS } from "./connector-views.js";
 import { scrubSecrets } from "./diag.js";
 import type { Hub } from "./hub.js";
@@ -157,6 +158,32 @@ export const MCP_TOOLS = [
     _meta: { ui: { resourceUri: VIEW_URIS.quotas } },
   },
   {
+    name: "kesher_approvals",
+    title: "Approvals waiting",
+    description: "The approval cards waiting in the PC's chats (what the agent wants to do: a command or a file change, which tool, why, a short preview) and whether the PC lets Claude answer them. Shows the **approvals** view with Allow, Deny and Allow for 10 minutes. Needs the PC's \"Claude connector may read and run\" setting.",
+    inputSchema: { type: "object", properties: { device: DEVICE_ARG }, additionalProperties: false },
+    annotations: READ_ONLY,
+    _meta: { ui: { resourceUri: VIEW_URIS.approvals } },
+  },
+  {
+    name: "kesher_approve",
+    title: "Answer an approval card",
+    description: "Allows or denies one waiting approval card (conversationId and requestId from kesher_approvals). Works only when the user also turned on \"let the connected app answer approval cards\" in KesherAI (Settings › Use KesherAI from other apps); dangerous commands and screen control always stay the user's own to approve. forMinutes (allow only, e.g. 10) keeps allowing that tool in that chat for a while. Show the user what the card does before you allow it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conversationId: { type: "string", description: "The chat's id (from kesher_approvals).", pattern: "^[\\w-]{1,64}$" },
+        requestId: { type: "string", description: "The card's id (from kesher_approvals).", pattern: "^[\\w-]{1,64}$" },
+        decision: { type: "string", enum: ["allow", "deny"] },
+        forMinutes: { type: "integer", minimum: 1, maximum: 60, description: "allow only: also keep allowing this tool in this chat for this many minutes." },
+        device: DEVICE_ARG,
+      },
+      required: ["conversationId", "requestId", "decision"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  },
+  {
     name: "kesher_agents",
     title: "Running agents",
     description: "The PC's agents (local model, Antigravity, OpenCode Go, GhostCLI…): on/off/busy, and the task each works on with its last step.",
@@ -184,7 +211,7 @@ export async function callTool(hub: Hub, name: ToolName, args: Record<string, un
     case "kesher_tasks":
       return viaPc(hub, grantId, args, { op: "tasks", filter: args.filter, executor: args.executor }, (a, pc) => ({
         data: { pc, tasks: a.tasks ?? [], ...(a.text ? { text: a.text } : {}) },
-        text: (a.tasks ?? []).length ? (a.tasks ?? []).map((t) => `${t.taskId} [${t.state}] ${t.title} (${t.executor}${t.queuePos ? `, #${t.queuePos} in line` : ""}${t.steps ? `, step ${t.steps}${t.estSteps ? ` of ~${t.estSteps}` : ""}` : ""})`).join("\n") : "No tasks match.",
+        text: tasksText(a.tasks ?? []),
       }));
     case "kesher_task":
       return viaPc(hub, grantId, args, { op: "task", taskId: args.taskId }, (a, pc) => ({ data: { pc, ...(a.task ? { task: a.task } : {}) }, text: a.task ? taskText(a) : a.text ?? "No such task." }));
@@ -195,13 +222,17 @@ export async function callTool(hub: Hub, name: ToolName, args: Record<string, un
     case "kesher_quotas":
       return viaPc(hub, grantId, args, { op: "quotas" }, (a, pc) => ({
         data: { pc, quotas: a.quotas ?? [] },
-        text: (a.quotas ?? []).map((q) => `${q.name}: ${q.state}${q.bars.map((b) => ` · ${b.label} ${typeof b.left === "number" ? `${Math.round(b.left * 100)}% left` : typeof b.used === "number" ? `${b.used}${b.limit ? `/${b.limit}` : ""} used` : "?"}${b.resetAt ? ` (back ${new Date(b.resetAt).toISOString().slice(0, 16)}Z)` : ""}`).join("")}`).join("\n") || "No quotas reported.",
+        text: quotasText(a.quotas ?? []),
       }));
     case "kesher_agents":
       return viaPc(hub, grantId, args, { op: "agents" }, (a, pc) => ({
         data: { pc, agents: a.agents ?? [] },
-        text: (a.agents ?? []).map((g) => `${g.kind} ${g.state}${g.label ? ` (${g.label})` : ""}${g.task ? ` → ${g.task.taskId} ${g.task.title}${g.task.now ? ` · last step: ${g.task.now.tool}${g.task.now.target ? ` ${g.task.now.target}` : ""}` : ""}` : ""}`).join("\n") || "No agents reported.",
+        text: agentsText(a.agents ?? []),
       }));
+    case "kesher_approvals":
+      return viaPc(hub, grantId, args, { op: "approvals" }, (a, pc) => ({ data: { pc, approvals: a.approvals ?? [], canAnswer: a.canAnswer === true }, text: approvalsText(a.approvals ?? [], a.canAnswer) }));
+    case "kesher_approve":
+      return viaPc(hub, grantId, args, { op: "approve", conversationId: args.conversationId, requestId: args.requestId, decision: args.decision, forMinutes: args.forMinutes }, (a, pc) => ({ data: { pc, ok: a.ok, text: a.text ?? "" }, text: a.text ?? "Done." }));
     case "list_devices":
       return toolResult({
         devices: hub.presence().map((d) => ({
@@ -258,14 +289,6 @@ export function connectorScrub(text: string): string {
   return scrubSecrets(redactLeaks(text).text);
 }
 
-/** A task's text answer: one line of facts, the result, and the newest steps. */
-function taskText(a: ConnectorAnswer): string {
-  const t = a.task!;
-  const head = `${t.taskId} [${t.state}] ${t.title} (${[t.executor, t.model, t.branch, t.steps ? `step ${t.steps}${t.estSteps ? ` of ~${t.estSteps}` : ""}` : ""].filter(Boolean).join(", ")})`;
-  const steps = t.stepLog.map((s) => `- ${s.tool}${s.target ? ` ${s.target}` : ""}${s.error ? " (failed)" : ""}`);
-  return [head, t.result || t.cause ? `Result: ${t.result ?? t.cause}` : "", steps.length ? `Latest steps:\n${steps.join("\n")}` : ""].filter(Boolean).join("\n");
-}
-
 /**
  * Runs one of the kesher_* tools through the PC (Hub.connectorAsk): the answer is scrubbed, then shaped by `shape`.
  * Refusals (opt-in off, offline, rate limit, a disallowed request) come back as tool errors in words.
@@ -305,7 +328,7 @@ export async function handleRpc(hub: Hub, msg: unknown, hubUrl: string, grantId:
         protocolVersion,
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: "kesher-hub", title: "Kesher Cloud hub", version: "1.0.0" },
-        instructions: "The owner's KesherAI hub. list_devices, get_agent_status, waiting_for_approval and list_tasks return metadata only (contents are end-to-end encrypted; share the hubUrl). The kesher_* tools ask the PC itself (tasks, one task, quotas, agents; add, run, queue, assign or stop a task) and work only while the PC's \"Claude connector may read and run\" setting is on.",
+        instructions: "The owner's KesherAI hub. list_devices, get_agent_status, waiting_for_approval and list_tasks return metadata only (contents are end-to-end encrypted; share the hubUrl). The kesher_* tools ask the PC itself (tasks, one task, quotas, agents; add, run, queue, assign or stop a task; the approval cards waiting in its chats, and answering them when the user allows it) and work only while the PC's \"Claude connector may read and run\" setting is on.",
       });
     }
     case "ping":

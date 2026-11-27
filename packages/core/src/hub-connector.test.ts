@@ -162,3 +162,62 @@ test("hub client: a connector query opens only from the hub, is refused while th
   assert.ok(got[3]!.type === "connector_answer" && !got[3]!.ok && /no time/.test(got[3]!.text ?? ""));
   assert.deepEqual(ran, ["inbox-run r-1"]);
 });
+
+/** Chat cards waiting on the PC: a plain command, a dangerous one, screen control, and two that are not chat cards. */
+function waitingCards() {
+  const base = { title: "Fix the build", preview: `pnpm test in ${HOME}/kesher`, at: "2026-11-27T10:00:00.000Z" };
+  return [
+    { ...base, conversationId: "c-1", requestId: "q-1", tool: "run_command", reason: "Runs a command.", forWhile: true },
+    { ...base, conversationId: "c-1", requestId: "q-2", tool: "run_command", reason: "This command deletes files, so it always needs your approval.", forWhile: false },
+    { ...base, conversationId: "c-2", requestId: "q-3", tool: "computer_use_app", reason: "Wants to see your screen.", forWhile: true },
+    { ...base, conversationId: "task-inbox", requestId: "q-4", tool: "antigravity", reason: "Run it?", kind: "run" as const },
+    { ...base, conversationId: "helper-asks", requestId: "q-5", tool: "x", reason: "y" },
+  ];
+}
+
+function approvalsDesk(allow: boolean) {
+  const answered: string[] = [];
+  const h = desk({
+    approvals: { pending: waitingCards, answer: async (c, r, d, from, m) => (answered.push(`${c}/${r} ${d} ${from.kind} ${m ?? "-"}`), true) },
+    allowApprovals: () => allow,
+  });
+  return { ...h, answered };
+}
+
+test("connector desk: lists chat approval cards only (not Antigravity asks), scrubbed, with locked ones marked", async () => {
+  const { d } = approvalsDesk(false);
+  const a = await d.answer({ queryId: "q", op: "approvals" }, true);
+  assert.equal(a.ok, true);
+  assert.deepEqual(a.approvals!.map((x) => x.requestId), ["q-1", "q-2", "q-3"]);
+  assert.deepEqual(a.approvals!.map((x) => !!x.locked), [false, true, true]);
+  assert.equal(a.canAnswer, false);
+  assert.ok(!JSON.stringify(a).includes(HOME), "home folder hidden");
+  assert.equal((await d.answer({ queryId: "q", op: "approvals" }, false)).ok, false, "the opt-in gates it");
+});
+
+test("connector desk: approve answers only when the user allows connected apps, and never a dangerous command or screen control", async () => {
+  const off = approvalsDesk(false);
+  const refused = await off.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-1", decision: "allow" }, true);
+  assert.equal(refused.ok, false);
+  assert.match(refused.text!, /not let connected apps answer/);
+  assert.deepEqual(off.answered, []);
+  // Deny is always possible: it only stops something.
+  assert.equal((await off.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-2", decision: "deny" }, true)).ok, true);
+  assert.deepEqual(off.answered, ["c-1/q-2 deny connector -"]);
+  const on = approvalsDesk(true);
+  for (const id of [["c-1", "q-2"], ["c-2", "q-3"]] as const) {
+    const r = await on.d.answer({ queryId: "q", op: "approve", conversationId: id[0], requestId: id[1], decision: "allow" }, true);
+    assert.equal(r.ok, false, id.join("/"));
+    assert.match(r.text!, /own approval in KesherAI/);
+  }
+  assert.deepEqual(on.answered, []);
+  const once = await on.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-1", decision: "allow" }, true);
+  assert.deepEqual([once.ok, once.text], [true, "Allowed once."]);
+  const ten = await on.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-1", decision: "allow", forMinutes: 10 }, true);
+  assert.match(ten.text!, /10 minutes/);
+  assert.deepEqual(on.answered, ["c-1/q-1 allow connector -", "c-1/q-1 allow connector 10"]);
+  // A card that is gone, or one that is not a chat's, is "no longer waiting".
+  for (const [c, r] of [["c-9", "q-1"], ["task-inbox", "q-4"]]) assert.match((await on.d.answer({ queryId: "q", op: "approve", conversationId: c!, requestId: r!, decision: "allow" }, true)).text!, /no longer waiting/);
+  assert.equal((await on.d.answer({ queryId: "q", op: "approve", conversationId: "c-1", requestId: "q-1", decision: "allow" }, false)).ok, false, "the opt-in gates it");
+  assert.ok(on.log.every((l) => !/q-1|Fix the build/.test(l.replace(/approve:\w+/, ""))), "the log has no card text");
+});

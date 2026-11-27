@@ -5,10 +5,18 @@
 // on stdout. KesherAI must be running.
 //
 // Usage: node mcp-bridge.cjs [http://127.0.0.1:7420/mcp]
-// (The desktop app runs it as: KesherAI.exe with ELECTRON_RUN_AS_NODE=1.)
+// (The desktop app runs it as: KesherAI.exe with ELECTRON_RUN_AS_NODE=1; the Claude Desktop
+// extension, the .mcpb file, runs it with Claude Desktop's own Node and passes the address in
+// KESHER_MCP_URL and the optional connection key in KESHER_TOKEN.)
 "use strict";
-const url = process.argv[2] || process.env.KESHER_MCP_URL || "http://127.0.0.1:7420/mcp";
-const token = process.env.KESHER_TOKEN;
+// An empty setting, or one Claude Desktop left as an unfilled ${user_config.x}, counts as not set.
+const setting = (v) => (v && !/^\s*\$\{/.test(v) && v.trim()) || "";
+const url = setting(process.argv[2]) || setting(process.env.KESHER_MCP_URL) || "http://127.0.0.1:7420/mcp";
+const token = setting(process.env.KESHER_TOKEN);
+if (!/^https?:\/\//i.test(url)) {
+  process.stderr.write("KesherAI bridge: the address must start with http:// or https://\n");
+  process.exit(1);
+}
 let buffer = "";
 let pending = 0;
 let ended = false;

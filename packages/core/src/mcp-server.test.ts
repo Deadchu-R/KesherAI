@@ -36,7 +36,7 @@ test("KesherAI as an MCP server: initialize, list tools, ask a local model, turn
     assert.ok(init.result.capabilities.tools);
     assert.equal((await rpc("notifications/initialized", {}, null)).statusCode, 202);
     const tools = ((await rpc("tools/list")).json() as { result: { tools: Array<{ name: string }> } }).result.tools.map((t) => t.name);
-    assert.deepEqual(tools, ["kesher_chat", "kesher_read", "kesher_list_chats", "kesher_approve", "list_models", "ask_model", "search_knowledge", "generate_image", "transcribe_audio"]);
+    assert.deepEqual(tools, ["kesher_chat", "kesher_read", "kesher_list_chats", "kesher_approve", "list_models", "ask_model", "search_knowledge", "generate_image", "transcribe_audio", "kesher_tasks", "kesher_task", "kesher_add_task", "kesher_task_action", "kesher_quotas", "kesher_agents"]);
     const ask = (await rpc("tools/call", { name: "ask_model", arguments: { prompt: "shalom" } })).json() as { result: { content: Array<{ text: string }>; isError: boolean } };
     assert.deepEqual(ask.result, { content: [{ type: "text", text: "SHALOM" }], isError: false });
     const models = (await rpc("tools/call", { name: "list_models", arguments: {} })).json() as { result: { content: Array<{ text: string }> } };

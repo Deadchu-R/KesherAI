@@ -1,9 +1,9 @@
 import { randomInt } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, join } from "node:path";
 import { isLocalRequest, pairedDeviceOf } from "../auth.js";
+import { findBridgeFile, mcpbFromDisk } from "../claude-extension.js";
+import { connectorTools } from "../mcp-connector-tools.js";
 import type { FastifyInstance } from "fastify";
 import { branding } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -56,7 +56,12 @@ export function summarizeEvents(events: Ev[], since: number, pending: Set<string
   return lines.join("\n").trim();
 }
 
+/** All the server's tools: its own, then the Claude connector's task tools (the same desk and opt-in as the hub's). */
 function toolsOf(s: KesherServices): Tool[] {
+  return [...ownTools(s), ...connectorTools(s.hub ? (q) => s.hub!.askConnector(q) : undefined)];
+}
+
+function ownTools(s: KesherServices): Tool[] {
   const chatModel = (id?: unknown) => (typeof id === "string" && id.trim() ? id.trim() : s.config.activeModels.chat);
   const speech = speechTools({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }).find((t) => t.spec.name === "transcribe_audio")!;
   /** Waits until the conversation stops running (idle, error, or waiting for the user), or time runs out. */
@@ -256,15 +261,15 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
   app.get("/api/mcp-server", async (req, reply) => {
     if (!isLocalRequest(req) && !pairedDeviceOf(req)) return reply.code(403).send({ error: "Only on this computer or a paired device." });
     const url = `http://127.0.0.1:${s.config.port}/mcp`;
-    const resources = (process as { resourcesPath?: string }).resourcesPath;
-    const here = dirname(fileURLToPath(import.meta.url));
-    const bridge = [resources && join(resources, "mcp-bridge.cjs"), resolve(here, "../../../../apps/desktop/resources/mcp-bridge.cjs")].find((p): p is string => !!p && existsSync(p));
+    const bridge = findBridgeFile();
     const electron = !!process.versions.electron;
     const stdio = bridge ? { command: electron ? process.execPath : "node", args: [bridge, url], ...(electron ? { env: { ELECTRON_RUN_AS_NODE: "1" } } : {}) } : undefined;
     return {
       enabled: s.config.mcpServer.enabled,
       allowApprovals: s.config.mcpServer.allowApprovals,
       url,
+      /** Whether the Claude Desktop extension (.mcpb) can be made here (the bridge file is there). */
+      extension: !!bridge,
       tools: toolsOf(s).map((t) => t.name),
       snippets: {
         claudeCode: `claude mcp add --transport http kesherai ${url}`,
@@ -273,6 +278,13 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
         ...(stdio ? { claudeDesktop: JSON.stringify({ mcpServers: { kesherai: stdio } }, null, 2) } : {}),
       },
     };
+  });
+  // The Claude Desktop extension (.mcpb), made on request: this computer only (it is for Claude Desktop on this PC).
+  app.get("/api/mcp-server/claude-desktop.mcpb", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on this computer." });
+    const bytes = await mcpbFromDisk({ version: (await s.updater.version()).version, url: `http://127.0.0.1:${s.config.port}/mcp`, tools: toolsOf(s).map((t) => ({ name: t.name, description: t.description })) });
+    if (!bytes) return reply.code(404).send({ error: "The bridge file is missing from this install." });
+    return reply.header("content-type", "application/octet-stream").header("content-disposition", 'attachment; filename="KesherAI.mcpb"').header("cache-control", "no-store").send(Buffer.from(bytes));
   });
   app.put<{ Body: { enabled?: boolean; allowApprovals?: boolean } }>("/api/mcp-server", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on this computer." });
@@ -299,7 +311,7 @@ export async function mcpServerRoutes(app: FastifyInstance, s: KesherServices): 
           protocolVersion: PROTOCOLS.includes(asked) ? asked : PROTOCOLS[0],
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: branding.productName, title: branding.productName, version: (await s.updater.version()).version },
-          instructions: `${branding.productName} runs AI models and an agent on the user's own computer. Use kesher_chat to give it a task as the user would (it uses its own tools: files, commands, Unity, Unreal, builds, Google Drive) and kesher_read to follow it; ask_model to hand a question to a private local model; search_knowledge for the user's documents; generate_image and transcribe_audio for media. Its approval cards stay the user's unless they let you answer them.`,
+          instructions: `${branding.productName} runs AI models and an agent on the user's own computer. Use kesher_chat to give it a task as the user would (it uses its own tools: files, commands, Unity, Unreal, builds, Google Drive) and kesher_read to follow it; ask_model to hand a question to a private local model; search_knowledge for the user's documents; generate_image and transcribe_audio for media. kesher_tasks, kesher_task, kesher_add_task, kesher_task_action, kesher_quotas and kesher_agents show and run its task inbox (they need its "Claude connector may read and run" setting). Its approval cards stay the user's unless they let you answer them.`,
         });
       }
       case "ping":

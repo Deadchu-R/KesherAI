@@ -15,7 +15,7 @@
 export const MCP_APP_MIME = "text/html;profile=mcp-app";
 
 /** The views' addresses. */
-export const VIEW_URIS = { board: "ui://kesher/board", quotas: "ui://kesher/quotas", task: "ui://kesher/task" } as const;
+export const VIEW_URIS = { board: "ui://kesher/board", quotas: "ui://kesher/quotas", task: "ui://kesher/task", approvals: "ui://kesher/approvals" } as const;
 
 /** Shared look: the hub page's palette (apps/hub/public/app.css), a light variant, chips, buttons and bars. */
 const CSS = `
@@ -41,6 +41,9 @@ button.primary{background:var(--acc);border-color:var(--acc);color:#111}button:d
 .status{min-height:18px;font-size:12.5px;color:var(--mut)}
 ol.steps{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:3px}ol.steps li{overflow-wrap:anywhere}
 .empty{color:var(--mut);padding:8px 2px}
+pre.pre{margin:0;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto}
+.note{background:var(--c-wait-bg);color:var(--warn);border-radius:9px;padding:6px 10px;font-size:12.5px}
+button.danger{color:var(--bad)}
 `;
 
 /** The host bridge and helpers every view shares (plain ES2017, no template literals: this sits inside one). */
@@ -143,6 +146,36 @@ function render(sc){var t=sc.task;var wrap=h("main",{});cur=t||null;
 boot("kesher-task",render);
 `;
 
+/**
+ * The approvals: one card per waiting approval (which tool, why, a short preview) with Allow, Allow for 10 minutes and
+ * Deny. The buttons call kesher_approve through the host; the PC still checks the user's own switch and never lets a
+ * dangerous command or screen control through (such a card shows only Deny).
+ */
+const APPROVALS_JS = `
+var canAnswer=true;
+function refresh(){var a={};if(PC)a.device=PC;callTool("kesher_approvals",a).then(function(r){render(r.sc)},function(){})}
+function decide(a,decision,minutes,status,btn){btn.disabled=true;status.className="status";status.textContent=T("שולח…","Sending…");
+ var args={conversationId:a.conversationId,requestId:a.requestId,decision:decision};if(minutes)args.forMinutes=minutes;if(PC)args.device=PC;
+ callTool("kesher_approve",args).then(function(r){status.textContent=r.text;status.className="status "+(r.ok?"ok":"bad");btn.disabled=false;if(r.ok)setTimeout(refresh,600)},
+  function(e){status.textContent=e.message;status.className="status bad";btn.disabled=false})}
+function render(sc){var items=sc.approvals||[];canAnswer=sc.canAnswer===true;var wrap=h("main",{});
+ wrap.appendChild(h("h1",{},T("אישורים","Approvals"),sc.pc?h("small",{text:"· "+sc.pc+" · "+items.length}):null));
+ if(!canAnswer&&items.length)wrap.appendChild(h("div",{"class":"note",text:T("KesherAI לא מרשה ל-Claude לאשר (הגדרות ← שימוש ב-KesherAI מאפליקציות אחרות). אפשר רק לדחות.","KesherAI does not let Claude allow cards (Settings, Use KesherAI from other apps). Deny still works.")}));
+ if(!items.length)wrap.appendChild(h("div",{"class":"empty",text:sc.error||T("שום דבר לא מחכה לאישור.","Nothing waits for approval.")}));
+ items.forEach(function(a){var status=h("div",{"class":"status"});var box=h("div",{"class":"actions"});
+  var allow=h("button",{"class":"primary",text:T("אשר","Allow"),on:function(ev){decide(a,"allow",0,status,ev.currentTarget)}});
+  var ten=h("button",{text:T("אשר ל-10 דקות","Allow for 10 minutes"),on:function(ev){decide(a,"allow",10,status,ev.currentTarget)}});
+  var deny=h("button",{"class":"danger",text:T("דחה","Deny"),on:function(ev){decide(a,"deny",0,status,ev.currentTarget)}});
+  if(!a.locked&&canAnswer){box.appendChild(allow);if(a.forWhile)box.appendChild(ten)}box.appendChild(deny);
+  wrap.appendChild(h("div",{"class":"card"},h("div",{"class":"row"},h("span",{"class":"chip c-wait",text:a.tool}),h("span",{"class":"title grow",dir:"auto",text:a.title||T("שיחה","Chat")})),
+   h("div",{"class":"mut",dir:"auto",text:[a.who,a.reason,a.at?clock(Date.parse(a.at)):""].filter(Boolean).join(" · ")}),
+   a.preview?h("pre",{"class":"pre",dir:"auto",text:a.preview}):null,
+   a.locked?h("div",{"class":"note",text:T("רק אתה יכול לאשר את זה, ב-KesherAI (פקודה מסוכנת או שליטה במסך).","Only you can allow this one, in KesherAI (a dangerous command or screen control).")}):null,
+   box,status))});
+ paint(wrap)}
+boot("kesher-approvals",render);
+`;
+
 /** One whole view page. */
 function page(title: string, js: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${CSS}</style></head><body><div id="app"></div><script>${BRIDGE}${js}</script></body></html>`;
@@ -153,4 +186,5 @@ export const VIEWS: ReadonlyArray<{ uri: string; name: string; description: stri
   { uri: VIEW_URIS.board, name: "Kesher task board", description: "The PC's task inbox with Run, Queue, Stop and Assign.", html: page("Kesher tasks", BOARD_JS) },
   { uri: VIEW_URIS.quotas, name: "Kesher quotas", description: "What is left of each provider the PC's agents use.", html: page("Kesher quotas", QUOTAS_JS) },
   { uri: VIEW_URIS.task, name: "Kesher task", description: "One task: progress, result and its latest steps.", html: page("Kesher task", TASK_JS) },
+  { uri: VIEW_URIS.approvals, name: "Kesher approvals", description: "Approval cards waiting on the PC, with Allow, Allow for 10 minutes and Deny.", html: page("Kesher approvals", APPROVALS_JS) },
 ];

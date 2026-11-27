@@ -1,6 +1,6 @@
 import { cleanProviderQuotas } from "./provider-quotas.js";
 import { parseAssignTo } from "./task-assign.js";
-export const CONNECTOR_OPS = ["tasks", "task", "quotas", "agents", "add", "action"];
+export const CONNECTOR_OPS = ["tasks", "task", "quotas", "agents", "add", "action", "approvals", "approve"];
 export const CONNECTOR_ACTIONS = ["run", "queue", "unqueue", "stop", "assign"];
 /** Executors a new task may name (`auto`: the PC's own routing, the same as "+ Task"). */
 export const CONNECTOR_EXECUTORS = ["auto", "antigravity", "local", "opus", "gemini", "opencode", "ghostcli"];
@@ -14,6 +14,13 @@ export const CONNECTOR_LIMITS = {
     agents: 16,
     /** A new task's goal, in characters (the inbox's own cap). */
     goalChars: 6000,
+    /** Approval cards one `approvals` answer lists (the oldest first). */
+    approvals: 10,
+    /** An approval's preview and reason, in characters (the card on the PC keeps the whole text). */
+    previewChars: 700,
+    reasonChars: 240,
+    /** The longest "Allow for a while" the connector may ask for, in minutes (the view offers 10). */
+    maxAllowMinutes: 60,
     /** A row's title in a list. */
     titleChars: 120,
     /** The plain answer, in characters, before it is sealed. */
@@ -84,6 +91,16 @@ export function parseConnectorQuery(x) {
             const to = parseAssignTo(q.to);
             return to ? { ...base, taskId: q.taskId, action, to, ...(q.confirm === true ? { confirm: true } : {}) } : null;
         }
+        case "approvals":
+            return base;
+        case "approve": {
+            if (typeof q.conversationId !== "string" || !ID.test(q.conversationId) || typeof q.requestId !== "string" || !ID.test(q.requestId))
+                return null;
+            if (q.decision !== "allow" && q.decision !== "deny")
+                return null;
+            const minutes = q.decision === "allow" ? num(q.forMinutes) : undefined;
+            return { ...base, conversationId: q.conversationId, requestId: q.requestId, decision: q.decision, ...(minutes ? { forMinutes: Math.min(minutes, CONNECTOR_LIMITS.maxAllowMinutes) } : {}) };
+        }
     }
 }
 /** A step note from untrusted input (tool and target short, one line). */
@@ -133,6 +150,20 @@ export function parseConnectorAnswer(x) {
     }
     if (Array.isArray(a.quotas))
         out.quotas = cleanProviderQuotas(a.quotas);
+    if (Array.isArray(a.approvals)) {
+        out.approvals = a.approvals.slice(0, CONNECTOR_LIMITS.approvals).flatMap((x) => {
+            if (!x || typeof x !== "object")
+                return [];
+            const r = x;
+            if (typeof r.conversationId !== "string" || !ID.test(r.conversationId) || typeof r.requestId !== "string" || !ID.test(r.requestId))
+                return [];
+            // The preview keeps its lines (other control characters become spaces).
+            const preview = (typeof r.preview === "string" ? r.preview : "").replace(/\p{Cc}/gu, (c) => (c === "\n" || c === "\t" ? c : " ")).slice(0, CONNECTOR_LIMITS.previewChars);
+            return [{ conversationId: r.conversationId, requestId: r.requestId, title: str(r.title, CONNECTOR_LIMITS.titleChars).trim(), tool: str(r.tool, 60).trim() || "tool", preview, reason: str(r.reason, CONNECTOR_LIMITS.reasonChars).trim(), ...optStr("who", r.who, 80), ...(r.forWhile === true ? { forWhile: true } : {}), ...(r.locked === true ? { locked: true } : {}), ...optStr("at", r.at, 40) }];
+        });
+    }
+    if (typeof a.canAnswer === "boolean")
+        out.canAnswer = a.canAnswer;
     if (Array.isArray(a.agents)) {
         out.agents = a.agents.slice(0, CONNECTOR_LIMITS.agents).flatMap((g) => {
             if (!g || typeof g !== "object")
@@ -156,7 +187,7 @@ export function parseConnectorAnswer(x) {
  * @returns The same answer, small enough to seal.
  */
 export function fitConnectorAnswer(a) {
-    const out = { ...a, ...(a.tasks ? { tasks: [...a.tasks] } : {}), ...(a.task ? { task: { ...a.task, stepLog: [...a.task.stepLog] } } : {}), ...(a.quotas ? { quotas: [...a.quotas] } : {}) };
+    const out = { ...a, ...(a.tasks ? { tasks: [...a.tasks] } : {}), ...(a.task ? { task: { ...a.task, stepLog: [...a.task.stepLog] } } : {}), ...(a.quotas ? { quotas: [...a.quotas] } : {}), ...(a.approvals ? { approvals: [...a.approvals] } : {}) };
     let cut = 0;
     const size = () => JSON.stringify(out).length;
     // Room for the "left out" note added below.
@@ -167,6 +198,8 @@ export function fitConnectorAnswer(a) {
         }
         else if (out.task?.stepLog.length)
             out.task.stepLog.shift();
+        else if (out.approvals?.length)
+            out.approvals.pop();
         else if (out.quotas?.length)
             out.quotas.pop();
         else if (out.agents?.length)
@@ -203,6 +236,7 @@ export function mapConnectorText(a, fn) {
             ? { task: { ...row(a.task), ...(a.task.branch ? { branch: fn(a.task.branch) } : {}), ...(a.task.result ? { result: fn(a.task.result) } : {}), ...(a.task.cause ? { cause: fn(a.task.cause) } : {}), stepLog: a.task.stepLog.map(step) } }
             : {}),
         ...(a.quotas ? { quotas: a.quotas.map((q) => ({ ...q, name: fn(q.name), ...(q.model ? { model: fn(q.model) } : {}), ...(q.health ? { health: { ...q.health, model: fn(q.health.model) } } : {}), ...(q.movedTo ? { movedTo: q.movedTo.map((m) => ({ ...m, name: fn(m.name) })) } : {}) })) } : {}),
+        ...(a.approvals ? { approvals: a.approvals.map((x) => ({ ...x, title: fn(x.title), tool: fn(x.tool), preview: fn(x.preview), reason: fn(x.reason), ...(x.who ? { who: fn(x.who) } : {}) })) } : {}),
         ...(a.agents
             ? { agents: a.agents.map((g) => ({ ...g, ...(g.label ? { label: fn(g.label) } : {}), ...(g.task ? { task: { ...g.task, title: fn(g.task.title), ...(g.task.now ? { now: step(g.task.now) } : {}) } } : {}) })) }
             : {}),

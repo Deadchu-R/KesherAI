@@ -15,6 +15,8 @@ import {
   type ProviderQuota,
   cleanOptIn,
   connectorQueryStale,
+  type ConnectorAnswer,
+  type ConnectorQuery,
   estimateTaskSteps,
   exportPrivateJwk,
   fitApprovals,
@@ -174,6 +176,8 @@ export interface HubClientDeps {
    * (hub-connector.ts).
    */
   addTask?: (t: { title: string; goal: string; executor: string }) => Promise<InboxTaskView>;
+  /** Whether connected apps may answer approval cards (`mcpServer.allowApprovals`): the connector's `approve` needs it too. */
+  allowApprovals?: () => boolean;
   /** One line to the app's log (the Claude connector notes each request here: op, task id, outcome). */
   log?: (line: string) => void;
   /**
@@ -471,10 +475,23 @@ export class HubClient {
         ...(deps.inboxCommand ? { inboxCommand: deps.inboxCommand } : {}),
         ...(deps.assign ? { assign: deps.assign } : {}),
         ...(deps.addTask ? { addTask: deps.addTask } : {}),
+        ...(deps.approvals ? { approvals: { pending: () => deps.approvals!.pending(), answer: (c, r, d, from, m) => deps.approvals!.answer(c, r, d, from, m) } } : {}),
+        ...(deps.allowApprovals ? { allowApprovals: deps.allowApprovals } : {}),
         ...(deps.log ? { log: deps.log } : {}),
       },
       deps.now ?? Date.now,
     );
+  }
+
+  /**
+   * One question of the Claude connector asked on this PC itself (KesherAI's own MCP server, for the Claude Desktop
+   * extension): the same desk, allow-list, opt-in and rate limit as the hub's questions.
+   *
+   * @param q - The query (checked by parseConnectorQuery).
+   * @returns The answer.
+   */
+  askConnector(q: ConnectorQuery): Promise<ConnectorAnswer> {
+    return this.desk.answer(q, cleanOptIn(this.s.optIn).connector);
   }
 
   /** The Claude connector's questions (hub-connector.ts): answered only while the `connector` opt-in is on. */

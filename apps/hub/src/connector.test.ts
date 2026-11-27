@@ -258,8 +258,8 @@ test("mcp: initialize, tools/list, notifications, bad requests, a foreign Origin
   assert.ok(result.capabilities.tools);
   assert.equal(((await rpc(hub, access, "initialize", { protocolVersion: "1999-01-01" })).data.result as { protocolVersion: string }).protocolVersion, "2025-11-25");
   const tools = ((await rpc(hub, access, "tools/list")).data.result as { tools: Array<{ name: string }> }).tools.map((t) => t.name);
-  assert.deepEqual(tools, ["list_devices", "get_agent_status", "waiting_for_approval", "list_tasks", "send_task", "kesher_tasks", "kesher_task", "kesher_add_task", "kesher_task_action", "kesher_quotas", "kesher_agents"]);
-  const writes = ["send_task", "kesher_add_task", "kesher_task_action"];
+  assert.deepEqual(tools, ["list_devices", "get_agent_status", "waiting_for_approval", "list_tasks", "send_task", "kesher_tasks", "kesher_task", "kesher_add_task", "kesher_task_action", "kesher_quotas", "kesher_approvals", "kesher_approve", "kesher_agents"]);
+  const writes = ["send_task", "kesher_add_task", "kesher_task_action", "kesher_approve"];
   assert.ok(MCP_TOOLS.filter((t) => !writes.includes(t.name)).every((t) => t.annotations.readOnlyHint));
   assert.ok(MCP_TOOLS.filter((t) => writes.includes(t.name)).every((t) => !t.annotations.readOnlyHint));
   const note = await call(hub, "POST", "/mcp", { body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }), headers: { authorization: `Bearer ${access}` } });
@@ -469,6 +469,32 @@ test("kesher_* tools: answers are scrubbed again on the hub (keys, e-mails, home
   assert.match(r.text, /r-3 \[failed\] Research/);
 });
 
+test("kesher_approvals and kesher_approve: asked of the PC, sealed, scrubbed; bad ids and decisions never leave the hub", async () => {
+  const { hub, sockets } = setup();
+  const { access } = await connect(hub);
+  const pc = await pair(hub, "pc", "Desk");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", busy: false, optIn: { appear: true, connector: true }, agents: [] }));
+  const card = { conversationId: "c-1", requestId: "q-1", title: "Fix the build", tool: "run_command", preview: "rm -rf /home/someone/x # token kh_abc.def", reason: "Runs a command.", forWhile: true };
+  const seen = fakePc(hub, sockets, pc, (q) => (q.op === "approvals" ? { ok: true, approvals: [card], canAnswer: true } : { ok: true, text: "Allowed once." }));
+  const list = await tool(hub, access, "kesher_approvals");
+  assert.equal(list.isError, false, list.text);
+  assert.equal((list.data.approvals as unknown[]).length, 1);
+  assert.equal(list.data.canAnswer, true);
+  assert.equal(list.data.pc, "Desk");
+  assert.match(list.text, /q-1 \(chat c-1\) run_command/);
+  assert.ok(!JSON.stringify(list).includes("/home/someone") && !JSON.stringify(list).includes("kh_abc"), "scrubbed on the hub too");
+  const ok = await tool(hub, access, "kesher_approve", { conversationId: "c-1", requestId: "q-1", decision: "allow", forMinutes: 10 });
+  assert.equal(ok.text, "Allowed once.");
+  assert.deepEqual({ op: seen.at(-1)!.op, d: seen.at(-1)!.decision, m: seen.at(-1)!.forMinutes, c: seen.at(-1)!.conversationId }, { op: "approve", d: "allow", m: 10, c: "c-1" });
+  const sent = seen.length;
+  for (const args of [{ conversationId: "c-1", requestId: "q-1", decision: "always" }, { conversationId: "../x", requestId: "q-1", decision: "allow" }, { conversationId: "c-1", decision: "deny" }]) {
+    assert.equal((await tool(hub, access, "kesher_approve", args)).isError, true, JSON.stringify(args));
+  }
+  assert.equal(seen.length, sent, "nothing was sent to the PC");
+});
+
 test("MCP Apps: tools name their views; resources/list and resources/read serve small self-contained HTML", async () => {
   const { hub } = setup();
   const { access } = await connect(hub);
@@ -479,8 +505,9 @@ test("MCP Apps: tools name their views; resources/list and resources/read serve 
   assert.equal(uriOf("kesher_tasks"), "ui://kesher/board");
   assert.equal(uriOf("kesher_quotas"), "ui://kesher/quotas");
   assert.equal(uriOf("kesher_task"), "ui://kesher/task");
+  assert.equal(uriOf("kesher_approvals"), "ui://kesher/approvals");
   const list = ((await rpc(hub, access, "resources/list")).data.result as { resources: Array<{ uri: string; mimeType: string }> }).resources;
-  assert.deepEqual(list.map((r) => r.uri), ["ui://kesher/board", "ui://kesher/quotas", "ui://kesher/task"]);
+  assert.deepEqual(list.map((r) => r.uri), ["ui://kesher/board", "ui://kesher/quotas", "ui://kesher/task", "ui://kesher/approvals"]);
   assert.ok(list.every((r) => r.mimeType === "text/html;profile=mcp-app"));
   for (const { uri } of list) {
     const read = (await rpc(hub, access, "resources/read", { uri })).data.result as { contents: Array<{ uri: string; mimeType: string; text: string }> };

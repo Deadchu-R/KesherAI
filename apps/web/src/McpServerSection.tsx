@@ -5,7 +5,7 @@ import { getLocale, he$ } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-interface Info { enabled: boolean; allowApprovals?: boolean; url: string; tools: string[]; snippets: { claudeCode: string; cursor: string; vscode: string; claudeDesktop?: string } }
+interface Info { enabled: boolean; allowApprovals?: boolean; extension?: boolean; url: string; tools: string[]; snippets: { claudeCode: string; cursor: string; vscode: string; claudeDesktop?: string } }
 
 const APPS: Array<{ key: keyof Info["snippets"]; name: string; where: [string, string] }> = [
   { key: "claudeCode", name: "Claude Code", where: ["הריצו בטרמינל:", "Run in a terminal:"] },
@@ -13,6 +13,24 @@ const APPS: Array<{ key: keyof Info["snippets"]; name: string; where: [string, s
   { key: "cursor", name: "Cursor", where: ["הוסיפו ל-‎.cursor/mcp.json (או Settings ← MCP):", "Add to .cursor/mcp.json (or Settings → MCP):"] },
   { key: "vscode", name: "VS Code", where: ["הוסיפו ל-‎.vscode/mcp.json:", "Add to .vscode/mcp.json:"] },
 ];
+
+/**
+ * Claude Desktop on this computer, the easy way: a one-file extension (.mcpb) made on request, which Claude Desktop
+ * installs with a double-click (no config file). It connects straight to KesherAI here, no cloud hub, and carries no key.
+ */
+function ClaudeDesktopExtension() {
+  return (
+    <div className="stack">
+      <h3>{L("תוסף ל-Claude Desktop (הכי קל)", "Claude Desktop extension (easiest)")}</h3>
+      <a className="button" href="/api/mcp-server/claude-desktop.mcpb" download="KesherAI.mcpb">{L("הורד ל-Claude Desktop", "Download for Claude Desktop")}</a>
+      <ol className="small">
+        <li>{L("לחצו פעמיים על הקובץ KesherAI.mcpb, או גררו אותו לחלון של Claude Desktop (הגדרות ← Extensions).", "Double-click KesherAI.mcpb, or drag it into Claude Desktop (Settings → Extensions).")}</li>
+        <li>{L("אשרו את ההתקנה. אין מה למלא: הכתובת של KesherAI במחשב הזה כבר שם, ואין צורך במפתח.", "Confirm the install. Nothing to fill in: this computer's KesherAI address is already there, and no key is needed.")}</li>
+        <li>{L("KesherAI צריך לרוץ. כדי שיראה וירים משימות: הגדרות ← Kesher Cloud ← \"Claude connector may read and run\".", "KesherAI must be running. For it to see and run tasks: Settings → Kesher Cloud → \"Claude connector may read and run\".")}</li>
+      </ol>
+    </div>
+  );
+}
 
 /**
  * Claude from anywhere: a custom connector added in the Claude app (phone, web or desktop) with a link
@@ -88,6 +106,7 @@ export function McpServerSection() {
             ))}
           </div>
           <p className="muted small">{L(...current.where)}</p>
+          {current.key === "claudeDesktop" && info.extension && <ClaudeDesktopExtension />}
           <div className="snippet">
             <pre dir="ltr">{snippet}</pre>
             <button type="button" onClick={() => void navigator.clipboard?.writeText(snippet).then(() => setCopied(true))}>{copied ? L("הועתק", "Copied") : L("העתק", "Copy")}</button>

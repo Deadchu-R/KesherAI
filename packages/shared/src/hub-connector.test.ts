@@ -46,3 +46,28 @@ test("connectorQueryStale: a query needs the hub's time, within 5 minutes of the
   assert.match(connectorQueryStale({ at: now - CONNECTOR_LIMITS.maxSkewMs - 1 }, now)!, /too old/);
   assert.match(connectorQueryStale({}, now)!, /no time/);
 });
+
+test("connector approvals: approve needs ids and a decision; the allowance is only for allow and capped", () => {
+  const ids = { queryId: "q1", conversationId: "c-1", requestId: "req_2" };
+  assert.deepEqual(parseConnectorQuery({ queryId: "q1", op: "approvals" }), { queryId: "q1", op: "approvals" });
+  assert.equal(parseConnectorQuery({ queryId: "q1", op: "approve", conversationId: "c-1", requestId: "r" }), null, "no decision");
+  assert.equal(parseConnectorQuery({ ...ids, op: "approve", decision: "always" }), null, "only allow or deny");
+  assert.equal(parseConnectorQuery({ ...ids, op: "approve", decision: "allow", conversationId: "../x" }), null);
+  assert.deepEqual(parseConnectorQuery({ ...ids, op: "approve", decision: "allow", forMinutes: 10 }), { ...ids, op: "approve", decision: "allow", forMinutes: 10 });
+  assert.equal(parseConnectorQuery({ ...ids, op: "approve", decision: "allow", forMinutes: 99999 })!.forMinutes, CONNECTOR_LIMITS.maxAllowMinutes);
+  assert.equal(parseConnectorQuery({ ...ids, op: "approve", decision: "deny", forMinutes: 10 })!.forMinutes, undefined, "deny never carries an allowance");
+});
+
+test("connector approvals: answers are cleaned, capped, scrubbed and fitted", () => {
+  const card = (i: number) => ({ conversationId: `c-${i}`, requestId: `r-${i}`, title: "Chat", tool: "run_command", preview: `line 1\nline 2\u0007 ${"x".repeat(2000)}`, reason: "Asks to run a command.", forWhile: true, locked: i === 0, extra: "dropped" });
+  const a = parseConnectorAnswer({ queryId: "q", ok: true, at: 1, canAnswer: true, approvals: [...Array.from({ length: 14 }, (_, i) => card(i)), { conversationId: "../x", requestId: "r" }] })!;
+  assert.equal(a.approvals!.length, CONNECTOR_LIMITS.approvals);
+  assert.equal(a.canAnswer, true);
+  assert.equal(a.approvals![0]!.locked, true);
+  assert.ok(a.approvals![1]!.preview.length <= CONNECTOR_LIMITS.previewChars && a.approvals![1]!.preview.startsWith("line 1\nline 2 "), "lines kept, control characters not");
+  assert.ok(!("extra" in a.approvals![0]!));
+  const m = mapConnectorText(a, (s) => s.replace(/line/g, "L"));
+  assert.ok(m.approvals![0]!.preview.startsWith("L 1"), "preview scrubbed");
+  const fat = fitConnectorAnswer({ ...a, approvals: Array.from({ length: 10 }, (_, i) => ({ ...a.approvals![0]!, requestId: `r-${i}`, preview: "p".repeat(700), reason: "r".repeat(240), title: "t".repeat(120) })) });
+  assert.ok(JSON.stringify(fat).length <= CONNECTOR_LIMITS.answerChars);
+});

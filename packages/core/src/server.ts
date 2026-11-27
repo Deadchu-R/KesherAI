@@ -863,6 +863,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onSync: () => services.tasksSync?.onPing(),
     // The Claude connector's "+ Task" (only while Settings › Kesher Cloud › "Claude connector may read and run" is on).
     addTask: (t) => taskInbox.add(t),
+    // The connector's approval cards also need "let the connected app answer approval cards" (Settings › MCP server).
+    allowApprovals: () => config.mcpServer.allowApprovals === true,
     // Each connector request goes to the app's log (op, task id, outcome; never a title or text).
     log: (line) => {
       try {

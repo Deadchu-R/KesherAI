@@ -5,8 +5,10 @@
  * This is the real gate, not the hub: every query is refused while the opt-in is off; only the ops in
  * {@link CONNECTOR_OPS} exist (read tasks / one task / quotas / agents, add a task, and Run / queue / take out of the
  * queue / Stop / "Who does it"); at most {@link CONNECTOR_LIMITS.perMinute} a minute; each is noted in the app's log
- * (op, task id and the outcome; never a title, goal or result). Approvals, board edits, agent names and settings are
- * not reachable from here. Every text field is scrubbed (home folder, user name, keys, e-mails) before it is sealed.
+ * (op, task id and the outcome; never a title, goal or result). Board edits, agent names and settings are not reachable
+ * from here. Approval cards of chats (`approvals`, `approve`; 27.11) are the one addition: listed while the opt-in is
+ * on, answered only when the user also let connected apps answer cards (Settings › Use KesherAI from other apps, the same
+ * switch as the MCP server's `kesher_approve`), and never a dangerous command or screen control. Every text field is scrubbed (home folder, user name, keys, e-mails) before it is sealed.
  */
 import { homedir, userInfo } from "node:os";
 import {
@@ -18,6 +20,7 @@ import {
   type AssignResult,
   type AssignTo,
   type ConnectorAgent,
+  type ConnectorApproval,
   type ConnectorAnswer,
   type ConnectorQuery,
   type ConnectorTaskDetail,
@@ -28,7 +31,8 @@ import {
   type InboxTaskView,
   type ProviderQuota,
 } from "@kesher/shared";
-import { hubInboxTask } from "./hub-client.js";
+import { HELPER_ASKS, INBOX_APPROVALS } from "./agent-activity.js";
+import { hubInboxTask, type PendingApproval } from "./hub-client.js";
 
 /** What the connector's answers read and do (the same functions the hub page's commands use). */
 export interface ConnectorDeps {
@@ -44,6 +48,13 @@ export interface ConnectorDeps {
   assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
   /** "+ Task": a new inbox task (inbox-runner.ts `add`). */
   addTask?: (t: { title: string; goal: string; executor: string }) => Promise<InboxTaskView>;
+  /** The approval cards waiting on this PC and how to answer one (hub-client.ts `approvals`). */
+  approvals?: {
+    pending(): PendingApproval[];
+    answer(conversationId: string, requestId: string, decision: "allow" | "deny", from: { id: string; kind: string }, forMinutes?: number): Promise<boolean>;
+  };
+  /** Whether the user let connected apps answer approval cards (`mcpServer.allowApprovals`). */
+  allowApprovals?: () => boolean;
   /** One line to the app's log. */
   log?: (line: string) => void;
 }
@@ -55,6 +66,15 @@ const ACTION_COMMAND: Record<"run" | "queue" | "unqueue" | "stop", HubCommandAct
 const FROM = { id: "connector", kind: "connector" };
 
 /** The inbox's executor for an agent kind the PC reports (to put a running task on its agent). */
+/** Chats' own cards are the connector's; Antigravity's "Run?" asks and helper cards have their own paths (a paired phone). */
+const OTHER_ASKS = new Set([HELPER_ASKS, INBOX_APPROVALS, "task-inbox"]);
+
+/** Tools whose approval is the user's alone, whoever asks (as in the MCP server's `kesher_approve`). */
+const USER_ONLY_TOOLS = /^computer_use_app$/;
+
+/** The guard's words for a command that always needs the user's own approval (hub-approvals.ts `isDangerousReason`). */
+const DANGER = /always needs your approval/i;
+
 const AGENT_OF: Record<string, string> = { antigravity: "antigravity", local: "local-model" };
 
 /**
@@ -86,7 +106,7 @@ export class ConnectorDesk {
    */
   async answer(q: ConnectorQuery, optedIn: boolean): Promise<ConnectorAnswer> {
     const at = this.now();
-    const what = `${q.op}${q.action ? `:${q.action}` : ""}${q.taskId ? ` ${q.taskId}` : ""}`;
+    const what = `${q.op}${q.action ? `:${q.action}` : ""}${q.decision ? `:${q.decision}` : ""}${q.taskId ? ` ${q.taskId}` : ""}`;
     const done = (a: Omit<ConnectorAnswer, "queryId" | "at">): ConnectorAnswer => {
       this.deps.log?.(`Claude connector: ${what} -> ${a.ok ? "ok" : "refused"}`);
       return fitConnectorAnswer(mapConnectorText({ queryId: q.queryId, at, ...a }, this.scrub));
@@ -110,7 +130,7 @@ export class ConnectorDesk {
    * @returns The answer to seal to the hub.
    */
   refuse(q: ConnectorQuery, why: string): ConnectorAnswer {
-    this.deps.log?.(`Claude connector: ${q.op}${q.action ? `:${q.action}` : ""}${q.taskId ? ` ${q.taskId}` : ""} -> refused (stale)`);
+    this.deps.log?.(`Claude connector: ${q.op}${q.action ? `:${q.action}` : ""}${q.decision ? `:${q.decision}` : ""}${q.taskId ? ` ${q.taskId}` : ""} -> refused (stale)`);
     return { queryId: q.queryId, ok: false, text: why, at: this.now() };
   }
 
@@ -139,6 +159,22 @@ export class ConnectorDesk {
         const r = hubInboxTask(asReported(t), at);
         return { ok: true, text: `Added to the task inbox as ${t.id}.`, ...(r ? { task: detailOf(r, t) } : {}) };
       }
+      case "approvals": {
+        if (!this.deps.approvals) return { ok: false, text: "This PC has no approvals to show." };
+        return { ok: true, approvals: this.waiting().map(toConnectorApproval), canAnswer: this.canAnswer() };
+      }
+      case "approve": {
+        const found = this.waiting().find((a) => a.conversationId === q.conversationId && a.requestId === q.requestId);
+        if (!this.deps.approvals || !found) return { ok: false, text: "That card is no longer waiting." };
+        if (q.decision === "allow") {
+          if (!this.canAnswer()) return { ok: false, text: "The user has not let connected apps answer KesherAI's approval cards (KesherAI › Settings › Use KesherAI from other apps). Ask them to approve it in KesherAI." };
+          if (lockedToUser(found)) return { ok: false, text: "This one needs the user's own approval in KesherAI (a dangerous command or screen control)." };
+        }
+        const minutes = q.decision === "allow" && found.forWhile !== false ? q.forMinutes : undefined;
+        const done = await this.deps.approvals.answer(found.conversationId, found.requestId, q.decision === "allow" ? "allow" : "deny", FROM, minutes);
+        if (!done) return { ok: false, text: "That card is no longer waiting." };
+        return { ok: true, text: q.decision === "deny" ? "Denied." : minutes ? `Allowed, and ${found.tool} stays allowed in that chat for ${minutes} minutes.` : q.forMinutes ? "Allowed once (a longer allowance does not apply to this one)." : "Allowed once." };
+      }
       case "action": {
         const id = q.taskId ?? "";
         if (q.action === "assign") {
@@ -150,6 +186,16 @@ export class ConnectorDesk {
         return this.deps.inboxCommand(ACTION_COMMAND[q.action], id, FROM);
       }
     }
+  }
+
+  /** Whether the user let connected apps answer approval cards. */
+  private canAnswer(): boolean {
+    return this.deps.allowApprovals?.() === true;
+  }
+
+  /** The chats' own approval cards waiting now (oldest first), not Antigravity's asks or helpers' cards. */
+  private waiting(): PendingApproval[] {
+    return (this.deps.approvals?.pending() ?? []).filter((a) => a.kind !== "run" && !OTHER_ASKS.has(a.conversationId)).slice(0, CONNECTOR_LIMITS.approvals);
   }
 
   /** The inbox's tasks as the hub lists them, with their queue places (oldest first). */
@@ -182,6 +228,27 @@ export class ConnectorDesk {
 /** A task from the hub is listed too here (the hub page leaves those out because it sent them; the connector did not). */
 function asReported(t: InboxTaskView): InboxTaskView {
   return t.from === "hub" ? { ...t, from: "claude" } : t;
+}
+
+/** Whether only the user may allow this card (a dangerous command, screen control). */
+function lockedToUser(a: Pick<PendingApproval, "tool" | "reason">): boolean {
+  return DANGER.test(a.reason) || USER_ONLY_TOOLS.test(a.tool);
+}
+
+/** An approval card as the connector lists it (cut short; the PC's own card keeps the whole text). */
+function toConnectorApproval(a: PendingApproval): ConnectorApproval {
+  return {
+    conversationId: a.conversationId,
+    requestId: a.requestId,
+    title: a.title.slice(0, CONNECTOR_LIMITS.titleChars),
+    tool: a.tool.slice(0, 60),
+    preview: a.preview.slice(0, CONNECTOR_LIMITS.previewChars),
+    reason: a.reason.slice(0, CONNECTOR_LIMITS.reasonChars),
+    ...(a.who ? { who: a.who.slice(0, 80) } : {}),
+    ...(a.forWhile !== false ? { forWhile: true } : {}),
+    ...(lockedToUser(a) ? { locked: true } : {}),
+    ...(a.at ? { at: a.at } : {}),
+  };
 }
 
 /** A list row: short fields only. */

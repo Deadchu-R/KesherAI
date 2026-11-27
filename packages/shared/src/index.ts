@@ -60,6 +60,7 @@ export * from "./work-list.js";
 export * from "./task-inbox.js";
 export * from "./claude-code.js";
 export * from "./provider-quotas.js";
+export * from "./connector-text.js";
 export * from "./quota-failover.js";
 export * from "./task-handoff.js";
 export * from "./inbox-models.js";
