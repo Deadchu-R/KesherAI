@@ -94,9 +94,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas" | "connector_query" | "connector_answer" | "taskchat" | "taskchat_answer";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas" | "claude_work" | "connector_query" | "connector_answer" | "taskchat" | "taskchat_answer";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "claude_work", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -278,6 +278,12 @@ export type SealedBody =
    * and times only), a whole snapshot that replaces the last. `at`: when the PC built it.
    */
   | { type: "quotas"; items: ProviderQuota[]; at: number }
+  /**
+   * PC to its owner's phones only: what Claude's helper agents did in the last 7 days, from the commits on main that carry
+   * a `Claude-Session:` trailer (claude-work.ts). Titles, counts, times, release versions and GitHub commit links; a
+   * whole snapshot that replaces the last. `at`: when the PC read it.
+   */
+  | { type: "claude_work"; sessions: HubClaudeSession[]; at: number }
   /** Hub to a PC whose `connector` opt-in is on: one question of the Claude connector (hub-connector.ts). Never queued. */
   | ({ type: "connector_query" } & ConnectorQuery)
   /** That PC's answer, sealed to the hub; opened in memory for that one MCP call, never stored or logged. */
@@ -542,6 +548,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   board: "board",
   relays: "relays",
   quotas: "quotas",
+  claude_work: "claude_work",
   connector_query: "connector_query",
   connector_answer: "connector_answer",
   taskchat: "taskchat",
@@ -626,7 +633,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "claude_work" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -793,6 +800,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "relays", keys: cleanRelayKeys(b.keys), at: num(b.at) };
     case "quotas":
       return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
+    case "claude_work":
+      return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x): x is HubClaudeSession => !!x), at: num(b.at) } : null;
     case "connector_query": {
       const q = parseConnectorQuery(b);
       return q ? { type: "connector_query", ...q } : null;
@@ -982,6 +991,47 @@ const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "runni
 const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];
+/** One commit of a helper session as the hub page lists it. */
+export interface HubClaudeCommit {
+  sha: string;
+  title: string;
+  files: number;
+  at: number;
+  /** The release (e.g. `0.6.504`) that included it; none = not released yet. */
+  release?: string;
+  /** Its GitHub page (only https://github.com/ links). */
+  url?: string;
+}
+
+/** The commits of one Claude session (a helper agent's work), newest first. */
+export interface HubClaudeSession {
+  id: string;
+  title: string;
+  at: number;
+  commits: HubClaudeCommit[];
+}
+
+/** A commit of a session, cleaned; null when it is not one. */
+function cleanClaudeCommit(x: unknown): HubClaudeCommit | null {
+  if (!x || typeof x !== "object") return null;
+  const c = x as Record<string, unknown>;
+  const title = oneLine(c.title);
+  if (typeof c.sha !== "string" || !/^[0-9a-f]{7,64}$/i.test(c.sha) || !title) return null;
+  const release = typeof c.release === "string" && /^\d+\.\d+\.\d+$/.test(c.release) ? c.release : undefined;
+  const url = typeof c.url === "string" && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/commit\/[0-9a-f]{7,64}$/i.test(c.url) ? c.url : undefined;
+  return { sha: c.sha, title: title.slice(0, 200), files: num(c.files), at: num(c.at), ...(release ? { release } : {}), ...(url ? { url } : {}) };
+}
+
+/** A session, cleaned (at most 20 commits); null when it has no commit. */
+function cleanClaudeSession(x: unknown): HubClaudeSession | null {
+  if (!x || typeof x !== "object") return null;
+  const s = x as Record<string, unknown>;
+  const commits = Array.isArray(s.commits) ? s.commits.slice(0, 20).map(cleanClaudeCommit).filter((c): c is HubClaudeCommit => !!c) : [];
+  const title = oneLine(s.title);
+  if (!commits.length || !title || typeof s.id !== "string") return null;
+  return { id: s.id.slice(0, 80), title: title.slice(0, 200), at: num(s.at), commits };
+}
+
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const optNum = (k: string, v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
 /** A string on one line (whitespace runs become one space), or undefined for anything else. */

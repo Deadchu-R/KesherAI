@@ -84,6 +84,7 @@ import { answerFromHub, isDangerousReason, userOnlyApproval } from "./hub-approv
 import { boardCommand } from "./hub-board.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
 import { ExternalAgents, gitIn } from "./external-agents.js";
+import { ClaudeWorkReader } from "./claude-work.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxRunId, inboxSnapshot, type RunSnapshot } from "./agent-activity.js";
 import { AgentLabels } from "./agent-labels.js";
 import { assignTask, type AssignDeps } from "./task-assign.js";
@@ -796,6 +797,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       save: (base) => void writeFile(join(paths.root, "external-agents.json"), JSON.stringify({ base })).catch(() => undefined),
     },
   });
+  services.claudeWork = new ClaudeWorkReader(() => (config.taskInbox.repo ? gitIn(config.taskInbox.repo) : undefined));
   // A chat's helper that ended in the background or waits for an answer: on this computer and the phone (notify.ts).
   const chatTitle = (id: string) => library.summary(id)?.title ?? "KesherAI";
   helperRuns.on("end", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperEnd(r, chatTitle(r.chatId)));
@@ -880,6 +882,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",
+    // What Claude's helper agents did this week (git only), for the hub page's Agents' work list.
+    claudeWork: async () => {
+      const w = (await services.claudeWork?.read())?.sessions ?? [];
+      return { sessions: w.map((x) => ({ id: x.id, title: x.title, at: x.at, commits: x.commits.map((c) => ({ sha: c.sha, title: c.title, files: c.files, at: c.at, ...(c.release ? { release: c.release } : {}), ...(c.url ? { url: c.url } : {}) })) })) };
+    },
     // What is left of each provider, for the hub page's Quotas section (provider-quotas.ts: names, numbers, times only).
     quotas: async () => {
       const st = await taskInbox.state(false);

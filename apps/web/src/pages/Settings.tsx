@@ -5,6 +5,7 @@ import { AboutYou } from "../AboutYou";
  * NotificationsSection…). Research behind the order: docs/RESEARCH_LOG.md.
  */
 import { HelpersSection } from "../settings/HelpersSection";
+import { ClaudeWorkSection } from "../settings/ClaudeWorkSection";
 import { ActiveModels } from "../settings/ActiveModels";
 import { ModelJobsSection } from "../settings/ModelJobsSection";
 import { AutoModelSection } from "../settings/AutoModelSection";
@@ -67,7 +68,7 @@ import { ChatsAtOnce } from "../ChatsAtOnce";
 const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; words: string; render: () => React.ReactNode }> = [
   { id: "general", icon: "⚙", en: "General", he: "כללי", words: "name about you gender address male female שם עלייך פנייה זכר נקבה models per job set up missing download suggested מודל לכל תפקיד הגדר חסר הורד מוצע model models default chat image voice speech microphone read aloud מודל מודלים ברירת מחדל צאט קול דיבור הקראה מיקרופון auto router strengths אוטומטי נתב חוזקות", render: () => <><AboutYou /><ModelJobsSection /><ActiveModels /><AutoModelSection /><SpeechSection /></> },
   { id: "chats", icon: "💬", en: "Chats", he: "צ'אטים", words: "model team translator translation language hebrew english צוות מודלים מתרגם תרגום שפה עברית אנגלית chat buttons bar toolbar show hide steps browser files coach context team group כפתורים צאט סרגל להציג להסתיר שלבים דפדפן קבצים מאמן הקשר צוות", render: () => <><ModelTeamSection /><ChatBarSection /></> },
-  { id: "agents", icon: "🤖", en: "Agents", he: "סוכנים", words: "agents sub-agents helpers lead agent lookup research build model swap at once queue steps background antigravity סוכנים סוכן משנה סוכן ראשי חיפוש מחקר בנייה מודל החלפה בבת אחת תור צעדים ברקע", render: () => <HelpersSection /> },
+  { id: "agents", icon: "🤖", en: "Agents", he: "סוכנים", words: "agents sub-agents helpers lead agent lookup research build model swap at once queue steps background antigravity סוכנים סוכן משנה סוכן ראשי חיפוש מחקר בנייה מודל החלפה בבת אחת תור צעדים ברקע", render: () => <><HelpersSection /><ClaudeWorkSection /></> },
   { id: "approvals", icon: "✅", en: "Approvals", he: "אישורים", words: "approvals grants revoke always allow for this chat for 1 hour until I revoke helpers time left permissions אישורים הרשאות בטל לצ'אט הזה לשעה עד שאבטל עוזרים זמן שנשאר", render: () => <PermissionsSection /> },
   { id: "inbox", icon: "📥", en: "Task inbox", he: "תיבת משימות", words: "task inbox kesher-inbox antigravity gemini run daily limit quota branch push agy paths commands busy game editor gpu ai studio תיבת משימות אנטיגרביטי ג׳מיני הפעל מכסה סף יומי ענף דחיפה נתיבים פקודות עסוק משחק עורך כרטיס מסך", render: () => <TaskInboxSection /> },
   { id: "study", icon: "🎓", en: "Study", he: "לימודים", words: "study goal daily streak reminder path duolingo steps מסלול שלבים דולינגו lectures recordings audio delete semester keep student יעד יומי רצף תזכורת לימודים הרצאות הקלטות אודיו מחיקה סמסטר לשמור סטודנט", render: () => <StudySection /> },

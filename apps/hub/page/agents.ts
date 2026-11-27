@@ -26,6 +26,7 @@ import { SNAPSHOT_SOURCE, type SyncedAgent } from "./drive-view.js";
 import { assignBox } from "./assign.js";
 import { runWithUndo } from "./run-button.js";
 import { quotasLink } from "./quotas.js";
+import { claudeWorkSection } from "./claude-work.js";
 
 /** What the agents view needs from the page. */
 export interface AgentsView {
@@ -356,6 +357,7 @@ export function agentsTab(v: AgentsView): HTMLElement {
       );
     }),
     chats.length || chatRuns.length ? h("section", { class: "card clip" }, groupHead(L("Claude", "Claude"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט והעוזרים של Claude לא מריצים סוכנים עכשיו.", "The Claude chat and helpers run no agents now."))) : null,
+    claudeWorkSection(v.device),
     cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null,
     snaps.length ? h("section", { class: "card clip drive-agents" }, h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "📁"), h("b", null, L("נראו לאחרונה", "Last seen")), h("span", { class: "sm mut" }, L("מ-Google Drive, כשהמחשב כבוי", "From Google Drive, while the PC is off")), h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(snaps.length))), h("div", { class: "alist" }, snaps.map(snapshotCard))) : null,
     empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null,

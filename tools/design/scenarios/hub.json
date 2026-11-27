@@ -2175,6 +2175,145 @@
    ]
   },
   {
+   "id": "HubAgentsWork",
+   "title": "ענן Kesher: סוכנים › העבודה של הסוכנים — מה עוזרי Claude עשו בשבוע, מהקומיטים ב-main: סשן לכרטיס, קומיט לשורה, בגרסה או עוד לא",
+   "titleEn": "Kesher cloud: Agents › Agents' work — what Claude's helpers did this week, from the commits on main: a card per session, a row per commit, released or not",
+   "route": "#agents",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [],
+    "agents": [],
+    "claudeWork": [
+     {
+      "pc": "pc-studio",
+      "sessions": [
+       {
+        "id": "session_01VMzn",
+        "title": "לוח \"העבודה של הסוכנים\": קומיטים לפי סשן, עם גרסה",
+        "at": {
+         "$agoMs": "40m"
+        },
+        "commits": [
+         {
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "title": "Agents' work: list of sessions from the commits on main",
+          "files": 14,
+          "at": {
+           "$agoMs": "40m"
+          },
+          "url": "https://github.com/example/kesherai/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+         },
+         {
+          "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "title": "Agents' work: release chip and GitHub link per commit",
+          "files": 6,
+          "at": {
+           "$agoMs": "2h"
+          },
+          "url": "https://github.com/example/kesherai/commit/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+         }
+        ]
+       },
+       {
+        "id": "session_01Hq8T",
+        "title": "Scheduled tasks: weekdays follow the computer's work week",
+        "at": {
+         "$agoMs": "5h"
+        },
+        "commits": [
+         {
+          "sha": "cccccccccccccccccccccccccccccccccccccccc",
+          "title": "0.6.504: Scheduled tasks follow the work week",
+          "files": 9,
+          "at": {
+           "$agoMs": "5h"
+          },
+          "url": "https://github.com/example/kesherai/commit/cccccccccccccccccccccccccccccccccccccccc",
+          "release": "0.6.504"
+         },
+         {
+          "sha": "dddddddddddddddddddddddddddddddddddddddd",
+          "title": "Scheduled tasks: Sunday-Thursday in Israel",
+          "files": 4,
+          "at": {
+           "$agoMs": "6h"
+          },
+          "url": "https://github.com/example/kesherai/commit/dddddddddddddddddddddddddddddddddddddddd",
+          "release": "0.6.504"
+         }
+        ]
+       },
+       {
+        "id": "session_01Kd3X",
+        "title": "Settings › Sites: standing site permissions",
+        "at": {
+         "$agoMs": "26h"
+        },
+        "commits": [
+         {
+          "sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "title": "Settings › Sites: see and manage standing permissions",
+          "files": 11,
+          "at": {
+           "$agoMs": "26h"
+          },
+          "url": "https://github.com/example/kesherai/commit/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "release": "0.6.503"
+         },
+         {
+          "sha": "ffffffffffffffffffffffffffffffffffffffff",
+          "title": "Approval card names the browser really used",
+          "files": 3,
+          "at": {
+           "$agoMs": "27h"
+          },
+          "url": "https://github.com/example/kesherai/commit/ffffffffffffffffffffffffffffffffffffffff",
+          "release": "0.6.503"
+         }
+        ]
+       },
+       {
+        "id": "session_01Zr7P",
+        "title": "Recurring scheduled tasks from a chat",
+        "at": {
+         "$agoMs": "3d"
+        },
+        "commits": [
+         {
+          "sha": "1111111111111111111111111111111111111111",
+          "title": "Recurring scheduled tasks from a chat (schedule_task)",
+          "files": 18,
+          "at": {
+           "$agoMs": "3d"
+          },
+          "url": "https://github.com/example/kesherai/commit/1111111111111111111111111111111111111111",
+          "release": "0.6.502"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 1000,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": ".claude-work .cw-row"
+    }
+   ]
+  },
+  {
    "id": "HubAgQuotaChip",
    "title": "ענן Kesher: משימות — מכסת Antigravity על השבב שלו (אחוז שנשאר / מתי מתחדש), ומשימה של GhostCLI",
    "titleEn": "Kesher Cloud: Tasks — Antigravity quota on its chip (share left / when it resets), and a GhostCLI task",

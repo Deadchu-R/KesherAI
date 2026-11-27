@@ -117,6 +117,8 @@ export class HubDevice {
     boardActions = new Map();
     /** Each PC's providers and what is left of them (its newest sealed `quotas` snapshot, in memory; quotas.ts shows it). */
     quotas = new Map();
+    /** Each PC's agents' work list (its newest sealed `claude_work` snapshot, in memory; claude-work.ts shows it). */
+    claudeWork = new Map();
     /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
     taskActions = new Map();
     agentSeq = 0;
@@ -799,6 +801,8 @@ export class HubDevice {
             return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
         if (body.type === "quotas")
             return this.onQuotas(env.from, body.items, body.at);
+        if (body.type === "claude_work")
+            return this.onClaudeWork(env.from, body.sessions, body.at);
         if (body.type === "taskchat_answer")
             return void (env.from && this.chatListener?.(env.from, body));
         if (body.type === "command_result")
@@ -838,6 +842,14 @@ export class HubDevice {
             }
         }
         await this.saveTasks();
+    }
+    /** A PC's agents' work list: replaces the last one (an older one that arrives late is ignored). */
+    onClaudeWork(from, sessions, at) {
+        const last = this.claudeWork.get(from);
+        if (last && last.at > at)
+            return;
+        this.claudeWork.set(from, { sessions, at });
+        this.changed();
     }
     /** A PC's quotas snapshot: replaces the last one (an older one that arrives late is ignored). */
     onQuotas(from, items, at) {

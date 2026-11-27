@@ -216,3 +216,15 @@ test("quotas: a PC's snapshot is cleaned strictly, kept 30 minutes at most, and 
   // A snapshot cannot pass as another kind (the kind is authenticated).
   assert.equal(parseSealedBody({ type: "quotas", items: [], at: 7 }, "board"), null);
 });
+
+test("claude_work: sessions are cleaned (links only to github commits, bad commits dropped), the kind must match the body", () => {
+  const sha = "a".repeat(40);
+  const ok = { id: "session_1", title: "Agents' work", at: 5, commits: [{ sha, title: "One", files: 3, at: 4, release: "0.6.504", url: `https://github.com/o/r/commit/${sha}` }, { sha: "nope", title: "Bad", files: 1, at: 1 }, { sha, title: "Two", files: 2, at: 3, release: "x", url: "https://evil.example/x" }] };
+  const b = parseSealedBody({ type: "claude_work", sessions: [ok, { id: "empty", title: "Nothing", at: 1, commits: [] }], at: 9 }, "claude_work");
+  assert.equal(b?.type, "claude_work");
+  const s = (b as Extract<NonNullable<typeof b>, { type: "claude_work" }>).sessions;
+  assert.equal(s.length, 1, "a session without a valid commit is dropped");
+  assert.deepEqual(s[0]!.commits.map((c) => [c.title, c.release, !!c.url]), [["One", "0.6.504", true], ["Two", undefined, false]]);
+  assert.equal(parseSealedBody({ type: "claude_work", sessions: "no", at: 1 }, "claude_work"), null);
+  assert.equal(parseSealedBody({ type: "claude_work", sessions: [], at: 1 }, "quotas"), null);
+});

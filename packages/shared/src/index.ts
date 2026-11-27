@@ -77,3 +77,4 @@ export * from "./voice-stream.js";
 export * from "./training-risk.js";
 export * from "./leak-guard.js";
 export * from "./file-card.js";
+export * from "./claude-work.js";

@@ -4916,3 +4916,14 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .sent-file-frame { width: 100%; height: 280px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .sent-file-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sent-file-actions .button { text-decoration: none; }
+
+/* Settings > Agents > Agents' work (ClaudeWorkSection) */
+.claude-work .cw-group { display: flex; flex-direction: column; gap: 8px; }
+.claude-work h3 { margin: 4px 0 0; font-size: 15px; }
+.cw-session { border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.cw-head { display: flex; flex-direction: column; gap: 2px; }
+.cw-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); color: inherit; text-decoration: none; min-height: 44px; }
+a.cw-row:hover .cw-title { text-decoration: underline; }
+.cw-title { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.cw-rel { background: color-mix(in srgb, var(--ok, #2e9d5b) 18%, transparent); }
+.cw-pending { opacity: 0.8; }

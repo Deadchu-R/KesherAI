@@ -109,11 +109,11 @@ export const WRITE_PACE = {
 } as const;
 
 /** Kinds kept in memory only, never in the queue table: each one carries a whole state, and the next replaces it. */
-const LIVE_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["progress", "inbox_task", "approvals", "board", "quotas", "command_result"]);
+const LIVE_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["progress", "inbox_task", "approvals", "board", "quotas", "claude_work", "command_result"]);
 /** Of those, kinds a phone that is off still needs when it comes on, so they are saved (paced) past the hub's sleep. */
 const SAVED_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["inbox_task", "approvals", "command_result"]);
 /** Of those, kinds whose newest message replaces the older one from the same sender (a full snapshot each time). */
-const REPLACING_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["approvals", "board", "quotas"]);
+const REPLACING_KINDS: ReadonlySet<SealedKind> = new Set<SealedKind>(["approvals", "board", "quotas", "claude_work"]);
 
 /** Sockets of connected devices, as the Durable Object has them. */
 export interface DeviceSockets {
@@ -1088,7 +1088,7 @@ export class Hub {
     if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
     // A task-inbox report, the approvals waiting on a PC, its shared task board and its providers' quotas go from a PC to the owner's phones (and the hub page) only.
-    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board" || env.kind === "quotas") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board" || env.kind === "quotas" || env.kind === "claude_work") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     // An approval answer or a command (Run, Cancel) goes from a paired phone (or the hub page) to a PC only, at a human pace.
     if ((env.kind === "command_result" || env.kind === "taskchat_answer") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     // The task chat (sealed, the hub never reads it): from a paired phone or the hub page to a PC, at a human pace.

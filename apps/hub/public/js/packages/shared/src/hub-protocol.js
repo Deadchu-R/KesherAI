@@ -83,7 +83,7 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "claude_work", "connector_query", "connector_answer", "taskchat", "taskchat_answer"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false, connector: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -157,6 +157,7 @@ export const BODY_FOR_KIND = {
     board: "board",
     relays: "relays",
     quotas: "quotas",
+    claude_work: "claude_work",
     connector_query: "connector_query",
     connector_answer: "connector_answer",
     taskchat: "taskchat",
@@ -239,7 +240,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" || kind === "claude_work" || kind === "taskchat" || kind === "taskchat_answer" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -428,6 +429,8 @@ export function parseSealedBody(x, kind) {
             return { type: "relays", keys: cleanRelayKeys(b.keys), at: num(b.at) };
         case "quotas":
             return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
+        case "claude_work":
+            return Array.isArray(b.sessions) ? { type: "claude_work", sessions: b.sessions.slice(0, 30).map(cleanClaudeSession).filter((x) => !!x), at: num(b.at) } : null;
         case "connector_query": {
             const q = parseConnectorQuery(b);
             return q ? { type: "connector_query", ...q } : null;
@@ -597,6 +600,29 @@ const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "pa
 const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS = ["read", "edit", "create", "delete"];
+/** A commit of a session, cleaned; null when it is not one. */
+function cleanClaudeCommit(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const c = x;
+    const title = oneLine(c.title);
+    if (typeof c.sha !== "string" || !/^[0-9a-f]{7,64}$/i.test(c.sha) || !title)
+        return null;
+    const release = typeof c.release === "string" && /^\d+\.\d+\.\d+$/.test(c.release) ? c.release : undefined;
+    const url = typeof c.url === "string" && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/commit\/[0-9a-f]{7,64}$/i.test(c.url) ? c.url : undefined;
+    return { sha: c.sha, title: title.slice(0, 200), files: num(c.files), at: num(c.at), ...(release ? { release } : {}), ...(url ? { url } : {}) };
+}
+/** A session, cleaned (at most 20 commits); null when it has no commit. */
+function cleanClaudeSession(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const s = x;
+    const commits = Array.isArray(s.commits) ? s.commits.slice(0, 20).map(cleanClaudeCommit).filter((c) => !!c) : [];
+    const title = oneLine(s.title);
+    if (!commits.length || !title || typeof s.id !== "string")
+        return null;
+    return { id: s.id.slice(0, 80), title: title.slice(0, 200), at: num(s.at), commits };
+}
 const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const optNum = (k, v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
 /** A string on one line (whitespace runs become one space), or undefined for anything else. */

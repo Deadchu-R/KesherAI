@@ -342,3 +342,10 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .tc-send { align-items: flex-end; gap: 8px; } .tc-send .tc-input { flex: 1; min-width: 0; }
 .tc-clear { align-self: flex-start; }
 @media (max-width: 640px) { .tchat { padding-inline: 10px; } .tc-msg { max-width: 100%; } .tc-list { max-height: 50vh; } }
+
+/* Agents' work (claude-work.ts) */
+.claude-work .cw-session { border-top: 1px solid var(--line, rgba(128,128,128,.25)); padding: 4px 0; }
+.claude-work .cw-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-height: 44px; color: inherit; text-decoration: none; }
+.claude-work .cw-title { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.claude-work a.cw-row:hover .cw-title { text-decoration: underline; }
+.claude-work .cw-pending { opacity: .8; }

@@ -15,6 +15,7 @@ import {
   type ProviderQuota,
   cleanOptIn,
   connectorQueryStale,
+  type HubClaudeSession,
   type ConnectorAnswer,
   type ConnectorQuery,
   estimateTaskSteps,
@@ -172,6 +173,8 @@ export interface HubClientDeps {
   boardCommand?: (taskId: string, cmd: HubBoardCommand) => Promise<{ ok: boolean; text: string }>;
   /** What is left of each provider this PC's agents use (provider-quotas.ts), for the hub page's Quotas section. */
   quotas?: () => Promise<ProviderQuota[]>;
+  /** What Claude's helper agents did this week, from git (claude-work.ts), for the hub page's Agents' work list. */
+  claudeWork?: () => Promise<{ sessions: HubClaudeSession[] }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
   /**
@@ -279,6 +282,8 @@ const DEAD_MS = 100_000;
 const APPROVALS_MS = 3000;
 /** The quotas snapshot (provider-quotas.ts) is read and, when it changed, sent at most this often. */
 export const QUOTAS_MS = 2 * 60_000;
+/** The agents' work list is read (a cheap cached git call) this often, and sent to phones when it changed or a phone came on. */
+const CLAUDE_WORK_MS = 5 * 60_000;
 /** An unchanged quotas snapshot is sent again after this, so the page's "read N min ago" stays true. */
 const QUOTAS_REFRESH_MS = 10 * 60_000;
 /** The hub's diagnostics are read this often while connected, and never more often than {@link DIAG_GAP_MS} after a failure. */
@@ -464,6 +469,11 @@ export class HubClient {
   private quotasRun?: Promise<void>;
   private quotasAgain = false;
   private quotasTimer?: NodeJS.Timeout;
+  /** The agents' work snapshot last sent (a hash), to which phones, and when. */
+  private workKey = "";
+  private workTo = new Set<string>();
+  private workSentAt = 0;
+  private workTimer?: NodeJS.Timeout;
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
@@ -1108,6 +1118,11 @@ export class HubClient {
         clearInterval(this.quotasTimer);
         this.quotasTimer = setInterval(() => void this.reportQuotas().catch(() => undefined), QUOTAS_MS);
         this.quotasTimer.unref?.();
+        this.workKey = "";
+        this.workTo.clear();
+        clearInterval(this.workTimer);
+        this.workTimer = setInterval(() => void this.reportClaudeWork().catch(() => undefined), CLAUDE_WORK_MS);
+        this.workTimer.unref?.();
         clearInterval(this.approvalsTimer);
         this.approvalsTimer = setInterval(() => void this.sendApprovals().catch(() => undefined), APPROVALS_MS);
         this.approvalsTimer.unref?.();
@@ -1139,6 +1154,7 @@ export class HubClient {
         clearInterval(this.pingTimer);
         clearInterval(this.approvalsTimer);
         clearInterval(this.quotasTimer);
+        clearInterval(this.workTimer);
         clearTimeout(this.boardTimer);
         this.boardTimer = undefined;
         this.socket = undefined;
@@ -1228,6 +1244,7 @@ export class HubClient {
         void this.reportInbox().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
         void this.reportQuotas().catch(() => undefined);
+        void this.reportClaudeWork().catch(() => undefined);
         // Each new link sends the relay keys again to the phones that are on (in case one lost its storage).
         this.relaysSent.clear();
         void this.sendRelays().catch(() => undefined);
@@ -1240,6 +1257,7 @@ export class HubClient {
         void this.sendApprovals().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
         void this.reportQuotas().catch(() => undefined);
+        void this.reportClaudeWork().catch(() => undefined);
         void this.sendRelays().catch(() => undefined);
         void this.syncRelays().catch(() => undefined);
         return;
@@ -1624,6 +1642,31 @@ export class HubClient {
       }
     })();
     return this.quotasRun;
+  }
+
+  /**
+   * Sends the agents' work list (what Claude's helpers committed this week) to the owner's online phones and hub pages:
+   * one sealed snapshot that replaces the last. It goes when the list changed, every 10 minutes unchanged, and at once to
+   * a phone that just came on. Offline phones get the current one when they come on.
+   */
+  async reportClaudeWork(): Promise<void> {
+    if (!this.deps.claudeWork || !this.linked || !this.s.deviceId) return;
+    const phones = this.devices.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
+    const online = new Set(phones.map((p) => p.id));
+    for (const id of this.workTo) if (!online.has(id)) this.workTo.delete(id);
+    if (!phones.length) return;
+    const { sessions } = await this.deps.claudeWork();
+    const key = createHash("sha256").update(JSON.stringify(sessions)).digest("base64url").slice(0, 16);
+    const now = Date.now();
+    const all = key !== this.workKey || now - this.workSentAt >= 2 * CLAUDE_WORK_MS;
+    const to = all ? phones : phones.filter((p) => !this.workTo.has(p.id));
+    if (!to.length) return;
+    if (all) {
+      this.workKey = key;
+      this.workSentAt = now;
+      this.workTo = new Set(online);
+    } else for (const p of to) this.workTo.add(p.id);
+    for (const p of to) await this.sendSealed(p.id, "claude_work", { type: "claude_work", sessions, at: now }, HUB_LIMITS.approvalTtl);
   }
 
   private async reportQuotasOnce(): Promise<void> {
