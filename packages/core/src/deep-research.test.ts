@@ -152,7 +152,28 @@ test("researchReport: no search result and no page read means no report, and the
   };
   await assert.rejects(researchReport("q", { model, search: async () => [], read: async () => "" }, new AbortController().signal), new RegExp(NO_SEARCH_NOTE));
   // Results but no page that opened: still nothing was read.
-  await assert.rejects(researchReport("q", { model, search: async () => [{ title: "A", url: "https://a.io/x", snippet: "s" }], read: async () => "" }, new AbortController().signal), new RegExp(NO_SEARCH_NOTE));
+  await assert.rejects(researchReport("q", { model, search: async () => [{ title: "A", url: "https://a.io/x", snippet: "s" }], read: async () => "" }, new AbortController().signal), /Web search returned nothing \(pages: None of the results could be read\.\); no report written/);
   assert.equal(wrote, false);
   assert.match(writerMessages("q", [], [])[0]!.content, /never invent a source or write placeholders such as \[Findings N\]/);
+});
+
+test("researchReport: a search that found nothing keeps each backend's reason (no addresses or keys), logged once per backend", async () => {
+  const { researchReport, noSearchNote, NO_SEARCH_NOTE } = await import("./deep-research.js");
+  const model: ModelTurn = async () => ({ text: '{"parts": ["a", "b"]}' }) as Awaited<ReturnType<ModelTurn>>;
+  const logged: string[] = [];
+  const info = console.info;
+  console.info = (x: string) => void logged.push(x);
+  try {
+    const search = async () => {
+      throw Object.assign(new Error("Web search failed on every backend."), { failures: ["duckduckgo: Search answered 202 (a bot check or rate limit).", "bing: Irrelevant results at https://www.bing.com/search?q=x&key=SECRET123"] });
+    };
+    const e = (await researchReport("q", { model, search, read: async () => "" }, new AbortController().signal).catch((x: unknown) => x)) as Error;
+    assert.equal(e.message, "Web search returned nothing (duckduckgo: Search answered 202 (a bot check or rate limit).; bing: Irrelevant results at www.bing.com); no report written");
+    assert.equal(logged.length, 2, "two sub-questions, but each backend is logged once");
+    assert.doesNotMatch(logged.join(" "), /SECRET123/);
+  } finally {
+    console.info = info;
+  }
+  assert.equal(noSearchNote([]), NO_SEARCH_NOTE);
+  assert.ok(noSearchNote(Array.from({ length: 9 }, (_, i) => `engine${i}: ${"x".repeat(90)}`)).length < 320);
 });

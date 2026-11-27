@@ -17,6 +17,7 @@ export * from "./sse.js";
 export { OpenAICompatibleProvider, openAICompatibleFactory, toOpenAIMessages, llamaCppFields, readUsage, type UsageReport } from "./openai-compatible.js";
 export { AnthropicProvider, anthropicFactory, toAnthropicMessages } from "./anthropic.js";
 export { parseToolArguments } from "./tool-args.js";
+export { GROUNDING_MODELS, groundingBody, groundingError, parseGrounding, type GroundedHit } from "./gemini-grounding.js";
 export { ComfyUIProvider, comfyUIFactory, defaultTextToImageWorkflow, type ComfyWorkflow } from "./comfyui.js";
 
 /** The factories the core server registers before loading plugins. */

@@ -388,9 +388,63 @@ export const BACKENDS: readonly SearchBackend[] = [
 /** The backend that worked last, and when. */
 let lastGood: { name: SearchBackend["name"]; at: number } | undefined;
 
-/** Forgets the backend that worked last (for tests). */
+/** How long a backend that answered a block (bot check, 202/403/429) is skipped the first time. */
+export const BLOCK_COOLDOWN_MS = 30 * 60_000;
+/** The longest skip: each block in a row doubles it, up to this. */
+export const MAX_BLOCK_COOLDOWN_MS = 4 * 60 * 60_000;
+
+/** Backends that answered a block lately: skipped until `until`; `strikes` blocks in a row (reset by a success). */
+const cooling = new Map<SearchBackend["name"], { until: number; strikes: number }>();
+
+/**
+ * Whether a backend's failure is a soft block (a bot check, an "anomaly" page, or a 202/403/429 status), the kind
+ * that gets worse when the engine is asked again soon (DuckDuckGo blocks a program that keeps asking).
+ *
+ * @param why - The failure's reason, as {@link runBackend} throws it.
+ */
+export function isBlockFailure(why: string): boolean {
+  return /^Search answered (?:202|403|429)\b|^Answered a bot-check/.test(why);
+}
+
+/**
+ * Starts (or lengthens) a backend's cooldown after a block: 30 minutes, doubled for each block in a row, at most 4 hours.
+ *
+ * @param name - The backend.
+ * @param now - The time (ms).
+ * @returns When it may be asked again (ms).
+ */
+export function coolBackend(name: SearchBackend["name"], now = Date.now()): number {
+  const strikes = (cooling.get(name)?.strikes ?? 0) + 1;
+  const until = now + Math.min(BLOCK_COOLDOWN_MS * 2 ** (strikes - 1), MAX_BLOCK_COOLDOWN_MS);
+  cooling.set(name, { until, strikes });
+  return until;
+}
+
+/** @returns The backends cooling down now, with the end of their cooldown (ms), e.g. for a settings page or a log. */
+export function searchCooldowns(now = Date.now()): Partial<Record<SearchBackend["name"], number>> {
+  const out: Partial<Record<SearchBackend["name"], number>> = {};
+  for (const [name, c] of cooling) if (c.until > now) out[name] = c.until;
+  return out;
+}
+
+/** Forgets the backend that worked last and every cooldown (for tests). */
 export function resetSearchMemory(): void {
   lastGood = undefined;
+  cooling.clear();
+}
+
+/**
+ * Every backend failed or found nothing. `failures` keeps one line per backend ("name: reason"), so a caller that
+ * needs results (research) can say why instead of "nothing found".
+ */
+export class SearchFailedError extends Error {
+  /**
+   * @param failures - One "backend: reason" line per backend tried or skipped.
+   */
+  constructor(readonly failures: string[]) {
+    super(`Web search failed on every backend. ${failures.join(" ")}`);
+    this.name = "SearchFailedError";
+  }
 }
 
 /**
@@ -440,34 +494,43 @@ async function runBackend(b: SearchBackend, ask: SearchAsk): Promise<SearchHit[]
 }
 
 /**
- * Searches with the first backend that gives results, and remembers which it was.
+ * Searches with the first backend that gives results, and remembers which it was. A backend that answers a block
+ * (see {@link isBlockFailure}) cools down and is skipped until then, so later queries go straight to the next one.
  *
  * @param ask - The query (already with any site: words) and the safe-search value.
  * @param deep - Whether to read the next page of results too (when the backend has one).
  * @param onEngine - Told which backend answered.
- * @returns The results; empty when every backend found nothing.
- * @throws When every backend errored (the message lists why).
+ * @param strict - Also throw (with the reasons) when every backend only found nothing; research needs to know why.
+ * @returns The results; empty when every backend found nothing (and not `strict`).
+ * @throws {SearchFailedError} When every backend errored or was cooling down (or, `strict`, found nothing); it lists why.
  */
-export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean, onEngine?: (name: SearchBackend["name"]) => void): Promise<SearchHit[]> {
+export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean, onEngine?: (name: SearchBackend["name"]) => void, strict = false): Promise<SearchHit[]> {
   const failures: string[] = [];
   let empty = false;
   for (const b of backendOrder()) {
     ask.signal.throwIfAborted();
+    const cool = cooling.get(b.name);
+    if (cool && cool.until > Date.now()) {
+      failures.push(`${b.name}: Skipped, blocked lately (until ${new Date(cool.until).toISOString().slice(11, 16)} UTC).`);
+      continue;
+    }
     try {
       let hits = await runBackend(b, { ...ask, page: 1 });
       lastGood = { name: b.name, at: Date.now() };
+      cooling.delete(b.name);
       onEngine?.(b.name);
       if (deep && b.name === "duckduckgo" && hits.length >= 8) hits = [...hits, ...(await runBackend(b, { ...ask, page: 2 }).catch(() => []))];
       return hits;
     } catch (e) {
       if (ask.signal.aborted) throw e;
       const why = (e as Error).message;
+      if (isBlockFailure(why)) coolBackend(b.name);
       if (/^(No results|Answered a bot|Irrelevant)/.test(why)) empty = true;
       failures.push(`${b.name}: ${why}`);
     }
   }
-  if (empty && failures.length) return [];
-  throw new Error(`Web search failed on every backend. ${failures.join(" ")}`);
+  if (empty && failures.length && !strict) return [];
+  throw new SearchFailedError(failures);
 }
 
 /** The result of one backend in the diagnostic. */

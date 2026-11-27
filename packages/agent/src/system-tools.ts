@@ -238,14 +238,16 @@ export const DEPTH = {
  * Searches the web with a chat's settings: only / never these sites, safe search, and how many results by depth.
  * Goes through the backends in web-search.ts (the keyed Tavily and Brave when a key is set, then DuckDuckGo, Lite, Yahoo, Startpage, Mojeek, Ecosia, Bing) until one answers with results that match the query.
  *
+ * @param opts.strict - Throw `SearchFailedError` (with each backend's reason) instead of returning an empty list when
+ *   every backend found nothing (research uses it to say why).
  * @returns The results, already filtered.
  */
-export async function searchWeb(query: string, prefs: import("@kesher/shared").WebPrefs | undefined, signal: AbortSignal, onEngine?: (name: string) => void): Promise<Array<{ title: string; url: string; snippet: string }>> {
+export async function searchWeb(query: string, prefs: import("@kesher/shared").WebPrefs | undefined, signal: AbortSignal, onEngine?: (name: string) => void, opts: { strict?: boolean } = {}): Promise<Array<{ title: string; url: string; snippet: string }>> {
   const only = (prefs?.only ?? []).map(siteName).filter(Boolean).slice(0, 10);
   const never = (prefs?.never ?? []).map(siteName).filter(Boolean).slice(0, 30);
   const depth = DEPTH[prefs?.depth ?? "normal"];
   const q = only.length ? `${query} ${only.map((d) => `site:${d}`).join(" OR ")}` : query;
-  const results = await searchBackends({ query: q, kp: safeValue(prefs), signal }, depth.results > 10, onEngine);
+  const results = await searchBackends({ query: q, kp: safeValue(prefs), signal }, depth.results > 10, onEngine, opts.strict);
   const seen = new Set<string>();
   return results
     .filter((r) => (only.length ? only.some((d) => onSite(r.url, d)) : true) && !never.some((d) => onSite(r.url, d)))

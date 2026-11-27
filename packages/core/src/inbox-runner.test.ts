@@ -5,10 +5,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agent } from "@agentclientprotocol/sdk";
-import { INBOX_GIT_MISSING } from "@kesher/shared";
+import { INBOX_GIT_MISSING, type InboxTaskView } from "@kesher/shared";
 import { AcpAgent } from "./acp.js";
 import { modelAgent } from "./acp-models.test.js";
-import { TaskInbox, isQuotaError, rememberFail, nextInLineTitle, quotaUntil, type RunCmd } from "./inbox-runner.js";
+import { TaskInbox, isQuotaError, rememberFail, nextInLineTitle, quotaUntil, requeueSearchFailures, searchRetryDue, SEARCH_RETRY_MS, type RunCmd } from "./inbox-runner.js";
 import { TaskBoard } from "./task-board.js";
 
 // The tester's own git identity, as a user's global config would have it: the inbox must never commit with it.
@@ -636,6 +636,57 @@ test("inbox: a Gemini limit or billing error defers the task to the reset; one a
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("inbox: a research whose web search found nothing goes back once after the search cooldown (not a quota stop, no GhostCLI move)", async () => {
+  const { root, repo } = await setup({ "r-20261127-01": RESEARCH_TASK("r-20261127-01") });
+  let now = 1_000_000;
+  let calls = 0;
+  const fail = "Web search returned nothing (duckduckgo: Search answered 429 (a bot check or rate limit).); no report written";
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async () => ({ code: 1, out: "not in tests" }),
+    startAgent: () => Promise.reject(new Error("no")),
+    notify: () => undefined,
+    busy: async () => ({ free: true, reasons: [] }),
+    now: () => now,
+    research: { ready: () => true, run: async () => (calls++, Promise.reject(new Error(fail))) },
+  });
+  try {
+    await inbox.sync();
+    await inbox.idle();
+    let t = await inbox.task("r-20261127-01");
+    assert.deepEqual([t.status, t.runBy, calls, t.searchRetry, t.retryAt, t.autoRetried], ["deferred-quota", "gemini", 1, "waiting", 1_000_000 + SEARCH_RETRY_MS, undefined]);
+    assert.match(t.note ?? "", /duckduckgo: Search answered 429[\s\S]*not the model's failure/);
+    await inbox.pumpGemini();
+    assert.equal(calls, 1, "nothing before the cooldown ends");
+    now += SEARCH_RETRY_MS + 1;
+    await inbox.pumpGemini();
+    t = await inbox.task("r-20261127-01");
+    assert.deepEqual([t.status, calls, t.searchRetry], ["failed", 2, "used"]);
+    assert.match(t.note ?? "", /^The research failed: Web search returned nothing \(duckduckgo/);
+    now += 3 * 60 * 60_000;
+    await inbox.pumpGemini();
+    assert.equal(calls, 2, "one search retry only, and no immediate auto-retry");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: research that failed on an empty search before this update goes back once, by itself", () => {
+  const base = { title: "x", status: "failed", runBy: "gemini", endedAt: 5 } as unknown as InboxTaskView;
+  const tasks = [
+    { ...base, id: "a", note: "The research failed: Web search returned nothing; no report written" },
+    { ...base, id: "b", note: "The research failed: The model wrote no report." },
+    { ...base, id: "c", note: "The research failed: Web search returned nothing; no report written", searchRetry: "used" as const },
+    { ...base, id: "d", runBy: "antigravity" as const, note: "Web search returned nothing" },
+  ];
+  assert.deepEqual(requeueSearchFailures(tasks, 99), ["a"]);
+  assert.deepEqual([tasks[0]!.status, tasks[0]!.retryAt, tasks[0]!.searchRetry, tasks[0]!.endedAt], ["deferred-quota", 99, "waiting", undefined]);
+  assert.equal(searchRetryDue("Web search returned nothing (bing: x); no report written", undefined), true);
+  assert.equal(searchRetryDue("429 RESOURCE_EXHAUSTED", undefined), false);
 });
 
 test("inbox: Gemini busy (503 overloaded) waits 15 minutes and tries once more, then succeeds", async () => {

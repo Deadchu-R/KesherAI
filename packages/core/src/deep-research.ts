@@ -2,6 +2,7 @@ import type { AgentTool, ModelTurn } from "@kesher/agent";
 import type { HelperPlanRef, HelperRunInfo } from "@kesher/shared";
 import { HELPER_STEPS } from "./agents.js";
 import { helperWork, newPlanId, type DelegateOptions, type HelperModel, type HelperResume } from "./delegate.js";
+import { failuresOf, NO_SEARCH_START } from "./research-search.js";
 
 /**
  * Deep research in the chat (docs/RESEARCH_LOG.md, "Gap list: agents and chat-first", A16; like Gemini's and
@@ -250,8 +251,37 @@ export interface ReportDeps {
   read: (url: string, signal: AbortSignal) => Promise<string>;
 }
 
-/** The note of a task whose searches returned nothing (no report is written then). */
-export const NO_SEARCH_NOTE = "Web search returned nothing; no report written";
+export { NO_SEARCH_START };
+/** The note of a task whose searches returned nothing (no report is written then), when no reason is known. */
+export const NO_SEARCH_NOTE = `${NO_SEARCH_START}; no report written`;
+
+/**
+ * One search failure's reason, safe to show and log: an address becomes its host, a key or token value is dropped.
+ *
+ * @param x - The "backend: why" line.
+ */
+export function cleanReason(x: string): string {
+  return x
+    .replace(/https?:\/\/([^/\s?#]+)\S*/g, "$1")
+    .replace(/\b(key|token|api[_-]?key|access_token|auth)=\S+/gi, "$1=…")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The short "why" of a research that found nothing: each backend's reason, without addresses (a host stays), keys or
+ * tokens, at most 70 characters each and 260 in all.
+ *
+ * @param failures - The "backend: why" lines, one per backend (the first one of each backend is kept).
+ * @returns `Web search returned nothing (duckduckgo: …; bing: …); no report written`, or {@link NO_SEARCH_NOTE}.
+ */
+export function noSearchNote(failures: readonly string[]): string {
+  const parts = failures.map(cleanReason).filter(Boolean).map((x) => (x.length > 70 ? `${x.slice(0, 69)}…` : x));
+  if (!parts.length) return NO_SEARCH_NOTE;
+  let why = parts.join("; ");
+  if (why.length > 260) why = `${why.slice(0, 259)}…`;
+  return `${NO_SEARCH_START} (${why}); no report written`;
+}
 
 /** The most sub-questions of the small, automatic research (a chat's deep research has {@link RESEARCH_PARTS}). */
 const SMALL_PARTS = 3;
@@ -280,9 +310,19 @@ export async function researchReport(question: string, deps: ReportDeps, signal:
   parts = [...new Set(parts)].slice(0, SMALL_PARTS);
   if (!parts.length) parts = [question.replace(/\s+/g, " ").trim().slice(0, 200)];
   const findings: Array<{ sub: string; text: string; read: boolean }> = [];
+  // Why searches failed, one line per backend (the first reason of each), logged once per run (KesherAI's main log).
+  const failed = new Map<string, string>();
+  const noteFailures = (e: unknown) => {
+    for (const line of failuresOf(e)) {
+      const name = /^([\w.-]+):/.exec(line)?.[1] ?? "search";
+      if (failed.has(name)) continue;
+      failed.set(name, line);
+      console.info(`[research] search failed: ${cleanReason(line).slice(0, 300)}`);
+    }
+  };
   for (const sub of parts) {
     signal.throwIfAborted();
-    const results = await deps.search(sub, signal).catch(() => []);
+    const results = await deps.search(sub, signal).catch((e: unknown) => (noteFailures(e), []));
     const pages: string[] = [];
     for (const r of results.slice(0, 2)) {
       const text = await deps.read(r.url, signal).catch(() => "");
@@ -293,7 +333,10 @@ export async function researchReport(question: string, deps: ReportDeps, signal:
   }
   const sources = collectSources(findings.map((f) => f.text));
   // Nothing usable (no page read, no result): a report would be made up, so there is none.
-  if (!sources.length || !findings.some((f) => f.read)) throw new Error(NO_SEARCH_NOTE);
+  if (!sources.length || !findings.some((f) => f.read)) {
+    if (sources.length) failed.set("pages", "pages: None of the results could be read.");
+    throw new Error(noSearchNote([...failed.values()]));
+  }
   const [system, user] = writerMessages(question, findings, sources);
   const body = await ask(system!.content, user!.content);
   if (!body) throw new Error("The model wrote no report.");

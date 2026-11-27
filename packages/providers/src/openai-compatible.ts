@@ -13,6 +13,7 @@ import type {
 import { parseToolArguments } from "./tool-args.js";
 import { fetchOk, readSSE } from "./sse.js";
 import { ThinkSplitter } from "./think-split.js";
+import { GROUNDING_MODELS, GROUNDING_REDIRECT_HOST, groundingBody, groundingError, parseGrounding, type GroundedHit } from "./gemini-grounding.js";
 
 /**
  * Provider for any server that speaks the OpenAI Chat Completions API.
@@ -47,6 +48,10 @@ export class OpenAICompatibleProvider implements Provider {
   private readonly waitMs: number;
   /** Set for llama.cpp's server: how many slots it has now (see {@link llamaCppFields}). */
   private readonly llamaCpp?: { slots?: () => number; parallelChats?: () => number };
+  /** Google's Gemini API only: the key, for the native search-grounding request ({@link googleSearch}). Never logged. */
+  private readonly geminiKey?: string;
+  /** Set only on a Gemini API connection with a key: Google Search grounding (see {@link Provider.webSearch}). */
+  readonly webSearch?: (query: string, signal?: AbortSignal) => Promise<GroundedHit[]>;
 
   /**
    * @param config - Needs `baseUrl` ending in `/v1` (or the API's equivalent).
@@ -64,6 +69,10 @@ export class OpenAICompatibleProvider implements Provider {
     // OpenCode Go refuses chats without a stable per-conversation id ("MissingSessionID", 2026-11-22) and asks clients
     // to name themselves instead of a generic HTTP library (opencode.ai/docs/console/go, "Where can I use it").
     this.sessionHeader = /(^|\.)opencode\.ai$/i.test(hostOf(this.baseUrl));
+    if (config.apiKey && hostOf(this.baseUrl) === "generativelanguage.googleapis.com") {
+      this.geminiKey = config.apiKey;
+      this.webSearch = (query, signal) => this.googleSearch(query, signal);
+    }
     this.headers = {
       "content-type": "application/json",
       ...(this.sessionHeader ? { "user-agent": "KesherAI/1.0" } : {}),
@@ -86,6 +95,37 @@ export class OpenAICompatibleProvider implements Provider {
   }
 
   /** @inheritDoc */
+  /**
+   * Google Search grounding on the Gemini API (gemini-grounding.ts): one request per query on the newest Flash alias,
+   * the next alias only when Google says the model is missing or busy. A free-limit (429) or billing answer stops at
+   * once with a plain reason, so nothing is retried against the quota and nothing is ever paid.
+   *
+   * @param query - The search query.
+   * @param signal - Stops it.
+   * @returns The pages found, each at its own address (Google's redirect links are followed once).
+   */
+  private async googleSearch(query: string, signal?: AbortSignal): Promise<GroundedHit[]> {
+    const root = this.baseUrl.replace(/\/openai$/, "");
+    let last = "Gemini search: no model answered.";
+    for (const model of GROUNDING_MODELS) {
+      const res = await fetch(`${root}/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": this.geminiKey! },
+        body: JSON.stringify(groundingBody(query)),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(45_000)]) : AbortSignal.timeout(45_000),
+      });
+      const text = await res.text();
+      if (res.ok) {
+        const hits = parseGrounding(text);
+        return Promise.all(hits.map(async (h) => ({ ...h, url: await unwrapRedirect(h.url, signal) })));
+      }
+      last = groundingError(res.status, text);
+      if (res.status !== 404 && res.status < 500) break;
+    }
+    throw new Error(last);
+  }
+
+  /** @returns Whether the server answers its model list (never throws). */
   async checkHealth(signal?: AbortSignal): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/models`, { headers: this.headers, signal: signal ?? AbortSignal.timeout(2000) });
@@ -456,6 +496,24 @@ export const openAICompatibleFactory: ProviderFactory = {
 };
 
 /** The host of a URL, or "" when it does not parse. */
+/**
+ * The page behind one of Google's grounding redirect links (its `location`, without following it further), so a
+ * report's Sources list shows the real address; any other address, or a failed lookup, is kept as it is.
+ *
+ * @param url - The link.
+ * @param signal - Stops it.
+ */
+async function unwrapRedirect(url: string, signal?: AbortSignal): Promise<string> {
+  if (hostOf(url) !== GROUNDING_REDIRECT_HOST) return url;
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "manual", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000) });
+    const to = res.headers.get("location") ?? "";
+    return /^https?:\/\//i.test(to) ? to : url;
+  } catch {
+    return url;
+  }
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname;

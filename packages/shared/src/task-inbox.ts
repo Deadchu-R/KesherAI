@@ -559,6 +559,11 @@ export interface InboxTaskView extends InboxTaskSpec {
   retryAt?: number;
   /** The one automatic retry after the quota reset was used (a second quota stop waits for the user). */
   autoRetried?: boolean;
+  /**
+   * A research run whose web search found nothing (not the model's failure) goes back once, after the search
+   * cooldown: "waiting" until that run starts, then "used" (a second such failure ends it as failed).
+   */
+  searchRetry?: "waiting" | "used";
   /** Whether the result file was written to the inbox branch. */
   resultWritten?: boolean;
   /**

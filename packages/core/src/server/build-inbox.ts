@@ -15,6 +15,7 @@ import { checkClaude, claudeArgs, claudeEnv, claudeOnce, fileExists, findClaude,
 import type { KesherConfig } from "../config.js";
 import { modelTurnFor, withFilter, type ConversationManager } from "../conversations.js";
 import { researchReport } from "../deep-research.js";
+import { researchSearch } from "../research-search.js";
 import type { FreeCloudPool } from "../free-cloud.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
@@ -294,6 +295,16 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     else gpuHighSince = undefined;
     return { ...inboxBusy({ ...found, ...(gpu !== undefined ? { gpu } : {}), ...(gpuHighSince !== undefined ? { gpuHighSince } : {}), now }, s), games: games.list.length };
   };
+  // Research's search (research-search.ts): the web backends, then Google Search grounding on the free Gemini key when
+  // every backend failed. One instance, so grounding's daily cap and its rest after a limit hold across tasks.
+  const researchSearchFn = researchSearch({
+    web: (q, sig) => searchWeb(q, withFilter(undefined, p.config.webFilter, false), sig, undefined, { strict: true }),
+    grounded: () => {
+      const g = p.registry.get("gemini");
+      return g?.webSearch ? (q, sig) => g.webSearch!(q, sig) : undefined;
+    },
+    redact: (q) => redactLeaks(q, privacyContext().ctx).text,
+  });
   const inbox = new TaskInbox({
     settings: () => p.config.taskInbox,
     ...(p.draining ? { draining: p.draining } : {}),
@@ -316,7 +327,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       ready: () => !!p.registry.get("gemini") || !!p.freeCloud?.candidates("background").length,
       run: async (question, signal) => {
         const prefs = withFilter(undefined, p.config.webFilter, false);
-        const tools = { search: (q: string, sig: AbortSignal) => searchWeb(q, prefs, sig), read: async (url: string, sig: AbortSignal) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output };
+        const tools = { search: researchSearchFn, read: async (url: string, sig: AbortSignal) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output };
         const viaPool = () => researchReport(question, { model: p.freeCloud!.turn("background"), ...tools }, signal);
         const provider = p.registry.get("gemini");
         if (!provider) {
@@ -369,7 +380,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
         const { ctx } = privacyContext();
         return researchReport(question, {
           model: modelTurnFor(p.registry, model, undefined, "helper", { unattended: () => true }),
-          search: (q: string, sig: AbortSignal) => searchWeb(q, prefs, sig),
+          search: researchSearchFn,
           read: async (url: string, sig: AbortSignal) => redactLeaks((await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output, ctx).text,
         }, signal);
       },

@@ -21,6 +21,7 @@ import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import { publishResearch } from "./research-publish.js";
 import { DRAIN_NOTE } from "./update-drain.js";
+import { NO_SEARCH_START } from "./research-search.js";
 import { dailySummary, LINE_TARGET, localDay, LOOP_TICK_MS, loopState, standingDue, STANDING_LOOP_NOTE, summaryDue, type LoopState } from "./work-loop.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, taskSize, validBranchName, validTaskId } from "./task-inbox.js";
@@ -801,6 +802,8 @@ export class TaskInbox {
       // An open ask does not survive a restart either (its answer would start a task nobody is waiting on).
       if (t.runAsk?.next) delete t.runAsk;
     }
+    // Research that failed only because the web search found nothing (before the search retry): back once, by itself.
+    requeueSearchFailures(this.saved.tasks, this.now());
   }
 
   private readonly listeners = new Set<() => void>();
@@ -1313,7 +1316,7 @@ export class TaskInbox {
     if (!s.enabled || s.paused) return;
     for (;;) {
       const now = this.now();
-      const due = (x: InboxTaskView) => x.runBy === "gemini" && (x.status === "waiting" || (x.status === "deferred-quota" && !x.autoRetried && x.retryAt !== undefined && x.retryAt <= now));
+      const due = (x: InboxTaskView) => x.runBy === "gemini" && (x.status === "waiting" || (x.status === "deferred-quota" && (!x.autoRetried || x.searchRetry === "waiting") && x.retryAt !== undefined && x.retryAt <= now));
       const t = this.saved.tasks.find(due);
       if (!t || (this.saved.geminiUntil ?? 0) > now) return;
       const r = this.d.research;
@@ -1338,7 +1341,11 @@ export class TaskInbox {
    * @param gh - GhostCLI runs it (its own counters and cooldowns), not Gemini.
    */
   private async runGemini(t: InboxTaskView, ask: (question: string, signal: AbortSignal) => Promise<string>, gh = false): Promise<void> {
-    if (t.status === "deferred-quota") t.autoRetried = true;
+    if (t.status === "deferred-quota") {
+      // The search retry is its own (a quota stop's one retry stays for a quota stop).
+      if (t.searchRetry === "waiting") t.searchRetry = "used";
+      else t.autoRetried = true;
+    }
     Object.assign(t, { status: "running" as InboxStatus, startedAt: this.now(), resultWritten: false });
     for (const k of ["endedAt", "note", "summary", "retryAt", "researchReport"] as const) delete t[k];
     await this.save();
@@ -1349,6 +1356,7 @@ export class TaskInbox {
     // A research run has no steps or files to watch: only the safety ceiling stops it.
     const timer = setTimeout(() => stop.abort(), limitsFor(t.maxMinutes, this.s).ceilingMs);
     let status: InboxStatus = "done";
+    let searchDeferred = false;
     try {
       const question = researchQuestion(t);
       // The time limit holds even if a search or a page read ignores the signal (a run once hung for two hours).
@@ -1361,7 +1369,19 @@ export class TaskInbox {
       t.summary = report.slice(0, 2000);
     } catch (e) {
       const msg = (e as Error).message || String(e);
-      if (gh && !stop.signal.aborted && (isQuotaError(msg) || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(msg))) {
+      if (!stop.signal.aborted && searchRetryDue(msg, t.searchRetry)) {
+        // The web search found nothing (engines blocking or down), not the model: back once after the search cooldown.
+        // First, because the reasons may carry an engine's "429", which is not Gemini's quota.
+        status = "deferred-quota";
+        searchDeferred = true;
+        t.searchRetry = "waiting";
+        t.retryAt = this.now() + SEARCH_RETRY_MS;
+        t.note = `${msg.slice(0, 340)} — not the model's failure; it tries once more by itself at ${new Date(t.retryAt).toISOString()}.`;
+      } else if (!stop.signal.aborted && msg.startsWith(NO_SEARCH_START)) {
+        // Its one search retry is used: it ends here (an engine's "429" in the reasons is not a model's quota).
+        status = "failed";
+        t.note = `The research failed: ${msg.slice(0, 400)}`;
+      } else if (gh && !stop.signal.aborted && (isQuotaError(msg) || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(msg))) {
         // Every GhostCLI model was cooling or busy: wait for the first one back (its own cooldowns, never Gemini's).
         const cools = Object.values(this.ghostcliCooldowns());
         status = "deferred-quota";
@@ -1389,7 +1409,7 @@ export class TaskInbox {
       else this.geminiStop = undefined;
     }
     // Gemini out of quota or busy: an automatic research task goes on GhostCLI when it may (no sensitive content).
-    if (!gh && status === "deferred-quota" && t.executor === "auto" && this.ghostcliResearchOk(t)) {
+    if (!gh && status === "deferred-quota" && !searchDeferred && t.executor === "auto" && this.ghostcliResearchOk(t)) {
       Object.assign(t, { runBy: "ghostcli" as const, status: "waiting" as InboxStatus, note: "Gemini is out or busy: GhostCLI writes this research (no sensitive content)." });
       delete t.retryAt;
       delete t.autoRetried;
@@ -3715,7 +3735,8 @@ export class TaskInbox {
    * @param t - The task that just ended.
    */
   private async retryLater(t: InboxTaskView): Promise<void> {
-    if (t.status !== "failed" || (t.autoRetries ?? 0) >= AUTO_RETRIES || !retryable(t.note)) return;
+    // A research whose search found nothing has its own one retry after the search cooldown (searchRetry), never at once.
+    if (t.status !== "failed" || (t.autoRetries ?? 0) >= AUTO_RETRIES || !retryable(t.note) || t.note?.includes(NO_SEARCH_START)) return;
     t.autoRetries = (t.autoRetries ?? 0) + 1;
     t.note = `Failed: ${(t.note ?? "").slice(0, 200)} — back in the queue (try ${t.autoRetries + 1} of ${AUTO_RETRIES + 1}).`;
     t.status = t.runBy === "local" || t.runBy === "opus" ? "queued" : "waiting";
@@ -3861,6 +3882,40 @@ const AUTO_RETRIES = 2;
  */
 export function retryable(note?: string): boolean {
   return !/privacy guard|may not use|outside the allowed paths|personal path|user name|declined|security|forbidden/i.test(note ?? "");
+}
+
+/** How long a research whose web search found nothing waits before its one retry (the engines' block cooldown). */
+export const SEARCH_RETRY_MS = 30 * 60_000;
+
+/**
+ * Whether a research run's failure is only "the web search found nothing" and its one search retry is still unused.
+ *
+ * @param msg - The run's error (or the task's note).
+ * @param searchRetry - The task's {@link InboxTaskView.searchRetry}.
+ */
+export function searchRetryDue(msg: string | undefined, searchRetry: InboxTaskView["searchRetry"]): boolean {
+  return !searchRetry && !!msg?.includes(NO_SEARCH_START);
+}
+
+/**
+ * Research tasks that failed only because the web search found nothing, before the search retry existed (0.6.496
+ * and older), go back once: deferred, due at once, with their search retry marked as waiting. Called when the queue
+ * is read, so such tasks rerun by themselves after an update.
+ *
+ * @param tasks - The queue's tasks.
+ * @param now - The time (ms).
+ * @returns The ids put back.
+ */
+export function requeueSearchFailures(tasks: InboxTaskView[], now: number): string[] {
+  const back: string[] = [];
+  for (const t of tasks) {
+    if (t.status !== "failed" || (t.runBy !== "gemini" && t.runBy !== "ghostcli") || !searchRetryDue(t.note, t.searchRetry)) continue;
+    Object.assign(t, { status: "deferred-quota" as InboxStatus, searchRetry: "waiting" as const, retryAt: now, resultWritten: false });
+    t.note = `Back in the queue once: ${(t.note ?? "").slice(0, 300)} (the web search, not the model).`;
+    delete t.endedAt;
+    back.push(t.id);
+  }
+  return back;
 }
 
 /** The icon of a task's end notice. */

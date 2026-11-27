@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backendOrder, checkBackends, looksBlocked, parseBing, parseBrave, parseDuckLite, parseEcosia, parseMojeek, parseStartpage, parseTavily, parseYahoo, relevantHits, resetSearchMemory, setSearchEngine, setSearchKeys } from "./web-search.js";
+import { BLOCK_COOLDOWN_MS, SearchFailedError, backendOrder, checkBackends, coolBackend, isBlockFailure, searchCooldowns, looksBlocked, parseBing, parseBrave, parseDuckLite, parseEcosia, parseMojeek, parseStartpage, parseTavily, parseYahoo, relevantHits, resetSearchMemory, setSearchEngine, setSearchKeys } from "./web-search.js";
 import { searchWeb } from "./system-tools.js";
 
 const LITE = `<table><tr><td>1.&nbsp;</td><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.python.org%2F3%2F&amp;rut=x" class='result-link'>Python <b>docs</b></a></td></tr>
@@ -220,3 +220,47 @@ test("the chosen engine is tried first, the others follow; an unusable choice is
     resetSearchMemory();
   }
 });
+
+test("a DuckDuckGo block (anomaly page or 202) cools it down: later searches go straight to the next backend", async () => {
+  resetSearchMemory();
+  const s = new AbortController().signal;
+  const f = fake({ "html.duckduckgo.com": "<html><div class='anomaly-modal'>bots use DuckDuckGo too</div></html>", "lite.duckduckgo.com": 202, "yahoo.com": 503, "startpage.com": 503, "mojeek.com": MOJEEK, "ecosia.org": 503, "bing.com": BING });
+  try {
+    await searchWeb("example", undefined, s);
+    assert.deepEqual(Object.keys(searchCooldowns()).sort(), ["duckduckgo", "duckduckgo-lite"]);
+    resetLastGoodOnly();
+    f.asked.length = 0;
+    await searchWeb("example", undefined, s);
+    assert.ok(!f.asked.some((a) => a.includes("duckduckgo.com")), "the cooling backends are not asked");
+    assert.equal(searchCooldowns(Date.now() + BLOCK_COOLDOWN_MS + 1).duckduckgo, undefined, "back after 30 minutes");
+    // A second block in a row doubles the wait.
+    const t0 = Date.now();
+    assert.equal(coolBackend("duckduckgo", t0), t0 + 2 * BLOCK_COOLDOWN_MS);
+    assert.ok(isBlockFailure("Search answered 429 (a bot check or rate limit).") && isBlockFailure("Answered a bot-check page.") && !isBlockFailure("No results on the page.") && !isBlockFailure("Search answered 503."));
+  } finally {
+    f.restore();
+    resetSearchMemory();
+  }
+});
+
+test("searchWeb strict: nothing found anywhere throws SearchFailedError with one reason per backend", async () => {
+  resetSearchMemory();
+  const s = new AbortController().signal;
+  const f = fake({ "duckduckgo.com": "<html></html>", "yahoo.com": "<html></html>", "startpage.com": 429, "mojeek.com": "<html></html>", "ecosia.org": "<html></html>", "bing.com": "<html></html>" });
+  try {
+    const e = await searchWeb("q", undefined, s, undefined, { strict: true }).catch((x: unknown) => x);
+    assert.ok(e instanceof SearchFailedError);
+    assert.deepEqual(e.failures.map((l) => l.split(":")[0]), ["duckduckgo", "duckduckgo-lite", "yahoo", "startpage", "mojeek", "ecosia", "bing"]);
+    assert.match(e.failures[3]!, /startpage: Search answered 429/);
+  } finally {
+    f.restore();
+    resetSearchMemory();
+  }
+});
+
+/** Forgets the remembered backend but keeps the cooldowns (so the second search starts from the default order). */
+function resetLastGoodOnly(): void {
+  const c = searchCooldowns();
+  resetSearchMemory();
+  for (const name of Object.keys(c) as Array<keyof typeof c>) coolBackend(name);
+}

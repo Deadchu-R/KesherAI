@@ -202,6 +202,12 @@ export interface Provider {
 
   /** Turns texts into vectors (embedding models), in the same order. */
   embed?(request: { providerModelId: string; input: string[] }, signal?: AbortSignal): Promise<number[][]>;
+
+  /**
+   * Searches the web with the provider's own search (Gemini's Google Search grounding; gemini-grounding.ts). Only
+   * research uses it, as its last search backend. Throws a plain reason (free limit, billing needed) on failure.
+   */
+  webSearch?(query: string, signal?: AbortSignal): Promise<Array<{ title: string; url: string; snippet: string }>>;
 }
 
 /**

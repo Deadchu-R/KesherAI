@@ -14,7 +14,7 @@ export { resolveInWorkspace, displayPath, globToRegExp, IGNORED_DIRS } from "./w
 export { buildSystemPrompt, readProjectGuide, type PromptOptions } from "./prompt.js";
 export * from "./system-tools.js";
 export * from "./answer-links.js";
-export { checkBackends, lastBackendCheck, setSearchEngine, setSearchKeys, type BackendCheck, type SearchEngineChoice, type SearchKeys } from "./web-search.js";
+export { checkBackends, lastBackendCheck, searchCooldowns, SearchFailedError, setSearchEngine, setSearchKeys, type BackendCheck, type SearchEngineChoice, type SearchKeys } from "./web-search.js";
 export { REQUEST_ACCESS_TOOL, requestAccessSpec } from "./tools.js";
 export { resolveForTool } from "./workspace.js";
 export { buildExecutableTool } from "./build.js";
