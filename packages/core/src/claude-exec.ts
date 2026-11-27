@@ -254,7 +254,20 @@ export async function readClaudeQuota(file: string): Promise<ClaudeQuota | undef
  * @param now - The clock.
  * @returns The new reading (unchanged when the event named no known window with a percent and a reset).
  */
-export async function mergeClaudeLimit(file: string, ev: Extract<ClaudeEvent, { kind: "limit" }>, now: number): Promise<ClaudeQuota | undefined> {
+export function mergeClaudeLimit(file: string, ev: Extract<ClaudeEvent, { kind: "limit" }>, now: number): Promise<ClaudeQuota | undefined> {
+  // One write at a time per file: one stream line now gives two windows, and two read-modify-writes at once would
+  // lose one window and race on the same temporary file.
+  const run = (merging.get(file) ?? Promise.resolve()).catch(() => undefined).then(() => mergeOne(file, ev, now));
+  merging.set(file, run);
+  void run.finally(() => merging.get(file) === run && merging.delete(file)).catch(() => undefined);
+  return run;
+}
+
+/** The quota file merges still running, per file (see {@link mergeClaudeLimit}). */
+const merging = new Map<string, Promise<unknown>>();
+
+/** One merge (see {@link mergeClaudeLimit}). */
+async function mergeOne(file: string, ev: Extract<ClaudeEvent, { kind: "limit" }>, now: number): Promise<ClaudeQuota | undefined> {
   const q = (await readClaudeQuota(file)) ?? { at: now };
   const key = ev.window === "five_hour" ? "fiveHour" : ev.window === "seven_day" || ev.window === "seven_day_opus" ? "sevenDay" : undefined;
   if (!key || !ev.resetsAt) return q.fiveHour || q.sevenDay ? q : undefined;
