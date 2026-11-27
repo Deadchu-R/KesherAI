@@ -197,6 +197,41 @@ interface Active {
 }
 
 /**
+ * The remote-tracking ref git names as broken in a fetch error ("fatal: bad object refs/remotes/origin/release"), when
+ * it is one: such a ref (left by a force-push into a shallow clone, or a cut-off fetch) makes every later fetch fail,
+ * even one that asks for another branch. Only `refs/remotes/…` refs are named, since they are a copy that the next
+ * fetch makes again; a local branch is never one.
+ *
+ * @param out - The fetch's output.
+ * @returns The ref, or undefined.
+ */
+export function brokenRemoteRef(out: string): string | undefined {
+  const m = /bad object (refs\/remotes\/[\w./-]+)/.exec(out);
+  return m && !m[1]!.includes("..") ? m[1] : undefined;
+}
+
+/**
+ * Runs `git fetch`, and when it fails on a broken remote-tracking ref, deletes that ref and tries again (at most twice:
+ * a second broken ref can show once the first is gone).
+ *
+ * @param git - Runs git in the repository.
+ * @param repo - The repository.
+ * @param args - The fetch's arguments, starting with "fetch".
+ * @param log - Logs a repair.
+ * @returns The last fetch's result.
+ */
+export async function fetchRepairing(git: TaskInboxDeps["git"], repo: string, args: string[], log?: (line: string) => void): Promise<{ code: number; out: string }> {
+  let r = await git(repo, args, 60_000);
+  for (let i = 0; i < 2 && r.code !== 0; i++) {
+    const ref = brokenRemoteRef(r.out);
+    if (!ref || (await git(repo, ["update-ref", "-d", ref])).code !== 0) break;
+    log?.(`task inbox: removed the broken ${ref} and fetched again`);
+    r = await git(repo, args, 60_000);
+  }
+  return r;
+}
+
+/**
  * When the plan's quota resets, from the agent's error text ("retry in 1h35m", "try again in 20 minutes").
  *
  * @param msg - The error.
@@ -740,7 +775,7 @@ export class TaskInbox {
       return undefined;
     }
     const ref = "refs/remotes/origin/main";
-    const fetched = await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], 60_000);
+    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`]);
     // Offline: the last fetched copy still counts (it is what the PC knew).
     if (fetched.code !== 0 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", ref])).code !== 0) return undefined;
     const size = await this.d.git(repo, ["cat-file", "-s", `${ref}:docs/WORK_LIST.md`]);
@@ -755,7 +790,7 @@ export class TaskInbox {
     if (!s.enabled) return;
     const repo = this.repo();
     const br = this.branch();
-    const fetched = await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${br}:refs/remotes/origin/${br}`], 60_000);
+    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${br}:refs/remotes/origin/${br}`]);
     this.saved.lastFetch = this.now();
     if (fetched.code !== 0) {
       // No inbox branch yet is not an error: nothing was sent.
@@ -1166,7 +1201,7 @@ export class TaskInbox {
       return;
     }
     const repo = this.repo();
-    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     // A partial attempt's pushed branch is where this one continues from (its work is kept, not redone).
     const resume = await this.resumeRef(repo, t);
@@ -1584,7 +1619,7 @@ export class TaskInbox {
     t.status = "running";
     t.note = "Starting…";
     await this.save();
-    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     const resume = await this.resumeRef(repo, t);
     const base = resume ?? taskBase;
@@ -2123,7 +2158,7 @@ export class TaskInbox {
     // still hold back work that runs on this PC itself (the local model, self-work).
     const repo = this.repo();
     // Start from the newest base on GitHub (fetch only reads).
-    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     // A partial attempt's pushed branch is where this one continues from.
     const resume = await this.resumeRef(repo, t);
@@ -2726,7 +2761,7 @@ export class TaskInbox {
     r.at = this.now();
     const repo = this.repo();
     const ref = "refs/remotes/origin/main";
-    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], 60_000);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`]);
     const ls = await this.d.git(repo, ["ls-tree", ref, "docs/research/"]);
     if (ls.code !== 0) return;
     for (const line of ls.out.split(/\r?\n/)) {

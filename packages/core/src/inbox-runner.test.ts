@@ -905,3 +905,26 @@ test("rememberFail keeps why a run did not succeed, and a done run clears it", (
   rememberFail(t, "done", 6);
   assert.equal(t.lastFail, undefined);
 });
+
+test("fetchRepairing removes a broken remote-tracking ref and fetches again", async () => {
+  const { brokenRemoteRef, fetchRepairing } = await import("./inbox-runner.js");
+  assert.equal(brokenRemoteRef("fatal: bad object refs/remotes/origin/release\nerror: did not send all necessary objects"), "refs/remotes/origin/release");
+  assert.equal(brokenRemoteRef("fatal: bad object refs/heads/main"), undefined);
+  assert.equal(brokenRemoteRef("fatal: bad object refs/remotes/../x"), undefined);
+  const calls: string[][] = [];
+  let broken = true;
+  const fake = async (_cwd: string, args: string[]) => {
+    calls.push(args);
+    if (args[0] === "update-ref") { broken = false; return { code: 0, out: "" }; }
+    return broken ? { code: 128, out: "fatal: bad object refs/remotes/origin/release" } : { code: 0, out: "" };
+  };
+  const r = await fetchRepairing(fake as never, "/repo", ["fetch", "--quiet", "origin"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(calls.map((c) => c[0]), ["fetch", "update-ref", "fetch"]);
+  assert.deepEqual(calls[1], ["update-ref", "-d", "refs/remotes/origin/release"]);
+  // Another failure is left alone.
+  calls.length = 0;
+  const other = await fetchRepairing((async (_c: string, a: string[]) => (calls.push(a), { code: 1, out: "Could not resolve host" })) as never, "/repo", ["fetch"]);
+  assert.equal(other.code, 1);
+  assert.equal(calls.length, 1);
+});
