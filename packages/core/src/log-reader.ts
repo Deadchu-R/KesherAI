@@ -328,6 +328,30 @@ export async function unityPlayerLogs(platform: NodeJS.Platform = process.platfo
   return found.sort((a, b) => b.modified - a.modified).slice(0, 20);
 }
 
+/**
+ * Turns file paths (with optional :line or :line:col) in log text into `<a>` tags that open the editor at that spot.
+ * Safe for HTML output: escapes the surrounding text and only wraps plausible absolute/relative paths.
+ */
+function withFileLinks(text: string): string {
+  if (!text) return text;
+  // Matches Windows (`C:\…`, `\\server\…`) and POSIX (`/…`, `./…`, `../…`) paths, optionally followed by :line or :line:col.
+  // Avoids matching timestamps like `12:34:56` by requiring at least one path separator before any colon suffix.
+  const re = /(?:[A-Za-z]:\\|\\\\|\.\.?[\\/]|\/)[^\s"'<>]*?(?::(\d+)(?::(\d+))?)?/g;
+  return text.replace(re, (match, lineStr?: string, colStr?: string) => {
+    // Strip trailing punctuation that often follows a path in log messages (commas, periods, parentheses).
+    const trail = match.match(/[),.;:!?]+$/)?.[0] ?? "";
+    const clean = trail ? match.slice(0, -trail.length) : match;
+    const line = lineStr ? Number(lineStr) : undefined;
+    const col = colStr ? Number(colStr) : undefined;
+    const params = new URLSearchParams({ file: clean });
+    if (line && Number.isFinite(line)) params.set("line", String(line));
+    if (col && Number.isFinite(col)) params.set("col", String(col));
+    const href = `/api/editor/open?${params.toString()}`;
+    const safe = clean.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<a href="${href}" title="Open in editor">${safe}</a>${trail}`;
+  });
+}
+
 /** The reader: its sources, a small parse cache, and the user's labels. */
 export class LogReader {
   private readonly cache = new Map<string, { version: string; entries: LogEntry[]; truncated: boolean }>();
@@ -426,8 +450,9 @@ export class LogReader {
     const hit = this.cache.get(id);
     if (hit && hit.version === version) return { source: s.info, entries: hit.entries, truncated: hit.truncated };
     const text = await s.read();
-    const entries = text ? parseLog(text.text) : [];
-    const truncated = !!text?.truncated;
+          const raw = text ? parseLog(text.text) : [];
+          const entries = raw.map((e) => ({ ...e, msg: withFileLinks(e.msg) }));
+          const truncated = !!text?.truncated;
     this.cache.delete(id);
     this.cache.set(id, { version, entries, truncated });
     while (this.cache.size > 6) this.cache.delete(this.cache.keys().next().value!);
