@@ -103,6 +103,7 @@ function row(q: ProviderQuota, now: number): HTMLElement {
     q.bars.map((b) => bar(b, now)),
     counts(q),
     q.movedTo?.length ? h("div", { class: "xs q-moved", dir: "auto" }, L("↪ העבודה עברה ל: ", "↪ Its work went to: "), q.movedTo.map((m) => L(`${m.name} (${m.tasks} משימות)`, `${m.name} (${m.tasks} ${m.tasks === 1 ? "task" : "tasks"})`)).join(" · ")) : null,
+      q.movedAway || q.takenOver ? h("div", { class: "xs q-failover", dir: "auto" }, [q.movedAway ? L(`↗ ${q.movedAway} משימות עברו לספק אחר היום`, `↗ ${q.movedAway} tasks moved away today`) : null, q.movedAway && q.takenOver ? " · " : null, q.takenOver ? L(`↙ ${q.takenOver} משימות נלקחו מספק אחר היום`, `↙ ${q.takenOver} tasks taken over today`) : null].filter(Boolean).join("")) : null,
     q.lastRateLimitAt ? h("div", { class: "xs mut" }, L(`הגבלת קצב אחרונה ${ago(q.lastRateLimitAt, now)}`, `Last rate limit ${ago(q.lastRateLimitAt, now)}`)) : null,
     !q.bars.length && !q.offWhy && q.kind !== "local" && q.kind !== "ghostcli" ? h("div", { class: "xs mut" }, q.state === "unknown" ? L("המחשב עוד לא קרא את המכסה", "The PC has not read its quota yet") : L("אין מכסה מדווחת", "No quota reported")) : null,
     h("div", { class: "xs mut q-age" }, q.readAt ? L(`נקרא ${ago(q.readAt, now)}`, `Read ${ago(q.readAt, now)}`) : L("לא נקרא", "Not read")),

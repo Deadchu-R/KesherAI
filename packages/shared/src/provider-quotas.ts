@@ -72,6 +72,10 @@ export interface ProviderQuota {
   offWhy?: QuotaOffWhy;
   /** Where its waiting work went while it was out of quota (the quota failover): each executor's name and how many tasks. */
   movedTo?: Array<{ name: string; tasks: number }>;
+  /** Tasks that left this provider today because its share ran out (quota failover moved them away). */
+  movedAway?: number;
+  /** Tasks this provider took over today from another provider whose share ran out (quota failover moved them here). */
+  takenOver?: number;
 }
 
 /** Why a row is off. */
@@ -93,8 +97,10 @@ export interface ProviderQuotaInput {
     /** Antigravity's plan ran out (InboxState.quota): back after `until`. */
     quota?: { until: number };
     /** Tasks the quota failover moved that have not ended: from which executor to which. */
-    moves?: Array<{ from: Exclude<InboxExecutor, "auto">; to: Exclude<InboxExecutor, "auto"> }>;
-  };
+          moves?: Array<{ from: Exclude<InboxExecutor, "auto">; to: Exclude<InboxExecutor, "auto"> }>;
+          /** Tasks the quota failover moved today: from which executor to which (the daily counter the hub shows). */
+          movesToday?: Array<{ from: Exclude<InboxExecutor, "auto">; to: Exclude<InboxExecutor, "auto"> }>;
+        };
   /** The free cloud helpers of chats (`/api/free-cloud`'s providers). */
   freeCloud?: Array<{ id: string; name?: string; configured: boolean; enabled: boolean; state: string; until?: number; day: { used: number; limit: number }; lastOkAt?: number }>;
   /** The built-in engine: loaded or not, and its model file (a path is cut to the file name). */
@@ -252,13 +258,26 @@ export function buildProviderQuotas(input: ProviderQuotaInput): ProviderQuota[] 
     const bar: QuotaBar = { label: "day", used: p.day.used, ...(p.day.limit ? { limit: p.day.limit } : {}), ...(until ? { resetAt: until } : p.day.limit && p.day.used >= p.day.limit ? { resetAt: nextUtcDay(now) } : {}) };
     out.push({ id: `cloud-${p.id}`.slice(0, 64), kind: "free", group: "chat", name: (p.name ?? p.id).slice(0, QUOTA_LIMITS.nameChars), state: !p.enabled || p.state === "off" ? "off" : until ? "out" : p.day.limit ? stateOf([bar]) : "ok", bars: [bar], ...(until ? { until } : {}), readAt: now });
   }
-  // Where the work of each task agent went while it was out (the row ids are the executors' ids).
-  for (const row of out) {
-    const to = new Map<string, number>();
-    for (const m of inbox.moves ?? []) if (m.from === row.id && row.group === "tasks") to.set(EXECUTOR_NAMES[m.to], (to.get(EXECUTOR_NAMES[m.to]) ?? 0) + 1);
-    if (to.size) row.movedTo = [...to].map(([name, tasks]) => ({ name, tasks })).slice(0, QUOTA_LIMITS.moves);
-  }
-  return out.slice(0, QUOTA_LIMITS.items);
+  // Where the work of each task agent went while it was out (the row ids are the executors' ids),
+      // plus how many tasks left or arrived today because of quota failover.
+      for (const row of out) {
+        const to = new Map<string, number>();
+        let movedAway = 0;
+        let takenOver = 0;
+        for (const m of inbox.moves ?? []) {
+          if (row.group !== "tasks") continue;
+          if (m.from === row.id) {
+            to.set(EXECUTOR_NAMES[m.to], (to.get(EXECUTOR_NAMES[m.to]) ?? 0) + 1);
+            movedAway++;
+          } else if (m.to === row.id) {
+            takenOver++;
+          }
+        }
+        if (to.size) row.movedTo = [...to].map(([name, tasks]) => ({ name, tasks })).slice(0, QUOTA_LIMITS.moves);
+        if (movedAway) row.movedAway = movedAway;
+        if (takenOver) row.takenOver = takenOver;
+      }
+      return out.slice(0, QUOTA_LIMITS.items);
 }
 
 const KINDS: readonly QuotaKind[] = ["antigravity", "ghostcli", "opencode", "gemini", "free", "local", "claude"];
@@ -338,8 +357,10 @@ export function cleanProviderQuotas(x: unknown): ProviderQuota[] {
       ...opt("model", model || undefined),
       ...opt("readAt", n0(q.readAt) || undefined),
       ...opt("offWhy", OFF_WHY.includes(q.offWhy as QuotaOffWhy) ? (q.offWhy as QuotaOffWhy) : undefined),
-      ...opt("movedTo", cleanMoves(q.movedTo)),
-    });
+              ...opt("movedTo", cleanMoves(q.movedTo)),
+              ...opt("movedAway", n0(q.movedAway) || undefined),
+              ...opt("takenOver", n0(q.takenOver) || undefined),
+            });
   }
   return out;
 }
