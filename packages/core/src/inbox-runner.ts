@@ -216,23 +216,75 @@ export function brokenRemoteRef(out: string): string | undefined {
 
 /**
  * Runs `git fetch`, and when it fails on a broken remote-tracking ref, deletes that ref and tries again (at most twice:
- * a second broken ref can show once the first is gone).
+ * a second broken ref can show once the first is gone). Fetches run without git's automatic housekeeping (a failed
+ * `repack` after a good fetch would otherwise make it look failed).
+ *
+ * A ref file left empty or half-written (a power cut while git wrote it) cannot be removed with `git update-ref -d`
+ * ("cannot lock ref"); then the loose file and its reflog are removed directly, only under `refs/remotes/`, and only
+ * when the file does not hold a valid object id.
  *
  * @param git - Runs git in the repository.
  * @param repo - The repository.
  * @param args - The fetch's arguments, starting with "fetch".
- * @param log - Logs a repair.
+ * @param log - Logs each repair step.
+ * @param files - File access (tests pass fakes).
  * @returns The last fetch's result.
  */
-export async function fetchRepairing(git: TaskInboxDeps["git"], repo: string, args: string[], log?: (line: string) => void): Promise<{ code: number; out: string }> {
-  let r = await git(repo, args, 60_000);
+export async function fetchRepairing(git: TaskInboxDeps["git"], repo: string, args: string[], log?: (line: string) => void, files: RefFiles = realRefFiles): Promise<{ code: number; out: string }> {
+  // "fetch" stays first (the git runner picks the network sign-in by it).
+  const quiet = args[0] === "fetch" ? ["fetch", "--no-auto-maintenance", ...args.slice(1)] : args;
+  let r = await git(repo, quiet, 60_000);
   for (let i = 0; i < 2 && r.code !== 0; i++) {
     const ref = brokenRemoteRef(r.out);
-    if (!ref || (await git(repo, ["update-ref", "-d", ref])).code !== 0) break;
+    if (!ref) break;
+    const del = await git(repo, ["update-ref", "-d", ref]);
+    if (del.code !== 0 && !(await removeLooseRef(git, repo, ref, files, log))) {
+      log?.(`task inbox: could not remove the broken ${ref}: ${del.out.slice(0, 160)}`);
+      break;
+    }
     log?.(`task inbox: removed the broken ${ref} and fetched again`);
-    r = await git(repo, args, 60_000);
+    r = await git(repo, quiet, 60_000);
   }
   return r;
+}
+
+/** Repair lines go to KesherAI's log (the main log keeps console output). */
+const repairLog = (line: string): void => console.info(line);
+
+/** The file access {@link removeLooseRef} needs. */
+export interface RefFiles {
+  read: (path: string) => Promise<string | undefined>;
+  remove: (path: string) => Promise<void>;
+}
+
+const realRefFiles: RefFiles = {
+  read: (path) => readFile(path, "utf8").catch(() => undefined),
+  remove: (path) => rm(path, { force: true }),
+};
+
+/**
+ * Removes a broken loose remote-tracking ref file (and its reflog) that git itself cannot delete.
+ *
+ * @param git - Runs git in the repository (for its git folder).
+ * @param repo - The repository.
+ * @param ref - A `refs/remotes/…` ref.
+ * @param files - File access.
+ * @param log - Logs the removal.
+ * @returns Whether a broken file was found and removed.
+ */
+export async function removeLooseRef(git: TaskInboxDeps["git"], repo: string, ref: string, files: RefFiles, log?: (line: string) => void): Promise<boolean> {
+  if (!/^refs\/remotes\/[\w./-]+$/.test(ref) || ref.includes("..")) return false;
+  const gd = await git(repo, ["rev-parse", "--absolute-git-dir"]);
+  if (gd.code !== 0 || !gd.out.trim()) return false;
+  const dir = gd.out.trim();
+  const file = join(dir, ...ref.split("/"));
+  const body = await files.read(file);
+  // A valid object id is left alone: that ref is not the broken one.
+  if (body === undefined || /^([0-9a-f]{40}|[0-9a-f]{64})\s*$/.test(body)) return false;
+  await files.remove(file);
+  await files.remove(join(dir, "logs", ...ref.split("/")));
+  log?.(`task inbox: removed the damaged ref file ${ref} (${body.trim() ? "not an object id" : "empty"})`);
+  return true;
 }
 
 /**
@@ -867,7 +919,7 @@ export class TaskInbox {
       return undefined;
     }
     const ref = "refs/remotes/origin/main";
-    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`]);
+    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], repairLog);
     // Offline: the last fetched copy still counts (it is what the PC knew).
     if (fetched.code !== 0 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", ref])).code !== 0) return undefined;
     const size = await this.d.git(repo, ["cat-file", "-s", `${ref}:docs/WORK_LIST.md`]);
@@ -882,7 +934,7 @@ export class TaskInbox {
     if (!s.enabled) return;
     const repo = this.repo();
     const br = this.branch();
-    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${br}:refs/remotes/origin/${br}`]);
+    const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${br}:refs/remotes/origin/${br}`], repairLog);
     this.saved.lastFetch = this.now();
     if (fetched.code !== 0) {
       // No inbox branch yet is not an error: nothing was sent.
@@ -1455,7 +1507,7 @@ export class TaskInbox {
       return;
     }
     const repo = this.repo();
-    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"], repairLog);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     // A partial attempt's pushed branch is where this one continues from (its work is kept, not redone).
     const resume = await this.resumeRef(repo, t);
@@ -1885,7 +1937,7 @@ export class TaskInbox {
     t.status = "running";
     t.note = "Starting…";
     await this.save();
-    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"], repairLog);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     const resume = await this.resumeRef(repo, t);
     const base = resume ?? taskBase;
@@ -2424,7 +2476,7 @@ export class TaskInbox {
     // still hold back work that runs on this PC itself (the local model, self-work).
     const repo = this.repo();
     // Start from the newest base on GitHub (fetch only reads).
-    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"]);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin"], repairLog);
     const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
     // A partial attempt's pushed branch is where this one continues from.
     const resume = await this.resumeRef(repo, t);
@@ -3084,7 +3136,7 @@ export class TaskInbox {
     r.at = this.now();
     const repo = this.repo();
     const ref = "refs/remotes/origin/main";
-    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`]);
+    await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], repairLog);
     const ls = await this.d.git(repo, ["ls-tree", ref, "docs/research/"]);
     if (ls.code !== 0) return;
     for (const line of ls.out.split(/\r?\n/)) {

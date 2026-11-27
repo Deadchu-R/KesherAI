@@ -928,3 +928,29 @@ test("fetchRepairing removes a broken remote-tracking ref and fetches again", as
   assert.equal(other.code, 1);
   assert.equal(calls.length, 1);
 });
+
+test("fetchRepairing removes a damaged (empty) ref file git cannot delete, and fetches without auto-maintenance", async () => {
+  const { fetchRepairing } = await import("./inbox-runner.js");
+  const gitDir = process.platform === "win32" ? "C:\\repo\\.git" : "/repo/.git";
+  const sep = process.platform === "win32" ? "\\" : "/";
+  const refFile = [gitDir, "refs", "remotes", "origin", "release"].join(sep);
+  const files = new Map<string, string>([[refFile, ""]]);
+  const removed: string[] = [];
+  const calls: string[][] = [];
+  const fake = async (_cwd: string, args: string[]) => {
+    calls.push(args);
+    if (args[0] === "update-ref") return { code: 128, out: "fatal: cannot lock ref 'refs/remotes/origin/release'" };
+    if (args[0] === "rev-parse") return { code: 0, out: gitDir + "\n" };
+    return files.has(refFile) ? { code: 128, out: "fatal: bad object refs/remotes/origin/release" } : { code: 0, out: "" };
+  };
+  const r = await fetchRepairing(fake as never, "/repo", ["fetch", "--quiet", "origin"], undefined, { read: async (p) => files.get(p), remove: async (p) => (removed.push(p), void files.delete(p)) });
+  assert.equal(r.code, 0);
+  assert.deepEqual(calls[0], ["fetch", "--no-auto-maintenance", "--quiet", "origin"]);
+  assert.ok(removed.includes(refFile));
+  // A ref file holding a valid id is never removed.
+  files.set(refFile, "a".repeat(40) + "\n");
+  removed.length = 0;
+  const r2 = await fetchRepairing(fake as never, "/repo", ["fetch"], undefined, { read: async (p) => files.get(p), remove: async (p) => void removed.push(p) });
+  assert.notEqual(r2.code, 0);
+  assert.deepEqual(removed, []);
+});
