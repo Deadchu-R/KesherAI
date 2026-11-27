@@ -1104,6 +1104,9 @@ export class TaskInbox {
     const repo = this.repo();
     const br = this.branch();
     const fetched = await fetchRepairing(this.d.git, repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${br}:refs/remotes/origin/${br}`], repairLog);
+    // The lead's "running now" list (claude-status.ts reads origin/claude-status): fetched with the inbox, quietly;
+    // a missing branch or a failure here never touches the inbox's state.
+    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", "+refs/heads/claude-status:refs/remotes/origin/claude-status"]).catch(() => undefined);
     this.saved.lastFetch = this.now();
     if (fetched.code !== 0) {
       // No inbox branch yet is not an error: nothing was sent.
