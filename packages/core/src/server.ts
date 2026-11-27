@@ -523,6 +523,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
     // A check-back's turn tells the phone when it ends, however short (like a message written on the phone).
     onCheckBack: (convId) => notifier.messageFromPhone(convId),
+    // A scheduled task that runs in a fresh chat: same model, mode and project as the chat that scheduled it.
+    create: async (fromId, title) => {
+      const from = library.summary(fromId);
+      if (!from) return undefined;
+      return (await services.conversations.create({ kind: from.kind, projectId: from.projectId, modelId: from.modelId, mode: from.mode, title: `⏱ ${title}`, source: "routine" })).id;
+    },
   });
   void chatTimers.start();
   // While an update waits for a free moment no new agent run starts (inbox, work loop, routines): update-drain.ts.

@@ -50,6 +50,7 @@ import { StudySection } from "../settings/StudySection";
 import { CloudHubSection } from "../settings/CloudHubSection";
 import { TasksSyncSection } from "../settings/TasksSyncSection";
 import { TaskInboxSection } from "../settings/TaskInboxSection";
+import { ScheduledSection } from "../chat/ScheduledList";
 import { Glyph } from "../ui/Glyph";
 import { useEffect, useState } from "react";
 import { isRemote } from "../api";
@@ -70,6 +71,7 @@ const SETTINGS_CATS: Array<{ id: string; icon: string; en: string; he: string; w
   { id: "approvals", icon: "✅", en: "Approvals", he: "אישורים", words: "approvals grants revoke always allow for this chat for 1 hour until I revoke helpers time left permissions אישורים הרשאות בטל לצ'אט הזה לשעה עד שאבטל עוזרים זמן שנשאר", render: () => <PermissionsSection /> },
   { id: "inbox", icon: "📥", en: "Task inbox", he: "תיבת משימות", words: "task inbox kesher-inbox antigravity gemini run daily limit quota branch push agy paths commands busy game editor gpu ai studio תיבת משימות אנטיגרביטי ג׳מיני הפעל מכסה סף יומי ענף דחיפה נתיבים פקודות עסוק משחק עורך כרטיס מסך", render: () => <TaskInboxSection /> },
   { id: "study", icon: "🎓", en: "Study", he: "לימודים", words: "study goal daily streak reminder path duolingo steps מסלול שלבים דולינגו lectures recordings audio delete semester keep student יעד יומי רצף תזכורת לימודים הרצאות הקלטות אודיו מחיקה סמסטר לשמור סטודנט", render: () => <StudySection /> },
+  { id: "scheduled", icon: "📅", en: "Scheduled", he: "משימות מתוזמנות", words: "scheduled tasks recurring every morning daily weekly cron repeat pause run now משימות מתוזמנות חוזר כל בוקר יומי שבועי השהיה הרץ עכשיו", render: () => <ScheduledSection /> },
   { id: "notifications", icon: "🔔", en: "Notifications", he: "התראות", words: "notifications phone push ntfy approve deny waiting done התראות פוש אישור דחייה מחכה הסתיים טלפון", render: () => <NotificationsSection /> },
   { id: "appearance", icon: "🎨", en: "Appearance and accessibility", he: "מראה ונגישות", words: "theme dark light colors font size language rtl accessibility contrast motion ערכת נושא כהה בהיר צבעים גופן גודל שפה נגישות ניגודיות תנועה", render: () => <><AppearanceSection /><AccessibilitySection /></> },
   { id: "keyboard", icon: "⌨", en: "Keyboard and helpers", he: "מקלדת ועוזרים", words: "console mode controller handheld ally big picture קונסולה שלט keyboard shortcuts keys hotkey ctrl alt change remap dictation text helper actions buttons game palette מקלדת קיצורים מקשים צירוף שינוי הכתבה עוזר טקסט פעולות כפתורים משחקים", render: () => <><KeyboardSection /><ConsoleModeSetting /><TextActionsSection /></> },

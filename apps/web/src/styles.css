@@ -4896,3 +4896,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-bar > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
 .tinbox-agq { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
 .model-pick { position: relative; display: inline-block; }
+
+/* Scheduled tasks (chat header list and Settings › Scheduled): the actions wrap under the name on a phone. */
+.scheduled-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--border, rgba(127,127,127,.2)); }
+.scheduled-row[data-paused] { opacity: .65; }
+.scheduled-main { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.scheduled-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.scheduled-actions button { min-height: 36px; }

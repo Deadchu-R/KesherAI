@@ -18,6 +18,7 @@ import { docStoreFor, docTools } from "../docs.js";
 import { versionNumber } from "../versions.js";
 import { sheetStoreFor, sheetTools } from "../sheets.js";
 import { timerTools } from "../chat-timers.js";
+import { scheduleTools } from "../chat-schedule.js";
 import { Checkpoints } from "../checkpoints.js";
 import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
 import { redact } from "../fault-log.js";
@@ -347,7 +348,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
       }, true);
       return { id: saved.id, ver: versionNumber(saved) };
     },
-    timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
+    timerTools: (convId) => (library.summary(convId)?.incognito ? [] : [...timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined)), ...scheduleTools(chatTimers, convId)]),
     memory,
   });
 }

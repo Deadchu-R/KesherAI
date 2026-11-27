@@ -1,0 +1,279 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-27T16:00:00Z",
+ "boards": [
+  {
+   "id": "ChatScheduled",
+   "title": "צ'אט: משימות מתוזמנות כמו ב-Claude (\"כל בוקר ב-8:30\") — רשימת \"מתוזמן\" בכותרת עם השהיה/המשך; הטלפון מקבל התראה בכל הרצה",
+   "titleEn": "Chat: scheduled tasks like Claude's (\"every morning at 8:30\") — a Scheduled list in the header, Pause/Resume each; phone notified per run",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 700,
+    "phone": 800
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "סיכום חדשות בוקר",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "כל בוקר ב-8:30 סכם לי את החדשות בטכנולוגיה, ובימי שני תבדוק גם את הבנייה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "קבעתי: \"חדשות בוקר\" כל יום ב-8:30, ו-\"בדיקת בנייה\" בכל יום שני ב-9:00. אפשר להשהות או למחוק אותן מהרשימה למעלה."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/scheduled*",
+     "json": {
+      "scheduled": [
+       {
+        "id": "s1",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "חדשות בוקר",
+        "prompt": "Summarise today's tech news in 5 bullets",
+        "when": "daily 08:30",
+        "due": {
+         "$inMs": "16h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "8h"
+        },
+        "lastResult": "ok"
+       },
+       {
+        "id": "s2",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "בדיקת בנייה",
+        "prompt": "Check the build and report",
+        "when": "weekly mon 09:00",
+        "due": {
+         "$inMs": "72h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "newChat": true
+       },
+       {
+        "id": "s3",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "גיבוי שבועי",
+        "prompt": "Back up the notes",
+        "when": "every 6 hours",
+        "due": {
+         "$inMs": "3h"
+        },
+        "setAt": {
+         "$agoMs": "2d"
+        },
+        "kind": "scheduled",
+        "paused": true,
+        "lastRun": {
+         "$agoMs": "1d"
+        },
+        "lastResult": "late"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/timers*",
+     "json": {
+      "timers": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".scheduled-btn"
+    },
+    {
+     "click": ".scheduled-btn"
+    },
+    {
+     "wait": ".kmenu-item"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".scheduled-btn"
+    },
+    {
+     "click": ".scheduled-btn"
+    },
+    {
+     "wait": ".kmenu-item"
+    }
+   ]
+  },
+  {
+   "id": "SettingsScheduled",
+   "title": "הגדרות › משימות מתוזמנות: כל המשימות (שם, צ'אט, ההרצה הבאה, תוצאה אחרונה) עם השהיה / המשך / הרץ עכשיו / מחיקה; אותו דבר בטלפון",
+   "titleEn": "Settings › Scheduled: every task (name, chat, next run, last result) with Pause / Resume / Run now / Delete; the same on the phone",
+   "route": "#/settings/scheduled",
+   "height": {
+    "desktop": 620,
+    "phone": 900
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/scheduled*",
+     "json": {
+      "scheduled": [
+       {
+        "id": "s1",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "חדשות בוקר",
+        "prompt": "Summarise today's tech news in 5 bullets",
+        "when": "daily 08:30",
+        "due": {
+         "$inMs": "16h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "8h"
+        },
+        "lastResult": "ok"
+       },
+       {
+        "id": "s2",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "בדיקת בנייה",
+        "prompt": "Check the build and report",
+        "when": "weekly mon 09:00",
+        "due": {
+         "$inMs": "72h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "newChat": true
+       },
+       {
+        "id": "s3",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "גיבוי שבועי",
+        "prompt": "Back up the notes",
+        "when": "every 6 hours",
+        "due": {
+         "$inMs": "3h"
+        },
+        "setAt": {
+         "$agoMs": "2d"
+        },
+        "kind": "scheduled",
+        "paused": true,
+        "lastRun": {
+         "$agoMs": "1d"
+        },
+        "lastResult": "late"
+       },
+       {
+        "id": "s4",
+        "convId": "c2",
+        "convTitle": "מחקר מתחרים",
+        "name": "סקירת מתחרים",
+        "prompt": "Review competitors",
+        "when": "weekdays 10:00",
+        "due": {
+         "$inMs": "20h"
+        },
+        "setAt": {
+         "$agoMs": "3d"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "4h"
+        },
+        "lastResult": "failed: no chat"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".scheduled-row"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".scheduled-row"
+    }
+   ]
+  }
+ ]
+}

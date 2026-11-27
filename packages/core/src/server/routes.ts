@@ -167,7 +167,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await journalRoutes(app, services);
   await gameRoutes(app, services);
   await textHelperRoutes(app, services);
-  await timerRoutes(app, chatTimers);
+  await timerRoutes(app, chatTimers, (id) => library.summary(id)?.title);
   await studyRoutes(app, services);
   await liveQuizRoutes(app, services.study);
   await focusRoomRoutes(app);

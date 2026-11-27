@@ -9,6 +9,7 @@
 import type { AgentTool } from "@kesher/agent";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { isScheduled, nextRun, parseSchedule, SCHEDULED_PER_CHAT, SCHEDULED_TOTAL, scheduleText, type ScheduledTask } from "./chat-schedule.js";
 
 /** One waiting timer. */
 export interface ChatTimer {
@@ -19,8 +20,22 @@ export interface ChatTimer {
   /** When (ms since 1970). */
   due: number;
   setAt: number;
-  /** "checkback" when the model asked with check_back_later (a note to itself; its turn notifies the phone). */
-  kind?: "checkback";
+  /**
+   * "checkback" when the model asked with check_back_later (a note to itself; its turn notifies the phone);
+   * "scheduled" for a recurring task (schedule_task, chat-schedule.ts): `due` is then its next run.
+   */
+  kind?: "checkback" | "scheduled";
+  /** Scheduled: its name (the message is "[KesherAI] Scheduled: <name>"). */
+  name?: string;
+  /** Scheduled: the schedule in the fixed grammar ("daily 08:30"). */
+  when?: string;
+  /** Scheduled: each run in a fresh chat instead of `convId`. */
+  newChat?: boolean;
+  /** Scheduled: paused by the user (it does not run, and runs on from the time it is resumed). */
+  paused?: boolean;
+  /** Scheduled: when it last ran (ms) and how that went ("ok", "late", or "failed: ..."). */
+  lastRun?: number;
+  lastResult?: string;
 }
 
 /** At most this many waiting check-backs per chat. */
@@ -74,6 +89,8 @@ export interface TimerDeps {
   send(convId: string, text: string): Promise<unknown>;
   /** Whether the chat still exists. */
   exists(convId: string): Promise<boolean>;
+  /** Makes a fresh chat for a scheduled run (like `convId`'s mode and project); its id, or undefined when it cannot. */
+  create?(fromConvId: string, title: string): Promise<string | undefined>;
   /** A check-back is about to go into a chat (its turn's end then notifies the phone, even when short). */
   onCheckBack?(convId: string): void;
 }
@@ -128,7 +145,7 @@ export class ChatTimers {
    */
   async add(convId: string, prompt: string, due: number, kind?: "checkback"): Promise<ChatTimer | string> {
     if (!prompt.trim()) return kind ? "Say what to check when you come back (note)." : "Say what the chat should do when the timer fires (prompt).";
-    const mine = this.list(convId);
+    const mine = this.list(convId).filter((x) => x.kind !== "scheduled");
     if (kind === "checkback" ? mine.filter((x) => x.kind === "checkback").length >= CHECKBACKS_PER_CHAT : mine.length >= TIMERS_PER_CHAT) {
       return kind ? `This chat already has ${CHECKBACKS_PER_CHAT} check-backs waiting. Cancel one first.` : `This chat already has ${TIMERS_PER_CHAT} timers waiting. Cancel one first.`;
     }
@@ -161,24 +178,107 @@ export class ChatTimers {
     if (this.list_.length !== n) await this.save();
   }
 
-  /** Fires what is due (the clock calls it; tests too). */
+  /** @returns A chat's scheduled tasks (or all of them), soonest first. */
+  scheduled(convId?: string): ScheduledTask[] {
+    return this.list(convId).filter(isScheduled);
+  }
+
+  /**
+   * Adds a scheduled task.
+   *
+   * @param convId - The chat that asks (the one it runs in, unless `newChat`).
+   * @param o - Name, the prompt for each run, the `when` text and whether each run is a fresh chat.
+   * @returns The task, or an error message for the model.
+   */
+  async schedule(convId: string, o: { name: string; prompt: string; when: string; newChat?: boolean }): Promise<ScheduledTask | string> {
+    const name = o.name.trim().slice(0, 80);
+    if (!name) return "Give the task a short name.";
+    if (!o.prompt.trim()) return "Say what to do each time (prompt).";
+    const now = this.now();
+    const sc = parseSchedule(o.when, now);
+    if (typeof sc === "string") return sc;
+    if (this.scheduled(convId).length >= SCHEDULED_PER_CHAT) return `This chat already has ${SCHEDULED_PER_CHAT} scheduled tasks. Delete one first.`;
+    if (this.scheduled().length >= SCHEDULED_TOTAL) return `There are already ${SCHEDULED_TOTAL} scheduled tasks in all. Delete one first.`;
+    const t: ScheduledTask = {
+      id: randomUUID().slice(0, 8), convId, prompt: o.prompt.trim().slice(0, 2000), due: nextRun(sc, now), setAt: now,
+      kind: "scheduled", name, when: scheduleText(sc), ...(o.newChat ? { newChat: true } : {}),
+    };
+    this.list_.push(t);
+    await this.save();
+    return t;
+  }
+
+  /** Pauses or resumes a scheduled task (resumed: the next run counts from now). @returns The task, or undefined. */
+  async setPaused(id: string, paused: boolean): Promise<ScheduledTask | undefined> {
+    const t = this.list_.find((x) => x.id === id);
+    if (!t || !isScheduled(t)) return undefined;
+    t.paused = paused || undefined;
+    if (!paused) {
+      const sc = parseSchedule(t.when, 0);
+      if (typeof sc !== "string" && sc.t !== "once") t.due = nextRun(sc, this.now());
+    }
+    await this.save();
+    return t;
+  }
+
+  /** Runs a scheduled task now (its schedule is not moved). @returns Whether the task exists. */
+  async runNow(id: string): Promise<boolean> {
+    const t = this.list_.find((x) => x.id === id);
+    if (!t || !isScheduled(t)) return false;
+    await this.fire(t, false);
+    await this.save();
+    return true;
+  }
+
+  /**
+   * Fires what is due (the clock calls it; tests too). A scheduled task that was missed (the computer was off) runs
+   * once, marked late, and goes on from now: never a burst of the runs it missed.
+   */
   async tick(): Promise<void> {
     const now = this.now();
-    const due = this.list_.filter((t) => t.due <= now);
+    const due = this.list_.filter((t) => t.due <= now && !t.paused);
     if (!due.length) return;
-    this.list_ = this.list_.filter((t) => t.due > now);
+    // Whether each was missed, read before a scheduled task's `due` moves on to its next run.
+    const wasLate = new Map(due.map((t) => [t, now - t.due > 5 * 60_000]));
+    for (const t of due) {
+      if (!isScheduled(t)) continue;
+      const sc = parseSchedule(t.when, 0);
+      if (typeof sc === "string" || sc.t === "once") this.list_ = this.list_.filter((x) => x !== t);
+      else t.due = nextRun(sc, now);
+    }
+    this.list_ = this.list_.filter((t) => t.kind === "scheduled" || t.due > now);
     await this.save();
     for (const t of due) {
       try {
-        if (!(await this.deps.exists(t.convId))) continue;
-        const late = now - t.due > 5 * 60_000 ? " (late: KesherAI was closed when it was due)" : "";
-        if (t.kind === "checkback") {
+        if (!(await this.deps.exists(t.convId))) {
+          this.list_ = this.list_.filter((x) => x !== t);
+          continue;
+        }
+        const late = wasLate.get(t) ? " (late: KesherAI was closed when it was due)" : "";
+        if (isScheduled(t)) await this.fire(t, !!late, late);
+        else if (t.kind === "checkback") {
           this.deps.onCheckBack?.(t.convId);
           await this.deps.send(t.convId, `[KesherAI] Check-back${late}: ${t.prompt}`);
         } else await this.deps.send(t.convId, `⏰ Timer${late}: ${t.prompt}`);
       } catch {
         // the chat is gone or cannot take a message now; the timer is not tried again
       }
+    }
+    await this.save();
+  }
+
+  /** One run of a scheduled task: a message into its chat (or a fresh one); the phone is told when the turn ends. */
+  private async fire(t: ScheduledTask, late: boolean, note = ""): Promise<void> {
+    t.lastRun = this.now();
+    try {
+      let target: string | undefined = t.convId;
+      if (t.newChat) target = (await this.deps.create?.(t.convId, t.name)) ?? undefined;
+      if (!target) throw new Error("no chat");
+      this.deps.onCheckBack?.(target);
+      await this.deps.send(target, `[KesherAI] Scheduled: ${t.name}${note}\n\n${t.prompt}`);
+      t.lastResult = late ? "late" : "ok";
+    } catch (e) {
+      t.lastResult = `failed: ${(e as Error).message}`.slice(0, 120);
     }
   }
 
