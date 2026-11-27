@@ -90,22 +90,36 @@ export function scheduleText(sc: Schedule): string {
 }
 
 /**
+ * The weekend days (0 = Sunday … 6 = Saturday) of this computer's work week: Friday and Saturday where the week runs
+ * Sunday to Thursday (Israel, and most of the Middle East by time zone), else Saturday and Sunday.
+ *
+ * @param timeZone - The IANA time zone (default: this computer's).
+ * @returns The two weekend days.
+ */
+export function weekendDays(timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): readonly number[] {
+  return /^Asia\/(Jerusalem|Tel_Aviv|Gaza|Hebron|Riyadh|Kuwait|Qatar|Bahrain|Baghdad|Amman|Damascus|Aden|Muscat|Dubai)$/.test(timeZone) || timeZone === "Israel"
+    ? [5, 6]
+    : [0, 6];
+}
+
+/**
  * The first run after `after`. Local times are built from the calendar date (not by adding 24 hours), so "daily
  * 09:00" stays 09:00 across a daylight-saving change; a time the clock skips (02:30 on the spring-forward night) runs
  * when the clock gets there.
  *
  * @param sc - The schedule.
  * @param after - From when (ms), exclusive.
+ * @param weekend - The days "weekdays" skips (default: this computer's work week, {@link weekendDays}).
  * @returns When (ms); for "once" the time itself (or `after` + 1 when it has passed, never repeated by the caller).
  */
-export function nextRun(sc: Schedule, after: number): number {
+export function nextRun(sc: Schedule, after: number, weekend: readonly number[] = weekendDays()): number {
   if (sc.t === "once") return sc.at;
   if (sc.t === "every") return after + sc.hours * 3_600_000;
   const base = new Date(after);
   for (let i = 0; i < 9; i++) {
     const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, sc.h, sc.m, 0, 0);
     const wd = day.getDay();
-    if (sc.t === "weekdays" && (wd === 0 || wd === 6)) continue;
+    if (sc.t === "weekdays" && weekend.includes(wd)) continue;
     if (sc.t === "weekly" && wd !== sc.d) continue;
     if (day.getTime() > after) return day.getTime();
   }

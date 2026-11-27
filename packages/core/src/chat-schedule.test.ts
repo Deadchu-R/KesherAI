@@ -161,3 +161,13 @@ test("the tools schedule, list and delete (only this chat's)", async () => {
   assert.equal(timers.scheduled("c1").length, 0);
   assert.match((await list!.run({}, {} as never)).output, /No scheduled/);
 });
+
+test("weekdays follow the local work week: Sunday to Thursday in Israel, Monday to Friday elsewhere", async () => {
+  const { weekendDays, nextRun } = await import("./chat-schedule.js");
+  assert.deepEqual(weekendDays("Asia/Jerusalem"), [5, 6]);
+  assert.deepEqual(weekendDays("Europe/London"), [0, 6]);
+  // Thursday 10:00 local → next "weekdays 09:00" in Israel is Sunday; elsewhere Friday.
+  const thu = new Date(2026, 10, 26, 10, 0).getTime();
+  assert.equal(new Date(nextRun({ t: "weekdays", h: 9, m: 0 }, thu, [5, 6])).getDay(), 0);
+  assert.equal(new Date(nextRun({ t: "weekdays", h: 9, m: 0 }, thu, [0, 6])).getDay(), 5);
+});
