@@ -861,6 +861,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     // Another device wrote to the user's Google Drive: pull now (tasks-sync.ts).
     onSync: () => services.tasksSync?.onPing(),
+    // The Claude connector's "+ Task" (only while Settings › Kesher Cloud › "Claude connector may read and run" is on).
+    addTask: (t) => taskInbox.add(t),
+    // Each connector request goes to the app's log (op, task id, outcome; never a title or text).
+    log: (line) => {
+      try {
+        appendFileSync(join(paths.root, "logs", "main.log"), `${new Date().toISOString()} ${line}\n`);
+      } catch {
+        // a log that cannot be written never stops the server
+      }
+    },
     // The hub's own problem log goes to logs/hub-diag.json (and its newest error to main.log): hub-diag.ts.
     saveDiag: (snap, reason) => void saveHubDiag(join(paths.root, "logs"), snap, reason),
     approvals: {

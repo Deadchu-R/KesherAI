@@ -7,6 +7,9 @@
  * hub page, where the owner's browser opens the sealed content. `send_task` is sealed by the hub with its own key (see
  * {@link Hub.sendConnectorTask}). Every call is written to the hub's activity log (tool name and connection only).
  */
+import { CONNECTOR_ACTIONS, CONNECTOR_EXECUTORS, mapConnectorText, redactLeaks, type ConnectorAnswer } from "../../../packages/shared/src/hub.js";
+import { MCP_APP_MIME, VIEW_URIS, VIEWS } from "./connector-views.js";
+import { scrubSecrets } from "./diag.js";
 import type { Hub } from "./hub.js";
 
 /** MCP protocol versions this server speaks, newest first. */
@@ -32,6 +35,9 @@ const NO_INPUT = { type: "object", properties: {}, additionalProperties: false }
 
 /** Why content is not here: said in each read tool's answer, so the model tells the owner where to look. */
 const SEALED_NOTE = "Task text, results, approvals and agent steps are end-to-end encrypted between KesherAI's devices; the hub cannot read them. Open the link to see them on the hub page (the browser decrypts).";
+
+const DEVICE_ARG = { type: "string", description: "The PC's id or name (optional when one PC lets the connector in)." } as const;
+const TASK_ID_ARG = { type: "string", description: "The task's id (from kesher_tasks).", pattern: "^[\\w-]{1,64}$" } as const;
 
 /** The tools, as `tools/list` returns them. */
 export const MCP_TOOLS = [
@@ -81,6 +87,82 @@ export const MCP_TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
+  // ---- through the PC (hub-connector.ts): only while the PC's "Claude connector may read and run" is on ----
+  {
+    name: "kesher_tasks",
+    title: "Task inbox",
+    description: "Lists the PC's task inbox: id, title, state, executor, queue place and steps. filter: open (waiting/queued), running, ended, or all (default). Needs the PC's \"Claude connector may read and run\" setting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: { type: "string", enum: ["open", "running", "ended", "all"], description: "Which tasks (default all)." },
+        executor: { type: "string", description: "Only this executor's tasks: antigravity, local, opencode, ghostcli, gemini, claude." },
+        device: DEVICE_ARG,
+      },
+      additionalProperties: false,
+    },
+    annotations: READ_ONLY,
+    _meta: { ui: { resourceUri: VIEW_URIS.board } },
+  },
+  {
+    name: "kesher_task",
+    title: "One task",
+    description: "One task of the PC's inbox in full: state, executor, model, branch, steps so far, the latest steps, and its result or why it failed.",
+    inputSchema: { type: "object", properties: { taskId: TASK_ID_ARG, device: DEVICE_ARG }, required: ["taskId"], additionalProperties: false },
+    annotations: READ_ONLY,
+    _meta: { ui: { resourceUri: VIEW_URIS.task } },
+  },
+  {
+    name: "kesher_add_task",
+    title: "Add a task",
+    description: "Adds a task to the PC's task inbox, as the app's \"+ Task\" does. executor auto (default) lets the PC pick; antigravity waits for Run.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short title (up to 200 characters).", maxLength: 200 },
+        goal: { type: "string", description: "What to do and how to check it (up to 6000 characters).", maxLength: 6000 },
+        executor: { type: "string", enum: [...CONNECTOR_EXECUTORS], description: "Who does it (default auto)." },
+        device: DEVICE_ARG,
+      },
+      required: ["title", "goal"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    _meta: { ui: { resourceUri: VIEW_URIS.task } },
+  },
+  {
+    name: "kesher_task_action",
+    title: "Run, queue, assign or stop a task",
+    description: "Does what the hub page's task buttons do: run (start it now; Antigravity too), queue / unqueue (its executor's line), stop (stops a running task, cancels a waiting one), assign (give it to another executor: to).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        taskId: TASK_ID_ARG,
+        action: { type: "string", enum: [...CONNECTOR_ACTIONS] },
+        to: { type: "string", description: "assign only: antigravity, local, opencode, ghostcli, gemini, claude or claude-code." },
+        confirm: { type: "boolean", description: "assign only: yes to stopping a running task (or re-running an ended one) first." },
+        device: DEVICE_ARG,
+      },
+      required: ["taskId", "action"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "kesher_quotas",
+    title: "Provider quotas",
+    description: "What is left of each provider the PC's agents use (Antigravity, GhostCLI, OpenCode Go, Gemini, Claude, the local model): share or count left per window, and when it fills again.",
+    inputSchema: { type: "object", properties: { device: DEVICE_ARG }, additionalProperties: false },
+    annotations: READ_ONLY,
+    _meta: { ui: { resourceUri: VIEW_URIS.quotas } },
+  },
+  {
+    name: "kesher_agents",
+    title: "Running agents",
+    description: "The PC's agents (local model, Antigravity, OpenCode Go, GhostCLI…): on/off/busy, and the task each works on with its last step.",
+    inputSchema: { type: "object", properties: { device: DEVICE_ARG }, additionalProperties: false },
+    annotations: READ_ONLY,
+  },
 ] as const;
 
 type ToolName = (typeof MCP_TOOLS)[number]["name"];
@@ -99,6 +181,27 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.slic
  */
 export async function callTool(hub: Hub, name: ToolName, args: Record<string, unknown>, hubUrl: string, grantId: string): Promise<Record<string, unknown>> {
   switch (name) {
+    case "kesher_tasks":
+      return viaPc(hub, grantId, args, { op: "tasks", filter: args.filter, executor: args.executor }, (a, pc) => ({
+        data: { pc, tasks: a.tasks ?? [], ...(a.text ? { text: a.text } : {}) },
+        text: (a.tasks ?? []).length ? (a.tasks ?? []).map((t) => `${t.taskId} [${t.state}] ${t.title} (${t.executor}${t.queuePos ? `, #${t.queuePos} in line` : ""}${t.steps ? `, step ${t.steps}${t.estSteps ? ` of ~${t.estSteps}` : ""}` : ""})`).join("\n") : "No tasks match.",
+      }));
+    case "kesher_task":
+      return viaPc(hub, grantId, args, { op: "task", taskId: args.taskId }, (a, pc) => ({ data: { pc, ...(a.task ? { task: a.task } : {}) }, text: a.task ? taskText(a) : a.text ?? "No such task." }));
+    case "kesher_add_task":
+      return viaPc(hub, grantId, args, { op: "add", title: args.title, goal: args.goal, executor: args.executor }, (a, pc) => ({ data: { pc, text: a.text ?? "Added.", ...(a.task ? { task: a.task } : {}) }, text: a.task ? `${a.text ?? "Added."}\n${taskText(a)}` : a.text ?? "Added." }));
+    case "kesher_task_action":
+      return viaPc(hub, grantId, args, { op: "action", taskId: args.taskId, action: args.action, to: args.to, confirm: args.confirm }, (a, pc) => ({ data: { pc, ok: a.ok, text: a.text ?? "" }, text: a.text ?? "Done." }));
+    case "kesher_quotas":
+      return viaPc(hub, grantId, args, { op: "quotas" }, (a, pc) => ({
+        data: { pc, quotas: a.quotas ?? [] },
+        text: (a.quotas ?? []).map((q) => `${q.name}: ${q.state}${q.bars.map((b) => ` · ${b.label} ${typeof b.left === "number" ? `${Math.round(b.left * 100)}% left` : typeof b.used === "number" ? `${b.used}${b.limit ? `/${b.limit}` : ""} used` : "?"}${b.resetAt ? ` (back ${new Date(b.resetAt).toISOString().slice(0, 16)}Z)` : ""}`).join("")}`).join("\n") || "No quotas reported.",
+      }));
+    case "kesher_agents":
+      return viaPc(hub, grantId, args, { op: "agents" }, (a, pc) => ({
+        data: { pc, agents: a.agents ?? [] },
+        text: (a.agents ?? []).map((g) => `${g.kind} ${g.state}${g.label ? ` (${g.label})` : ""}${g.task ? ` → ${g.task.taskId} ${g.task.title}${g.task.now ? ` · last step: ${g.task.now.tool}${g.task.now.target ? ` ${g.task.now.target}` : ""}` : ""}` : ""}`).join("\n") || "No agents reported.",
+      }));
     case "list_devices":
       return toolResult({
         devices: hub.presence().map((d) => ({
@@ -145,6 +248,38 @@ export async function callTool(hub: Hub, name: ToolName, args: Record<string, un
 }
 
 /**
+ * Hides secrets and personal paths in the connector's answers (again: the PC already did, with its own user name and
+ * home folder): keys, e-mails, home folders (leak-guard), and the hub's own tokens and addresses (diag.ts).
+ *
+ * @param text - A text field of an answer.
+ * @returns The same text, safe to show Claude.
+ */
+export function connectorScrub(text: string): string {
+  return scrubSecrets(redactLeaks(text).text);
+}
+
+/** A task's text answer: one line of facts, the result, and the newest steps. */
+function taskText(a: ConnectorAnswer): string {
+  const t = a.task!;
+  const head = `${t.taskId} [${t.state}] ${t.title} (${[t.executor, t.model, t.branch, t.steps ? `step ${t.steps}${t.estSteps ? ` of ~${t.estSteps}` : ""}` : ""].filter(Boolean).join(", ")})`;
+  const steps = t.stepLog.map((s) => `- ${s.tool}${s.target ? ` ${s.target}` : ""}${s.error ? " (failed)" : ""}`);
+  return [head, t.result || t.cause ? `Result: ${t.result ?? t.cause}` : "", steps.length ? `Latest steps:\n${steps.join("\n")}` : ""].filter(Boolean).join("\n");
+}
+
+/**
+ * Runs one of the kesher_* tools through the PC (Hub.connectorAsk): the answer is scrubbed, then shaped by `shape`.
+ * Refusals (opt-in off, offline, rate limit, a disallowed request) come back as tool errors in words.
+ */
+async function viaPc(hub: Hub, grantId: string, args: Record<string, unknown>, query: Record<string, unknown>, shape: (a: ConnectorAnswer, pc: string) => { data: Record<string, unknown>; text: string }): Promise<Record<string, unknown>> {
+  const r = await hub.connectorAsk(query, grantId, str(args.device, 64));
+  if ("error" in r) return toolError(r.error);
+  const a = mapConnectorText(r.answer, connectorScrub);
+  if (!a.ok) return { ...toolError(a.text ?? "The PC refused."), structuredContent: { pc: r.pc, ok: false, error: a.text ?? "" } };
+  const { data, text } = shape(a, r.pc);
+  return { content: [{ type: "text", text }], structuredContent: data };
+}
+
+/**
  * One JSON-RPC message from Claude to `/mcp` (no batches: removed in MCP 2025-06-18).
  *
  * @param hub - The hub.
@@ -168,15 +303,25 @@ export async function handleRpc(hub: Hub, msg: unknown, hubUrl: string, grantId:
       const protocolVersion = (MCP_VERSIONS as readonly string[]).includes(asked) ? asked : MCP_VERSIONS[0];
       return ok({
         protocolVersion,
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: "kesher-hub", title: "Kesher Cloud hub", version: "1.0.0" },
-        instructions: "The owner's KesherAI hub. Read tools return metadata only (contents are end-to-end encrypted; share the hubUrl so the owner opens them). send_task gives a PC a task; Antigravity tasks wait for the owner's Run press.",
+        instructions: "The owner's KesherAI hub. list_devices, get_agent_status, waiting_for_approval and list_tasks return metadata only (contents are end-to-end encrypted; share the hubUrl). The kesher_* tools ask the PC itself (tasks, one task, quotas, agents; add, run, queue, assign or stop a task) and work only while the PC's \"Claude connector may read and run\" setting is on.",
       });
     }
     case "ping":
       return ok({});
     case "tools/list":
       return ok({ tools: MCP_TOOLS });
+    case "resources/list":
+      return ok({ resources: VIEWS.map((v) => ({ uri: v.uri, name: v.name, description: v.description, mimeType: MCP_APP_MIME })) });
+    case "resources/templates/list":
+      return ok({ resourceTemplates: [] });
+    case "resources/read": {
+      const view = VIEWS.find((v) => v.uri === params.uri);
+      if (!view) return rpcError(id, -32002, "Resource not found.");
+      // No outside loads at all (an empty CSP allow-list), and a border around the view.
+      return ok({ contents: [{ uri: view.uri, mimeType: MCP_APP_MIME, text: view.html, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: true } } }] });
+    }
     case "tools/call": {
       const name = params.name;
       const tool = MCP_TOOLS.find((t) => t.name === name);

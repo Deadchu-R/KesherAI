@@ -250,6 +250,8 @@ export const KesherConfigSchema = z.object({
           /** Live agent activity to the owner's phones (sealed metadata), and with it the touched files' names. */
           reportActivity: z.boolean().default(false),
           reportFileNames: z.boolean().default(false),
+          /** "Claude connector may read and run" (hub-connector.ts): the hub may ask this PC, sealed, for its tasks and Run them. */
+          connector: z.boolean().default(false),
         })
         .prefault({}),
       /**

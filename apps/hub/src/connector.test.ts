@@ -15,9 +15,12 @@ const VERIFIER = "v".repeat(20) + "-._~" + "A1".repeat(20);
 class FakeSockets implements DeviceSockets {
   on = new Set<string>();
   got = new Map<string, HubFrame[]>();
+  /** Called after each frame a device gets (a fake PC answers from here). */
+  onSend?: (id: string, f: HubFrame) => void;
   send(id: string, f: HubFrame): boolean {
     if (!this.on.has(id)) return false;
     this.got.set(id, [...(this.got.get(id) ?? []), f]);
+    this.onSend?.(id, f);
     return true;
   }
   isOnline(id: string): boolean {
@@ -255,13 +258,15 @@ test("mcp: initialize, tools/list, notifications, bad requests, a foreign Origin
   assert.ok(result.capabilities.tools);
   assert.equal(((await rpc(hub, access, "initialize", { protocolVersion: "1999-01-01" })).data.result as { protocolVersion: string }).protocolVersion, "2025-11-25");
   const tools = ((await rpc(hub, access, "tools/list")).data.result as { tools: Array<{ name: string }> }).tools.map((t) => t.name);
-  assert.deepEqual(tools, ["list_devices", "get_agent_status", "waiting_for_approval", "list_tasks", "send_task"]);
-  assert.ok(MCP_TOOLS.filter((t) => t.name !== "send_task").every((t) => t.annotations.readOnlyHint));
+  assert.deepEqual(tools, ["list_devices", "get_agent_status", "waiting_for_approval", "list_tasks", "send_task", "kesher_tasks", "kesher_task", "kesher_add_task", "kesher_task_action", "kesher_quotas", "kesher_agents"]);
+  const writes = ["send_task", "kesher_add_task", "kesher_task_action"];
+  assert.ok(MCP_TOOLS.filter((t) => !writes.includes(t.name)).every((t) => t.annotations.readOnlyHint));
+  assert.ok(MCP_TOOLS.filter((t) => writes.includes(t.name)).every((t) => !t.annotations.readOnlyHint));
   const note = await call(hub, "POST", "/mcp", { body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }), headers: { authorization: `Bearer ${access}` } });
   assert.equal(note.status, 202);
   const batch = await call(hub, "POST", "/mcp", { body: "[]", headers: { authorization: `Bearer ${access}` } });
   assert.equal(batch.status, 400);
-  assert.equal(((await rpc(hub, access, "resources/list")).data.error as { code: number }).code, -32601);
+  assert.equal(((await rpc(hub, access, "resources/subscribe")).data.error as { code: number }).code, -32601);
   assert.equal(((await rpc(hub, access, "tools/call", { name: "rm_rf" })).data.error as { code: number }).code, -32602);
   const foreign = await call(hub, "POST", "/mcp", { body: "{}", headers: { authorization: `Bearer ${access}`, origin: "https://evil.example" } });
   assert.equal(foreign.status, 403);
@@ -336,4 +341,157 @@ test("send_task: sealed by the hub to the PC that opted in, opened by the PC wit
   assert.ok(!(sockets.got.get(pc.id) ?? []).some((f) => f.t === "refused"));
   assert.equal(store.queueCount(), 0);
   assert.ok(store.auditList(100).some((a) => a.action === "mcp-send_task"));
+});
+
+// ---- the kesher_* tools: asked of the PC, sealed both ways (hub-connector.ts) ----
+
+/** A fake PC on the connector's line: opens each query with the hub's key and answers with `reply` (or not at all). */
+function fakePc(hub: Hub, sockets: FakeSockets, pc: { id: string; keys: HubKeyPair; hubKey: string }, reply: (q: Record<string, unknown>) => Record<string, unknown> | undefined) {
+  const seen: Array<Record<string, unknown>> = [];
+  sockets.onSend = (id, f) => {
+    if (id !== pc.id || f.t !== "deliver" || f.env.kind !== "connector_query") return;
+    void (async () => {
+      const q = (await openEnvelope(f.env, pc.keys.privateKey, pc.hubKey)) as unknown as Record<string, unknown>;
+      seen.push(q);
+      const a = reply(q);
+      if (!a) return;
+      const env = await sealMessage({ from: pc.id, to: "hub", kind: "connector_answer" }, { type: "connector_answer", queryId: q.queryId, at: 1, ...a } as never, pc.keys.privateKey, pc.hubKey);
+      await hub.onFrame(pc.id, JSON.stringify({ t: "send", env }));
+    })();
+  };
+  return seen;
+}
+
+/** Everything the store holds except the activity log (which only gets `mcp-<tool>` rows). */
+function storeDump(store: MemoryStore): string {
+  return JSON.stringify(Object.entries(store).filter(([k]) => k !== "log").map(([k, v]) => [k, v instanceof Map ? [...v.entries()] : v]));
+}
+
+const SAMPLE_TASKS = [
+  { taskId: "r-1", title: "Fix the hub page", state: "waiting-run", executor: "antigravity", queuePos: 1, estSteps: 20 },
+  { taskId: "r-2", title: "Port the plugin", state: "running", executor: "local", steps: 4, estSteps: 12, model: "Qwen 3 8B" },
+];
+
+test("kesher_* tools: refused until the PC opts in; then asked sealed, answered sealed, and nothing is stored", async () => {
+  const { hub, store, sockets } = setup();
+  const { access } = await connect(hub);
+  const pc = await pair(hub, "pc", "Desk");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", version: "0.6.497", busy: false, optIn: { appear: true }, agents: [] }));
+  // Off: the hub says so before asking, and nothing goes to the PC.
+  const off = await tool(hub, access, "kesher_tasks");
+  assert.equal(off.isError, true);
+  assert.match(off.text, /Claude connector may read and run/);
+  assert.ok(!(sockets.got.get(pc.id) ?? []).some((f) => f.t === "deliver"), "no query while the opt-in is off");
+  // On (the PC still checks it itself: a PC that answers "refused" is shown as an error).
+  await hub.onFrame(pc.id, JSON.stringify({ t: "beat", busy: false, optIn: { appear: true, connector: true }, agents: [] }));
+  let refuse = true;
+  const seen = fakePc(hub, sockets, pc, (q) =>
+    refuse ? { ok: false, text: "This PC does not let the Claude connector in." } : q.op === "tasks" ? { ok: true, tasks: SAMPLE_TASKS } : q.op === "action" ? { ok: true, text: "Started on the PC." } : { ok: true },
+  );
+  const before = storeDump(store);
+  const refused = await tool(hub, access, "kesher_tasks", { filter: "open" });
+  assert.equal(refused.isError, true);
+  assert.match(refused.text, /does not let/);
+  refuse = false;
+  const listed = await tool(hub, access, "kesher_tasks", { filter: "open" });
+  assert.equal(listed.isError, false, listed.text);
+  assert.deepEqual((listed.data.tasks as unknown[]).length, 2);
+  assert.equal(listed.data.pc, "Desk");
+  assert.match(listed.text, /r-1 \[waiting-run\] Fix the hub page \(antigravity, #1 in line\)/);
+  assert.equal(seen.at(-1)!.op, "tasks");
+  assert.equal(seen.at(-1)!.filter, "open");
+  const run = await tool(hub, access, "kesher_task_action", { taskId: "r-1", action: "run" });
+  assert.equal(run.text, "Started on the PC.");
+  assert.deepEqual({ op: seen.at(-1)!.op, action: seen.at(-1)!.action, taskId: seen.at(-1)!.taskId }, { op: "action", action: "run", taskId: "r-1" });
+  // The query was sent to the open socket only, sealed; nothing was queued or kept (KV/D1 stand-in unchanged).
+  const q = (sockets.got.get(pc.id) ?? []).find((f): f is Extract<HubFrame, { t: "deliver" }> => f.t === "deliver" && f.env.kind === "connector_query")!;
+  assert.equal(q.env.from, "hub");
+  assert.ok(!q.env.ct.includes("r-1"), "sealed");
+  assert.equal(storeDump(store), before, "nothing stored");
+  assert.equal(store.queueCount(), 0);
+  assert.ok(!JSON.stringify(store.auditList(200)).includes("Fix the hub page"), "no task text in the log");
+  assert.ok(store.auditList(200).some((a) => a.action === "mcp-kesher_tasks"));
+});
+
+test("kesher_* tools: disallowed requests are refused before sealing; another PC's answer and a device's query are not taken", async () => {
+  const { hub, sockets } = setup();
+  const { access } = await connect(hub);
+  const pc = await pair(hub, "pc", "Desk");
+  const other = await pair(hub, "pc", "Laptop");
+  for (const d of [pc, other]) {
+    sockets.on.add(d.id);
+    await hub.onOpen(d.id);
+  }
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", busy: false, optIn: { appear: true, connector: true }, agents: [] }));
+  await hub.onFrame(other.id, JSON.stringify({ t: "hello", busy: false, optIn: { appear: true }, agents: [] }));
+  // An action the hub page does not offer, a bad id, an assign without who: refused here, nothing sent.
+  for (const args of [{ taskId: "r-1", action: "approve" }, { taskId: "../x", action: "run" }, { taskId: "r-1", action: "assign" }]) {
+    const r = await tool(hub, access, "kesher_task_action", args);
+    assert.equal(r.isError, true, JSON.stringify(args));
+  }
+  assert.ok(!(sockets.got.get(pc.id) ?? []).some((f) => f.t === "deliver"));
+  assert.match((await tool(hub, access, "kesher_quotas", { device: "Laptop" })).text, /does not let the Claude connector in/);
+  // The asked PC never answers; the other PC's answer with the same id is dropped; the call times out in words.
+  const seen: string[] = [];
+  sockets.onSend = (id, f) => {
+    if (id !== pc.id || f.t !== "deliver" || f.env.kind !== "connector_query") return;
+    void (async () => {
+      const q = (await openEnvelope(f.env, pc.keys.privateKey, pc.hubKey)) as unknown as { queryId: string };
+      seen.push(q.queryId);
+      const env = await sealMessage({ from: other.id, to: "hub", kind: "connector_answer" }, { type: "connector_answer", queryId: q.queryId, ok: true, at: 1, quotas: [] } as never, other.keys.privateKey, other.hubKey);
+      await hub.onFrame(other.id, JSON.stringify({ t: "send", env }));
+    })();
+  };
+  const r = await hub.connectorAsk({ op: "quotas" }, "g1", "", 200);
+  assert.ok("error" in r && /did not answer/.test(r.error));
+  assert.equal(seen.length, 1);
+  // A device cannot send the connector's query kind to a PC.
+  const forged = await sealMessage({ from: other.id, to: pc.id, kind: "connector_query" }, { type: "connector_query", queryId: "q1", op: "tasks" } as never, other.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(other.id, JSON.stringify({ t: "send", env: forged }));
+  assert.ok((sockets.got.get(other.id) ?? []).some((f) => f.t === "refused" && f.code === "not-allowed"));
+  assert.ok(!(sockets.got.get(pc.id) ?? []).some((f) => f.t === "deliver" && f.env.id === forged.id));
+});
+
+test("kesher_* tools: answers are scrubbed again on the hub (keys, e-mails, home folders, hub tokens)", async () => {
+  const { hub, sockets } = setup();
+  const { access } = await connect(hub);
+  const pc = await pair(hub, "pc", "Desk");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", busy: false, optIn: { appear: true, connector: true }, agents: [] }));
+  const leak = `see /home/someone/kesher, C:\\Users\\someone\\x, mail owner@example.com, key sk-ant-${"b".repeat(30)}, token kh_abc.def`;
+  fakePc(hub, sockets, pc, () => ({ ok: true, task: { taskId: "r-3", title: "Research", state: "failed", executor: "gemini", result: leak, stepLog: [{ tool: "read_file", target: "/home/someone/.ssh/id", at: 5 }] } }));
+  const r = await tool(hub, access, "kesher_task", { taskId: "r-3" });
+  const all = JSON.stringify(r);
+  for (const bad of ["/home/someone", "someone\\\\x", "owner@example.com", "sk-ant-", "kh_abc"]) assert.ok(!all.includes(bad), `${bad} hidden: ${all}`);
+  assert.match(r.text, /r-3 \[failed\] Research/);
+});
+
+test("MCP Apps: tools name their views; resources/list and resources/read serve small self-contained HTML", async () => {
+  const { hub } = setup();
+  const { access } = await connect(hub);
+  const init = (await rpc(hub, access, "initialize", { protocolVersion: "2025-11-25" })).data.result as { capabilities: Record<string, unknown> };
+  assert.ok(init.capabilities.resources);
+  const tools = ((await rpc(hub, access, "tools/list")).data.result as { tools: Array<{ name: string; _meta?: { ui?: { resourceUri?: string } } }> }).tools;
+  const uriOf = (n: string) => tools.find((t) => t.name === n)?._meta?.ui?.resourceUri;
+  assert.equal(uriOf("kesher_tasks"), "ui://kesher/board");
+  assert.equal(uriOf("kesher_quotas"), "ui://kesher/quotas");
+  assert.equal(uriOf("kesher_task"), "ui://kesher/task");
+  const list = ((await rpc(hub, access, "resources/list")).data.result as { resources: Array<{ uri: string; mimeType: string }> }).resources;
+  assert.deepEqual(list.map((r) => r.uri), ["ui://kesher/board", "ui://kesher/quotas", "ui://kesher/task"]);
+  assert.ok(list.every((r) => r.mimeType === "text/html;profile=mcp-app"));
+  for (const { uri } of list) {
+    const read = (await rpc(hub, access, "resources/read", { uri })).data.result as { contents: Array<{ uri: string; mimeType: string; text: string }> };
+    const html = read.contents[0]!.text;
+    assert.equal(read.contents[0]!.mimeType, "text/html;profile=mcp-app");
+    assert.match(html, /^<!DOCTYPE html>/);
+    assert.ok(html.length < 40_000, `${uri} is small`);
+    assert.ok(!/<script[^>]+src=|<link[^>]+href=|@import|https?:\/\//i.test(html), `${uri} loads nothing from outside`);
+    assert.ok(!/innerHTML/.test(html), `${uri} never writes data as HTML`);
+    assert.match(html, /ui\/initialize/);
+    assert.match(html, /[\u0590-\u05FF]/, "Hebrew text too");
+  }
+  assert.equal(((await rpc(hub, access, "resources/read", { uri: "ui://kesher/nope" })).data.error as { code: number }).code, -32002);
 });

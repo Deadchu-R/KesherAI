@@ -68,6 +68,7 @@ import {
 import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
 import { hubBoardSnapshot } from "./hub-board.js";
+import { ConnectorDesk } from "./hub-connector.js";
 import { parseHubDiag, type HubDiagSnapshot } from "./hub-diag.js";
 import { pickRelay, relayList, type RelayProvider } from "./relay.js";
 import type { TaskBoard } from "./task-board.js";
@@ -167,6 +168,13 @@ export interface HubClientDeps {
   quotas?: () => Promise<ProviderQuota[]>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
+  /**
+   * "+ Task" for the Claude connector (inbox-runner.ts `add`): only reached while the `connector` opt-in is on
+   * (hub-connector.ts).
+   */
+  addTask?: (t: { title: string; goal: string; executor: string }) => Promise<InboxTaskView>;
+  /** One line to the app's log (the Claude connector notes each request here: op, task id, outcome). */
+  log?: (line: string) => void;
   /**
    * The hub's diagnostics (`GET /api/diag`), fetched after a failed connect and every 10 minutes while connected;
    * the app saves them to `logs/hub-diag.json` and the newest error to `main.log` (hub-diag.ts).
@@ -454,7 +462,22 @@ export class HubClient {
   constructor(private readonly deps: HubClientDeps) {
     this.router = new RelayRouter(deps.now ?? Date.now);
     this.fetch = deps.fetch ?? fetch;
+    this.desk = new ConnectorDesk(
+      {
+        ...(deps.inboxTasks ? { inboxTasks: deps.inboxTasks } : {}),
+        ...(deps.quotas ? { quotas: deps.quotas } : {}),
+        ...(deps.agents ? { agents: deps.agents } : {}),
+        ...(deps.inboxCommand ? { inboxCommand: deps.inboxCommand } : {}),
+        ...(deps.assign ? { assign: deps.assign } : {}),
+        ...(deps.addTask ? { addTask: deps.addTask } : {}),
+        ...(deps.log ? { log: deps.log } : {}),
+      },
+      deps.now ?? Date.now,
+    );
   }
+
+  /** The Claude connector's questions (hub-connector.ts): answered only while the `connector` opt-in is on. */
+  private readonly desk: ConnectorDesk;
 
   /**
    * Tells the owner's other devices that this PC wrote to Google Drive, so they pull now instead of waiting for
@@ -1289,6 +1312,15 @@ export class HubClient {
         if (kind === "phone") await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, kind }, body.forMinutes).catch(() => false);
         // The answered approval leaves the snapshot at once (not at the next check).
         void this.sendApprovals().catch(() => undefined);
+        return ack();
+      }
+      case "connector_query": {
+        // Only the hub's own key opens this kind, and only through the hub's socket (a relay never carries it). The
+        // desk refuses it while "Claude connector may read and run" is off; the answer goes to the hub only.
+        if (env.from !== "hub" || !fromHub) return ack();
+        const { type: _type, ...q } = body;
+        const a = await this.desk.answer(q, cleanOptIn(this.s.optIn).connector);
+        await this.sendSealed("hub", "connector_answer", { type: "connector_answer", ...a }, 60);
         return ack();
       }
       case "command": {

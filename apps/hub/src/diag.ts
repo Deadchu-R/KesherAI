@@ -50,6 +50,24 @@ export interface DiagSnapshot {
 const MESSAGE_MAX = 200;
 
 /**
+ * Hides the hub's own secrets and addresses in a text, keeping its length and the rest of it: hub tokens (`kh_…`,
+ * `kh2_…`, connector `kc_…`), tickets (`kt1.…`), JWT-like strings, e-mail addresses, IPv4 and IPv6 addresses. Used by
+ * {@link scrub} and by the Claude connector's answers (mcp.ts).
+ *
+ * @param text - A text.
+ * @returns The same text without them.
+ */
+export function scrubSecrets(text: string): string {
+  return text
+    .replace(/\b(?:kh2?|kc)_[\w.-]+/g, "<token>")
+    .replace(/\bkt1\.[\w.-]+/g, "<ticket>")
+    .replace(/\beyJ[\w-]+\.[\w-]+(\.[\w-]*)?/g, "<jwt>")
+    .replace(/[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+/g, "<email>")
+    .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "<ip>")
+    .replace(/(?<![\w:])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?)(?![\w:])/gi, "<ip>");
+}
+
+/**
  * Hides what must never be kept: hub tokens (`kh_…`, `kh2_…`), tickets (`kt1.…`), JWT-like strings, e-mail addresses, IPv4 and
  * IPv6 addresses, and any long token-like run of letters and digits. Cuts the result to {@link MESSAGE_MAX}.
  *
@@ -57,13 +75,7 @@ const MESSAGE_MAX = 200;
  * @returns The same message, safe to keep.
  */
 export function scrub(text: string): string {
-  return text
-    .replace(/\bkh2?_[\w.-]+/g, "<token>")
-    .replace(/\bkt1\.[\w.-]+/g, "<ticket>")
-    .replace(/\beyJ[\w-]+\.[\w-]+(\.[\w-]*)?/g, "<jwt>")
-    .replace(/[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+/g, "<email>")
-    .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "<ip>")
-    .replace(/(?<![\w:])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?)(?![\w:])/gi, "<ip>")
+  return scrubSecrets(text)
     .replace(/[\w-]{32,}/g, "<redacted>")
     .replace(/\s+/g, " ")
     .trim()

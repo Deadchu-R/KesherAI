@@ -29,6 +29,8 @@ export const LIMITS = {
   command: { burst: 30, perMs: 60_000 },
   /** Claude connector requests (`/mcp`) per caller IP, before the token is looked up (scan 169: no free SQL reads). */
   mcp: { burst: 120, perMs: 60_000 },
+  /** The connector's sealed questions to a PC (hub-connector.ts), per connection: 30 a minute (the PC has its own 30). */
+  connectorAsk: { burst: 30, perMs: 60_000 },
 } as const satisfies Record<string, Limit>;
 
 /** Buckets by key ("signIn:<ip hash>", "task:<device id>"). */

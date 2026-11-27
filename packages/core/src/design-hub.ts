@@ -86,7 +86,7 @@ export async function startHubServer(root: string): Promise<{ base: string; clos
 export const FAKE_VAPID = "B" + "x".repeat(86);
 
 /** The first part of a PC's opt-in the hub page needs to list it as a PC that takes tasks and reports activity. */
-export const PC_OPT_IN = { appear: true, acceptTasks: true, acceptLocal: true, acceptAntigravity: true, reportLinks: false, reportActivity: true, reportFileNames: false };
+export const PC_OPT_IN = { appear: true, acceptTasks: true, acceptLocal: true, acceptAntigravity: true, reportLinks: false, reportActivity: true, reportFileNames: false, connector: true };
 
 /** What the hub page reads from `/api/state` for a signed-in owner (the seed's `owner` fields go over these). */
 export function hubOwnerState(seed: HubSeed, presence: Array<{ id: string; name: string; kind: string; online: boolean }>): Record<string, unknown> {

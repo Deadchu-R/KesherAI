@@ -1985,3 +1985,28 @@ Scope: `git diff f189a92..HEAD` (225 files).
 - Checked, no change needed: `/api/unreal/log` and `/api/unreal/open-editor` take a project only from the found list (never a path); the log read is capped at 2 MB and 2000 lines. `/api/models/delete` resolves the path and must stay inside KesherAI's models folder (a link inside it is unlinked, not followed). `/api/comfy-ui/flows/:id/smoke` is computer-only, finds the flow in the ready-made list, runs one at a time and always releases its slot. F5-TTS setup and worker, UE4Editor and the inbox's git/pnpm calls take argument lists (no shell; `pnpm install --ignore-scripts`); the text to speak goes as JSON on stdin. Relay keys are format-checked (Supabase URL pinned to `*.supabase.co`), never in status answers or logs. The hub page's service worker keeps only same-origin GET shell files (never `/api`), and the hub CSP is strict. OpenCode cooldowns hold only validated `opencode-go/…` ids and reset daily; `fetchedAt` is keyed by validated branch names.
 - Fixed: the speech-model scan behind "Models per job" and the Hebrew voice settings walked folders on every call (the page asks every 4 s while a download runs): reused for 15 s. `samePath` ran two sync `realpath` calls per project at every Unreal page poll: looked-up real paths are kept for 30 s (bounded map). Tests added for both.
 - Left (by design, listed for Roee): a paired phone can delete downloaded models, change the hub address and set the backup relay keys (the hub address accepts any https host; the relay keys only Ably and `*.supabase.co`); the hub CSP allows `https://*.supabase.co` because each project has its own host; `cmd.exe /c` for the plugin build puts engine and plugin paths inside quotes (the paths come from Epic's registry and KesherAI's folders, never from a request).
+
+## 2026-11-27: the Claude connector reads and runs through the PC (an exception to end-to-end sealing)
+- **What changed (Roee's choice, "option A")**: the hub's MCP server (`/mcp`, OAuth for the owner only) got six
+  `kesher_*` tools that ask a PC for its task inbox, one task, quotas and agents, add a task, and Run / queue / unqueue /
+  stop / assign one. The hub seals a `connector_query` to the PC with the hub's own key; the PC answers with a
+  `connector_answer` sealed to the hub; the hub opens it **in memory for that one MCP call** (like `send_task` and the
+  Claude cloud path already do). So for these answers the hub, and Claude, see the plain task titles, states, results
+  and step names. That is the exception.
+- **Limits**: (1) the PC's own opt-in "Claude connector may read and run" (Settings › Kesher Cloud), **off by default**,
+  checked by the PC on every query (the hub's copy only gives a sooner error); (2) only those ops: the PC never answers
+  approvals, settings, files, chats, board edits or agent names through this line, and the shared validator drops any
+  other op before and after sealing; (3) 30 a minute on the PC and 30 a minute per connection on the hub; (4) each
+  query is noted in the PC's `logs/main.log` (op, task id, ok/refused; never a title or text); (5) the query goes to the
+  PC's open socket only, never into the hub's queue or storage, and the answer is never stored or logged (tested: the
+  store is byte-for-byte unchanged after calls); an answer from another PC or after the 10 s wait is dropped;
+  (6) only the hub can send the query kind and only a PC can answer it (devices are refused); (7) every text field is
+  scrubbed on the PC (home folder, user name, keys, e-mails) and again on the hub (leak-guard and the hub's token scrub);
+  (8) a task's goal is never read back, only its title, short result and step names (a new task's goal passes the hub in memory on its way to the PC, like `send_task`); (9) pausing the hub stops all tools.
+- **What is still true**: approvals, chats, board details and live agent steps to the phone stay sealed end to end; a
+  PC with the setting off is exactly as before. Running an Antigravity task from the connector is the owner's explicit
+  call (the same as pressing Run on the hub page).
+- **Residual risk**: whoever holds a connector access token (Claude, after the owner's Google sign-in) can read task
+  titles and press Run within the daily limits while the setting is on. Revoke in hub page › Settings › Connections, or
+  turn the setting off on the PC.
+

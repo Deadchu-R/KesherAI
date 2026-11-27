@@ -4750,6 +4750,13 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - Tasks: WORK_LIST g-01..g-03 (Tuesday 24.11).
 - Stopped at: done (brief).
 
+## 2026-11-27 — MCP Apps: views inside Claude for the hub connector (Claude helper, from memory, no web)
+- **What it is**: the MCP UI extension (SEP-1865). A tool names `_meta.ui.resourceUri` (`ui://…`); `resources/read` serves HTML of mimeType `text/html;profile=mcp-app`; the host shows it in a sandboxed iframe and talks JSON-RPC over postMessage (`ui/initialize` with theme and locale, `ui/notifications/tool-result`, `tools/call` through the host, `ui/notifications/size-changed`). Claude, ChatGPT apps and KesherAI's own McpAppView.tsx host it; hosts that do not just show the tool's text.
+- **Take**: one small self-contained page per view (inline CSS/JS, no outside loads, empty CSP allow-list), data only from `structuredContent`, every action as a normal tool call (so the model and the user see the same thing), text answers that stand alone. **Leave**: heavy frameworks, live polling (refresh after an action only), anything that needs the page to hold a token.
+- **Language and weight**: plain TypeScript strings on the Worker (about 10-12 KB per view, no build step), plain DOM in the frame; nothing runs on the PC beyond the existing inbox reads. Same on every platform (the host draws it). Measure first: view load time in Claude's phone app.
+- **Tasks**: built now (connector-views.ts: board, quotas, task); later: an agents view with live steps (needs a push from the hub; MCP has no server-sent updates in this server), a model picker in the board's Assign, and `ui/update-model-context` so Claude knows what the user pressed.
+- Stopped at: done (brief).
+
 ## 2026-11-27 — Quota view on the hub: how usage dashboards show what is left (Claude helper, brief, for Roee 27.11 "info on quotas in the hub too")
 - **Claude usage (Settings › Usage, `/usage`)**: one bar per window (current 5-hour session, weekly, weekly per model),
   "N% used" and "Resets at HH:MM / Tue 09:00"; no raw counts. Take: one bar per window, the reset time beside it.

@@ -13,6 +13,7 @@ import { cleanAwayNote, type AwayNote } from "./device-status.js";
 import { cleanTailscaleDirect, type TailscaleDirect } from "./direct-path.js";
 import { cleanRelayKeys, type RelayKeys } from "./relay-keys.js";
 import { cleanProviderQuotas, type ProviderQuota } from "./provider-quotas.js";
+import { parseConnectorAnswer, parseConnectorQuery, type ConnectorAnswer, type ConnectorQuery } from "./hub-connector.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -92,9 +93,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays" | "quotas" | "connector_query" | "connector_answer";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays", "quotas", "connector_query", "connector_answer"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -151,10 +152,16 @@ export interface HubOptIn {
   reportActivity: boolean;
   /** With activity: also the names (relative paths) of files the agents touch, never their contents. */
   reportFileNames: boolean;
+  /**
+   * "Claude connector may read and run" (Roee, 27.11; off by default): the hub may ask this PC, sealed, for its tasks,
+   * one task, its quotas and agents, add a task, and Run / queue / assign / stop one (hub-connector.ts). The PC checks
+   * it again on every query; the hub reads it only to say "turn it on first".
+   */
+  connector: boolean;
 }
 
 /** The opt-in a new PC starts with. */
-export const DEFAULT_OPT_IN: HubOptIn = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
+export const DEFAULT_OPT_IN: HubOptIn = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false, connector: false };
 
 /** An agent a device reports (a loaded local model, Antigravity, a vendor session such as Claude Remote Control). */
 export interface HubAgent {
@@ -269,7 +276,11 @@ export type SealedBody =
    * PC to its owner's phones only: what is left of each provider its agents use (provider-quotas.ts; names, numbers
    * and times only), a whole snapshot that replaces the last. `at`: when the PC built it.
    */
-  | { type: "quotas"; items: ProviderQuota[]; at: number };
+  | { type: "quotas"; items: ProviderQuota[]; at: number }
+  /** Hub to a PC whose `connector` opt-in is on: one question of the Claude connector (hub-connector.ts). Never queued. */
+  | ({ type: "connector_query" } & ConnectorQuery)
+  /** That PC's answer, sealed to the hub; opened in memory for that one MCP call, never stored or logged. */
+  | ({ type: "connector_answer" } & ConnectorAnswer);
 
 /**
  * One ask as the phone's notification shows it, with the answer it needs: Run / Not now (`run`, an Antigravity Run
@@ -526,6 +537,8 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   board: "board",
   relays: "relays",
   quotas: "quotas",
+  connector_query: "connector_query",
+  connector_answer: "connector_answer",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -571,6 +584,7 @@ export function cleanOptIn(x: unknown): HubOptIn {
     reportLinks: bool(o.reportLinks, DEFAULT_OPT_IN.reportLinks),
     reportActivity: bool(o.reportActivity, DEFAULT_OPT_IN.reportActivity),
     reportFileNames: bool(o.reportFileNames, DEFAULT_OPT_IN.reportFileNames),
+    connector: bool(o.connector, DEFAULT_OPT_IN.connector),
   };
 }
 
@@ -605,7 +619,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" || kind === "quotas" ? HUB_LIMITS.approvalTtl : kind === "connector_query" || kind === "connector_answer" ? 60 : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -772,6 +786,14 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "relays", keys: cleanRelayKeys(b.keys), at: num(b.at) };
     case "quotas":
       return Array.isArray(b.items) ? { type: "quotas", items: cleanProviderQuotas(b.items), at: num(b.at) } : null;
+    case "connector_query": {
+      const q = parseConnectorQuery(b);
+      return q ? { type: "connector_query", ...q } : null;
+    }
+    case "connector_answer": {
+      const a = parseConnectorAnswer(b);
+      return a ? { type: "connector_answer", ...a } : null;
+    }
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;
       const error = str(b.error, 300);

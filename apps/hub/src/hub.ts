@@ -15,6 +15,9 @@ import {
   importPrivateJwk,
   importPublicKey,
   keyFingerprint,
+  CONNECTOR_LIMITS,
+  parseConnectorQuery,
+  type ConnectorAnswer,
   openEnvelope,
   parseDeviceFrame,
   parseEnvelope,
@@ -1073,9 +1076,12 @@ export class Hub {
     // The hub does not open them (no plain result is ever kept here): taken and dropped; the owner reads the result on
     // the PC's board or the hub page.
     if (env.to === "hub" && (env.kind === "progress" || env.kind === "result")) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: false });
+    // A PC's answer to the connector's question: opened in memory for the waiting MCP call, never queued or kept.
+    if (env.to === "hub" && env.kind === "connector_answer") return this.connectorAnswer(from, env, refuse);
     if (env.to === "hub") return this.cloud(from, env, refuse);
-    // An ask note only rides inside an `approvals` envelope (into the Web Push payload), never on its own.
-    if (env.kind === "cloud" || env.kind === "cloud_started" || env.kind === "ask_note") return refuse("not-allowed", env.id);
+    // An ask note only rides inside an `approvals` envelope (into the Web Push payload), never on its own. Only the hub
+    // asks the connector's questions, and their answers go to the hub only.
+    if (env.kind === "cloud" || env.kind === "cloud_started" || env.kind === "ask_note" || env.kind === "connector_query" || env.kind === "connector_answer") return refuse("not-allowed", env.id);
     const to = this.store.device(env.to);
     if (!to || to.id === from.id || !Hub.reachable(to)) return refuse("no-recipient", env.id);
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
@@ -1445,6 +1451,78 @@ export class Hub {
     const delivered = this.sockets.send(pc.id, { t: "deliver", env });
     this.store.setSetting(CONNECTOR_TASKS, JSON.stringify([...this.sentTasks(), { envId: env.id, taskId, to: pc.id, executor: req.executor, at: t }].slice(-20)));
     return { taskId, deviceId: pc.id, name: pc.name, delivered };
+  }
+
+  /** The connector's questions waiting for a PC's answer, by query id (memory only; see {@link connectorAsk}). */
+  private readonly asks = new Map<string, { pc: string; done: (a: ConnectorAnswer | { error: string }) => void }>();
+
+  /**
+   * Asks one PC a question of the Claude connector (hub-connector.ts; Roee's "option A", 27.11) and waits for its
+   * answer. The query is sealed with the hub's own key and sent over the PC's open socket only: never queued (an off
+   * PC is an error now, not a message kept for later). The PC refuses it unless its "Claude connector may read and
+   * run" opt-in is on; the hub checks the same opt-in first only to answer sooner. The answer is opened here, in
+   * memory, for this one call; nothing of it is stored or logged.
+   *
+   * @param query - The question (its `queryId` is made here).
+   * @param grantId - The connection that asks (for the rate limit).
+   * @param device - A PC's id or name (optional when one PC lets the connector in).
+   * @param wait - How long to wait for the answer, in ms.
+   * @returns The PC's answer and its name, or an error in words.
+   */
+  async connectorAsk(query: Record<string, unknown>, grantId: string, device = "", wait: number = CONNECTOR_LIMITS.waitMs): Promise<{ answer: ConnectorAnswer; pc: string } | { error: string }> {
+    if (this.paused) return { error: "The hub is paused (hub page › Settings)." };
+    const q = parseConnectorQuery({ ...query, queryId: randomB64url(12) });
+    if (!q) return { error: "That request is not allowed." };
+    const pcs = this.presence().filter((d) => d.kind === "pc");
+    const want = device.trim().toLowerCase();
+    const named = want ? pcs.filter((d) => d.id.toLowerCase() === want || d.name.toLowerCase() === want) : pcs.filter((d) => d.optIn.connector);
+    if (!named.length) return { error: want ? `No paired PC is called "${device.slice(0, 60)}".` : "No PC lets the Claude connector in yet. On the PC: Settings › Kesher Cloud › tick \"Claude connector may read and run\"." };
+    const on = named.filter((d) => d.online);
+    if (!on.length) return { error: `"${named[0]!.name}" is not online now; try again when it is on.` };
+    if (on.length > 1) return { error: `More than one PC fits; name one (device): ${on.map((d) => d.name).join(", ")}.` };
+    const pc = on[0]!;
+    if (!pc.optIn.connector) return { error: `"${pc.name}" does not let the Claude connector in. On the PC: Settings › Kesher Cloud › tick "Claude connector may read and run".` };
+    if (!this.limits.take(`connectorAsk:${grantId}`, LIMITS.connectorAsk)) return { error: "Too many requests in a minute; try again shortly." };
+    const key = await this.ownKey();
+    if (!key) return { error: "The hub has no key yet." };
+    const { queryId, ...rest } = q;
+    const env = await sealMessage({ from: "hub", to: pc.id, kind: "connector_query", ttl: 60 }, { type: "connector_query", queryId, ...rest }, key.privateKey, pc.publicKey);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.asks.delete(queryId);
+        resolve({ error: `"${pc.name}" did not answer in time (an older KesherAI, or it is busy); try again.` });
+      }, wait);
+      this.asks.set(queryId, {
+        pc: pc.id,
+        done: (a) => {
+          clearTimeout(timer);
+          this.asks.delete(queryId);
+          resolve("error" in a ? a : { answer: a, pc: pc.name });
+        },
+      });
+      // Straight to the open socket: not written to the queue (this.store), so it is never kept.
+      if (!this.sockets.send(pc.id, { t: "deliver", env })) this.asks.get(queryId)?.done({ error: `"${pc.name}" is not online now.` });
+    });
+  }
+
+  /** A PC's sealed answer to a waiting connector question (only from the PC that was asked). */
+  private async connectorAnswer(from: DeviceRow, env: SealedEnvelope, refuse: (code: HubRefusal, id?: string) => void): Promise<void> {
+    if (from.kind !== "pc") return refuse("not-allowed", env.id);
+    const key = await this.ownKey();
+    if (!key) return refuse("cloud-off", env.id);
+    let body;
+    try {
+      body = await openEnvelope(env, key.privateKey, from.publicKey);
+    } catch {
+      return refuse("bad-frame", env.id);
+    }
+    this.sockets.send(from.id, { t: "sent", id: env.id, queued: false });
+    if (body.type !== "connector_answer") return;
+    const ask = this.asks.get(body.queryId);
+    // An answer nobody waits for (late, or from another PC) is dropped.
+    if (!ask || ask.pc !== from.id) return;
+    const { type: _type, ...answer } = body;
+    ask.done(answer);
   }
 
   /**

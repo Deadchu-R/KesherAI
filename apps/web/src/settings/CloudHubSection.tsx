@@ -27,6 +27,8 @@ interface OptIn {
   reportLinks: boolean;
   reportActivity: boolean;
   reportFileNames: boolean;
+  /** "Claude connector may read and run" (off by default; older servers leave it out). */
+  connector?: boolean;
 }
 
 /** `GET /api/hub` (packages/core/src/hub-client.ts, HubStatus): no token, no key. */
@@ -125,7 +127,7 @@ export function CloudHubSection() {
   const down = s.paired && s.enabled && !s.connected;
   const opt = (key: keyof OptIn, he: string, en: string, disabled = false) => (
     <label className="row small">
-      <input type="checkbox" checked={s.optIn[key]} disabled={busy || disabled} onChange={(e) => void put({ optIn: { [key]: e.target.checked } })} /> {L(he, en)}
+      <input type="checkbox" checked={s.optIn[key] === true} disabled={busy || disabled} onChange={(e) => void put({ optIn: { [key]: e.target.checked } })} /> {L(he, en)}
     </label>
   );
 
@@ -189,6 +191,8 @@ export function CloudHubSection() {
           {opt("reportLinks", "לשתף קישורים לשיחות של סוכנים (למשל Claude Remote Control)", "Share agent session links (e.g. Claude Remote Control)")}
           {opt("reportActivity", "לשתף מה הסוכנים עושים עכשיו (לשונית סוכנים בענן: כותרת, צעדים ושמות כלים, נעול לטלפון)", "Share what the agents do now (the cloud's Agents tab: title, steps and tool names, sealed to the phone)")}
           {opt("reportFileNames", "גם שמות הקבצים שהסוכנים נוגעים בהם (בלי התוכן)", "Also the names of the files the agents touch (never their content)", !s.optIn.reportActivity)}
+          {opt("connector", "מחבר Claude רשאי לקרוא ולהפעיל (משימות, מכסות וסוכנים; הוספת משימה, הפעלה, תור, העברה ועצירה)", "Claude connector may read and run (tasks, quotas and agents; add, Run, queue, assign and stop a task)")}
+          <small className="muted">{L("כבוי: Claude ב-claude.ai רואה רק מה שהמרכז עצמו יודע. דלוק: המרכז שואל את המחשב בהצפנה, והתשובה נפתחת אצלו רק לאותה בקשה, בלי לשמור.", "Off: Claude in claude.ai sees only what the hub itself knows. On: the hub asks this PC, sealed, and opens the answer only for that one request, never stored.")}</small>
           <small className="muted">{L("מחשב חדש לא מקבל משימות עד שמסמנים כאן.", "A new PC takes no tasks until you tick it here.")}</small>
           {s.relays && <BackupRelays relays={s.relays} live={s} onSaved={load} />}
           {s.devices.length > 0 && (
