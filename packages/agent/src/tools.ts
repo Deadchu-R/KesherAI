@@ -10,6 +10,7 @@ import { SYSTEM_TOOLS } from "./system-tools.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
 import { checkCodeTool, codeMapTool, findAssetsTool, findSymbolTool } from "./code-intel.js";
 import { readDocumentTool } from "./documents.js";
+import { MIN_READ_LINES, OUTLINE_MIN_LINES, fileOutline } from "./read-memo.js";
 
 /** What a tool returns. */
 export interface ToolOutput {
@@ -268,7 +269,8 @@ const readFileTool: AgentTool = {
     if (text.includes("\u0000")) throw new Error("This looks like a binary file, not text.");
     const lines = text.split(/\r?\n/);
     const start = Math.max(1, Number(input.offset ?? 1));
-    const count = Math.max(1, Number(input.limit ?? MAX_READ_LINES));
+    // A tiny window makes a model page through a big file in dozens of steps and lose its place: at least MIN_READ_LINES.
+    const count = Math.max(MIN_READ_LINES, Number(input.limit ?? MAX_READ_LINES) || MAX_READ_LINES);
     const slice = lines.slice(start - 1, start - 1 + count);
     // Whole lines up to the output budget, then where to read on. (Cutting the middle out, as other tools' output is,
     // hid exactly the part asked for in files with long lines, and local models read the same lines again and again.)
@@ -282,7 +284,9 @@ const readFileTool: AgentTool = {
     }
     const next = start + out.length;
     const more = next - 1 < lines.length && (out.length < slice.length || start - 1 + count < lines.length) ? `\n… ${lines.length - (next - 1)} more lines: read on with offset ${next}` : "";
-    return { output: out.join("\n") + more };
+    // A big file read from its start gets its outline first (symbols with lines), so the next read can go straight to a part.
+    const outline = input.offset === undefined && lines.length >= OUTLINE_MIN_LINES ? fileOutline(text, str(input, "path")) : "";
+    return { output: (outline ? `${outline}\n\n` : "") + out.join("\n") + more };
   },
 };
 

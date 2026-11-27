@@ -102,7 +102,8 @@ export function supersededReads(messages: readonly AgentMessage[]): Map<string, 
       continue;
     }
     // Only a read that returned numbered lines supersedes (not an error or a refusal).
-    if (!/^\s*\d+ {2}/.test(m.content)) continue;
+    // (A big file's first read starts with its outline, then the numbered lines.)
+    if (!/^\s*\d+ {2}/m.test(m.content)) continue;
     ranges.add(`${call.path}#${call.range}`);
     // A plain read that ended without "read on with offset" had the whole file: it covers every range of it.
     if (!call.range && !/\n… \d+ more lines: read on with offset \d+$/.test(m.content)) whole.add(call.path);

@@ -948,7 +948,7 @@ export class TaskInbox {
    * @param input - Title, goal and the rest; paths and limits default to Settings. `extraPaths`: more folders the task
    *   may change, only `integrations/<engine>/<folder>/**` (an engine plugin's AI-converted copy, engine-support.ts). `maxFiles`: 1–60 (default 15).
    */
-  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number; size?: string; kind?: string }): Promise<InboxTaskView> {
+  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number; size?: string; kind?: string; source?: string }): Promise<InboxTaskView> {
     await this.load();
     const s = this.s;
     const title = String(input.title ?? "").trim().slice(0, 200);
@@ -963,7 +963,7 @@ export class TaskInbox {
     const executor = ["auto", "antigravity", "local", "opus", "opencode", "claude", "gemini"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
     const size = ["S", "M", "L"].includes(String(input.size)) ? (input.size as InboxTaskSpec["size"]) : undefined;
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
-    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(research ? { kind: "research" as const } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
+    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(research ? { kind: "research" as const } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}), ...(input.source && /^[\w./-]{1,200}$/.test(input.source) && !input.source.includes("..") ? { source: input.source } : {}) };
     // The same checks as a file from git (the text is data either way).
     const parsed = parseTaskFile(taskFileText(spec), spec.id, s);
     if ("error" in parsed) throw fail(parsed.error, 400);
@@ -2807,7 +2807,7 @@ export class TaskInbox {
         r.made.push(next.key);
         try {
           this.feeding = true;
-          const t = await this.add({ title: next.title, goal: goalFor(next), executor: gap ? "opencode" : ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size });
+          const t = await this.add({ title: next.title, goal: goalFor(next), source: next.source, executor: gap ? "opencode" : ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size });
           if (gap) continue;
           if (ex === "antigravity") await this.setModel(t.id, "Claude Opus 4.6 (Thinking)").catch(() => undefined);
           if (ex === "local") await this.queueAdd(t.id, "research loop");
@@ -2828,7 +2828,7 @@ export class TaskInbox {
         if (!next || next.size === "L") break;
         r.backlog = r.backlog.filter((b) => b !== next);
         r.made.push(next.key);
-        await this.add({ title: next.title, goal: goalFor(next), executor: "opencode", risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size }).catch(() => undefined);
+        await this.add({ title: next.title, goal: goalFor(next), source: next.source, executor: "opencode", risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size }).catch(() => undefined);
       }
     }
     await this.save();

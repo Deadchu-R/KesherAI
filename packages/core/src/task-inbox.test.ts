@@ -190,3 +190,12 @@ test("inbox: a local task is small, unless it converts or ports something (then 
   // "report" or "support" are not "port".
   assert.equal(boardSizeFor({ ...small, goal: "Write the report and support text." }, "local"), "small");
 });
+
+test("a task file keeps the research report it came from (source)", async () => {
+  const { parseTaskFile, taskFileText } = await import("./task-inbox.js");
+  const text = "---\nid: r-20261127-07\ntitle: A task\nexecutor: local\nsource: docs/research/r-20261126-06.md\n---\n\n## Goal\nDo it.\n";
+  const p = parseTaskFile(text, "r-20261127-07", { allowedPaths: [], forbiddenPaths: [], maxMinutes: 30 } as never);
+  assert.ok("spec" in p && p.spec);
+  assert.equal(p.spec!.source, "docs/research/r-20261126-06.md");
+  assert.match(taskFileText(p.spec!), /^source: docs\/research\/r-20261126-06\.md$/m);
+});

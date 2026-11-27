@@ -94,15 +94,16 @@ const cache = new Map<string, { size: number; mtime: number; item: Indexed }>();
  *
  * @param text - The file.
  * @param ext - Its extension, e.g. `.gd`.
- * @returns Up to 40 symbol lines (`class Player`, `Jump()`) and their 1-based lines, in the same order.
+ * @param max - How many symbols at most (default 40).
+ * @returns Up to `max` symbol lines (`class Player`, `Jump()`) and their 1-based lines, in the same order.
  */
-export function symbolsWithLines(text: string, ext: string): { symbols: string[]; lines: number[] } {
+export function symbolsWithLines(text: string, ext: string, max = 40): { symbols: string[]; lines: number[] } {
   const lang = LANG[ext.toLowerCase()];
   const symbols: string[] = [];
   const lines: number[] = [];
   if (!lang) return { symbols, lines };
   const all = text.split(/\r?\n/);
-  for (let i = 0; i < all.length && symbols.length < 40; i++) {
+  for (let i = 0; i < all.length && symbols.length < max; i++) {
     const line = all[i]!;
     if (line.length > 300 || /^\s*(\/\/|#|\*|\/\*)/.test(line)) continue;
     for (const re of PATTERNS[lang]!) {
