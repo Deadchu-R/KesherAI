@@ -526,13 +526,14 @@ const runCommandTool: AgentTool = {
   spec: {
     name: "run_command",
     description:
-      "Run a shell command in the project folder (cmd on Windows, sh elsewhere) and return its output and exit code. Use it to build, test, run git status, install packages. Commands that never finish (servers, watchers) are stopped at the timeout.",
+      "Run a shell command in the project folder (cmd on Windows, sh elsewhere) and return its output and exit code. Use it to build, test, run git status, install packages. Commands that never finish (servers, watchers) are stopped at the timeout. Use background:true for builds, installs, servers and anything over about 30 seconds: it returns at once with an id, you keep working, and the chat gets a new turn when it ends (read its output with command_output, tail or grep, never whole).",
     inputSchema: {
       type: "object",
       properties: {
         command: { type: "string", description: "The command line." },
         purpose: { type: "string", description: "One short sentence for the user, in their language: what this command does and why it is needed now. Shown when they approve it." },
-        timeout_seconds: { type: "integer", description: "Stop after this many seconds (default 120, max 600)." },
+        timeout_seconds: { type: "integer", description: "Stop after this many seconds (default 120, max 600). Not used with background." },
+        background: { type: "boolean", description: "Start it and return at once (see above); the output goes to a file." },
       },
       required: ["command"],
     },
@@ -544,6 +545,7 @@ const runCommandTool: AgentTool = {
   async run(input, ctx) {
     const cwd = workspaceOf(ctx);
     const command = str(input, "command");
+    if (input.background === true) throw new Error("Background commands are not available in this conversation; run it without background.");
     const timeoutMs = Math.min(600, Math.max(1, Number(input.timeout_seconds ?? 120))) * 1000;
     const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress, ctx.env);
     return { output: truncate(`${r.output.trim() || "(no output)"}\n\n${r.status}`) };

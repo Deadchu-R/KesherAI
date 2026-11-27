@@ -24,4 +24,4 @@ export { DEFAULT_TOOL_CAP, TOOL_OUTPUT_TOOL } from "./budget.js";
 export { documentText, formatPages, readDocumentTool, type DocumentText } from "./documents.js";
 export { csvRows, docxHtml, openZip, pptxSlides, sheetText, xlsxSheets, type Sheet } from "./office.js";
 export { bare, codeMap, indexProject, listAssets, symbolsOf, symbolsWithLines, type AssetEntry, type Indexed } from "./code-intel.js";
-export { AGENT_GIT_IDENTITY, runShell, sshArgs, sshTarget, type ShellResult } from "./shell.js";
+export { AGENT_GIT_IDENTITY, runShell, spawnShell, killTree, sshArgs, sshTarget, type ShellResult } from "./shell.js";

@@ -64,7 +64,7 @@ import { plansOf } from "../plan-view";
 import { ShareDialog } from "../chat/ShareDialog";
 import { useOwnerTyping } from "../chat/ShareReplies";
 import { ScheduledButton } from "../chat/ScheduledList";
-import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
+import { CanvasButton, GroupButton, TeamButton, TimersButton, BackgroundCommandsRow, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
 import { gateNoteText } from "../chat/gate-text";
 import { namedDocuments, splitAttachments } from "../attach-lines";
@@ -892,6 +892,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
         {show("team", (conv.team ?? []).length > 0) && <TeamButton team={conv.team ?? []} models={models} onChange={(team) => void patch({ team })} />}
         {conv.kind === "chat" && show("group", (conv.group ?? []).length > 0) && <GroupButton group={conv.group ?? []} onChange={(group) => void patch({ group })} />}
         <TimersButton convId={conv.id} />
+        <BackgroundCommandsRow convId={conv.id} />
         <ScheduledButton convId={conv.id} />
         {!conv.incognito && <CanvasButton convId={conv.id} events={events.length} />}
         {pluginUi.panels.map((x) => {

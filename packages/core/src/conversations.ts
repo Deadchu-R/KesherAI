@@ -298,7 +298,10 @@ export class ConversationManager {
     media.notes.push(...computerNotes);
     // Chats get the file tools too, inside their own outputs folder, so they can make real files and programs.
     const hasImages = media.tools.some((t) => t.spec.name === "generate_image");
-    const code = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
+    const codeBase = kind === "chat" && hasImages ? CODE_TOOLS.map(steerImagesToEngine) : CODE_TOOLS;
+    // run_command with background:true (background-commands.ts), and its command_output / command_stop / commands.
+    const bg = id ? this.deps.background : undefined;
+    const code = bg ? [...codeBase.map((t) => bg.wrap(id!, t)), ...bg.tools(id!)] : codeBase;
     const skills = [...(this.deps.skills?.count ? [this.deps.skills.tool()] : []), ...learnTools(this.deps), ...(this.deps.saveConfig ? [settingsTool(this.deps.config, () => this.deps.saveConfig!())] : [])];
     const group = id ? this.groupTools(id) : { tools: [], notes: [] };
     const split = splitTools(this.deps, () => this.defaultChatModel(), media.notes, id);
@@ -1869,6 +1872,8 @@ export class ConversationManager {
     this.sessions.get(id)?.stop();
     this.sessions.delete(id);
     this.helpers.runs.stopAll(id);
+    // Its background commands are killed (with their children) and their files removed.
+    await this.deps.background?.forget(id).catch(() => undefined);
     this.delegateOptions.delete(id);
     this.outside.get(id)?.close();
     this.outside.delete(id);

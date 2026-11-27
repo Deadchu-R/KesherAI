@@ -1,0 +1,133 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-27T16:00:00Z",
+ "boards": [
+  {
+   "id": "ChatBackgroundCommands",
+   "title": "צ'אט: פקודות ברקע — שבבים בראש הצ'אט: ⏳ npm run build · 1:12 · עצירה; בסיום כרטיס עם קוד יציאה ו\"הצג פלט\", תור חדש והתראה לטלפון",
+   "titleEn": "Chat: background commands — chips at the top: ⏳ npm run build · 1:12 · Stop; when done a card with exit code and \"Show output\", a new turn, a phone ping",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 700,
+    "phone": 800
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בניית האפליקציה",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תבנה את הגרסה ותתקין את החבילות, ובינתיים תמשיך עם הערות העדכון"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הבנייה וההתקנה רצות ברקע. אני ממשיך לכתוב את הערות העדכון, ואקרא את סוף הפלט כשהן יסתיימו."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/timers*",
+     "json": {
+      "timers": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/commands",
+     "json": {
+      "commands": [
+       {
+        "id": "b1",
+        "command": "npm run build",
+        "state": "running",
+        "startedAt": {
+         "$agoMs": "72s"
+        }
+       },
+       {
+        "id": "b2",
+        "command": "pnpm install",
+        "state": "exited",
+        "exit": 0,
+        "startedAt": {
+         "$agoMs": "5m"
+        },
+        "endedAt": {
+         "$agoMs": "2m"
+        }
+       },
+       {
+        "id": "b3",
+        "command": "npm run dev",
+        "state": "running",
+        "startedAt": {
+         "$agoMs": "9m"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".bgcmd-chip"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".bgcmd-chip"
+    }
+   ]
+  }
+ ]
+}

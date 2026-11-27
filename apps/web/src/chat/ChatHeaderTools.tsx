@@ -8,6 +8,7 @@ import { ModelMenu } from "../ModelMenu";
 import { usePersonas } from "../Personas";
 import { Menu, MenuItem, MenuLabel } from "../ui/Menu";
 import { LineIcon } from "../ui/Glyph";
+import { clockText } from "./clock-text";
 
 /**
  * Agent group: personas this chat's model leads. It splits a request between
@@ -178,6 +179,70 @@ export function TimersButton({ convId }: { convId: string }) {
       ))}
     </Menu>
     </>
+  );
+}
+
+/** One background command as the server lists it (background-commands.ts). */
+interface BgCommand { id: string; command: string; state: "running" | "exited" | "stopped" | "ended"; exit?: number | null; startedAt: number; endedAt?: number }
+
+/**
+ * The chat's background commands (run_command with background:true), as chips at the top of the chat: a running one
+ * "⏳ npm run build · 1:12 · Stop", a finished one (kept for 10 minutes) "✅ npm run build · exit 0 · Show output".
+ * "Show output" opens the end of the output under the row. Looks at the server every 3 s while one runs.
+ *
+ * @param props.convId - The chat.
+ */
+export function BackgroundCommandsRow({ convId }: { convId: string }) {
+  const [cmds, setCmds] = useState<BgCommand[]>([]);
+  const [now, setNow] = useState(Date.now());
+  const [gone, setGone] = useState<string[]>([]);
+  const [shown, setShown] = useState<{ id: string; text: string } | null>(null);
+  const he = getLocale() === "he";
+  const running = cmds.some((c) => c.state === "running");
+  useEffect(() => {
+    const load = () => !document.hidden && void api<{ commands: BgCommand[] }>(`/api/conversations/${encodeURIComponent(convId)}/commands`).then((r) => (setCmds(r.commands), setNow(Date.now())), () => undefined);
+    load();
+    const t = window.setInterval(load, running ? 3_000 : 30_000);
+    addEventListener("focus", load);
+    return () => (window.clearInterval(t), removeEventListener("focus", load));
+  }, [convId, running]);
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(t);
+  }, [running]);
+  const base = `/api/conversations/${encodeURIComponent(convId)}/commands`;
+  const stop = (id: string) => void api(`${base}/${encodeURIComponent(id)}/stop`, { method: "POST" }).then(() => setCmds((x) => x.map((c) => (c.id === id ? { ...c, state: "stopped" } : c))), (e: Error) => toast(e.message));
+  const show = (id: string) =>
+    shown?.id === id
+      ? setShown(null)
+      : void api<{ output: string }>(`${base}/${encodeURIComponent(id)}/output?tail=30`).then((r) => setShown({ id, text: r.output }), (e: Error) => toast(e.message));
+  const visible = cmds.filter((c) => (c.state === "running" || now - (c.endedAt ?? c.startedAt) < 600_000) && !gone.includes(c.id)).slice(0, 6);
+  if (!visible.length) return null;
+  return (
+    <div className="bgcmd-row">
+      {visible.map((c) => {
+        const ok = c.state === "exited" && c.exit === 0;
+        const icon = c.state === "running" ? "⏳" : ok ? "✅" : c.state === "exited" ? "⚠️" : "⏹";
+        const end = c.state === "exited" ? (he ? `קוד ${c.exit ?? "?"}` : `exit ${c.exit ?? "?"}`) : c.state === "stopped" ? (he ? "נעצר" : "stopped") : he ? "הסתיים עם KesherAI" : "ended with KesherAI";
+        return (
+          <span key={c.id} className={`bgcmd-chip${c.state === "running" ? "" : ok ? " ok" : " bad"}`} title={c.command} dir="auto">
+            <span aria-hidden>{icon}</span>
+            <span className="bgcmd-cmd" dir="ltr">{c.command}</span>
+            <span className="bgcmd-time">· {c.state === "running" ? clockText(now - c.startedAt) : end}</span>
+            {c.state === "running" ? (
+              <button type="button" className="checkback-cancel" onClick={() => stop(c.id)} aria-label={he ? `עצירת ${c.command}` : `Stop ${c.command}`}>· {he ? "עצירה" : "Stop"}</button>
+            ) : (
+              <>
+                <button type="button" className="checkback-cancel" onClick={() => show(c.id)} aria-expanded={shown?.id === c.id}>· {he ? "הצג פלט" : "Show output"}</button>
+                <button type="button" className="checkback-cancel" onClick={() => setGone((g) => [...g, c.id])} aria-label={he ? "הסתרה" : "Dismiss"}>×</button>
+              </>
+            )}
+          </span>
+        );
+      })}
+      {shown && <pre className="bgcmd-out" dir="ltr">{shown.text || (he ? "(אין פלט)" : "(no output)")}</pre>}
+    </div>
   );
 }
 

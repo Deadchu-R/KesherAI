@@ -102,6 +102,7 @@ import { F5Hebrew, classifySpeechModels, vocabBeside } from "./hebrew-tts.js";
 import { speechModelsOnComputer } from "./routes/speech.js";
 import { buildTravel } from "./travel/index.js";
 import { ChatTimers } from "./chat-timers.js";
+import { BackgroundCommands } from "./background-commands.js";
 import { MemoryStore } from "./memory-store.js";
 import { Tor } from "./tor.js";
 import { FaultLog } from "./fault-log.js";
@@ -533,6 +534,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   });
   void chatTimers.start();
+  // Background commands of the chat (run_command with background:true): their end wakes the chat like a check-back.
+  const background = new BackgroundCommands({
+    dir: join(paths.root, "background"),
+    send: (convId, text) => services.conversations.send(convId, text),
+    onWake: (convId) => notifier.messageFromPhone(convId),
+  });
+  void background.start().catch(() => undefined);
   // Travel search and price watches (travel/): search only; a drop in a watched price tells the phone.
   const travel = buildTravel(paths.root, () => config.travel, async (title, body) => void (await notifier.send({ title, body, path: "#/settings/travel", tags: ["airplane"] })));
   travel.watches.start();
@@ -601,7 +609,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ freeCloud, taskBoard, registry, library, embedder: () => semantic?.embedder(), assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, travel, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
+    conversations: buildConversations({ freeCloud, taskBoard, registry, library, embedder: () => semantic?.embedder(), assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, background, travel, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
     coach,
     memory,
     computer,
@@ -1117,7 +1125,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await guestRoutes(app, services);
 
   // Every area's routes, in their order (after the key check for remote access, above).
-  await registerRoutes(app, services, { paths, library, apiKeys, chatTimers, canvases, telegram, travel });
+  await registerRoutes(app, services, { paths, library, apiKeys, chatTimers, canvases, telegram, travel, background });
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, {
@@ -1206,6 +1214,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       notifier.close();
       phonePush.close();
       telegram.stop();
+      void background.stopAll();
       hub.stop();
       void comfy.stop();
       services.f5Hebrew.stop();

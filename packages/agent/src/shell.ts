@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 
 /** Character budget for tool output the model sees. */
 export const MAX_OUTPUT = 30_000;
@@ -63,6 +63,45 @@ export function sshArgs(t: NonNullable<ReturnType<typeof sshTarget>>, command: s
 }
 
 /**
+ * Starts a shell command (cmd on Windows, sh elsewhere; in WSL or over ssh for a project there) without waiting.
+ *
+ * @param command - Command line.
+ * @param cwd - Working folder.
+ * @param extraEnv - More variables (the project's environment).
+ * @returns The child process (its output pipes are open).
+ */
+export function spawnShell(command: string, cwd: string, extraEnv: Record<string, string> = {}): ChildProcess {
+  const env = { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY };
+  // A WSL project: the command runs in its Linux distribution, in the project's folder (a login shell, so its PATH).
+  const wsl = process.platform === "win32" ? wslTarget(cwd) : undefined;
+  // A project on another computer (SSHFS-Win's path): the command runs there over ssh, in the project's folder.
+  const ssh = wsl ? undefined : sshTarget(cwd);
+  return wsl
+    ? spawn("wsl.exe", ["-d", wsl.distro, "--cd", wsl.dir, "--", "bash", "-lc", command], { windowsHide: true, env })
+    : ssh
+      ? spawn("ssh", sshArgs(ssh, command), { windowsHide: true, env })
+      : spawn(command, { cwd, shell: true, windowsHide: true, env });
+}
+
+/**
+ * Stops a process started with {@link spawnShell} together with its children (taskkill /T on Windows).
+ *
+ * @param pid - The child's process id.
+ * @param child - The child, for the plain kill elsewhere.
+ */
+export function killTree(pid: number | undefined, child?: ChildProcess): void {
+  if (process.platform === "win32" && pid) spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
+  else if (child) child.kill("SIGKILL");
+  else if (pid) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // already gone
+    }
+  }
+}
+
+/**
  * Runs a shell command (cmd on Windows, sh elsewhere), collecting its output.
  * Stopped on timeout or when `signal` aborts, with its child processes.
  *
@@ -76,16 +115,7 @@ export function sshArgs(t: NonNullable<ReturnType<typeof sshTarget>>, command: s
  */
 export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void, extraEnv: Record<string, string> = {}): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
-    const env = { ...process.env, ...extraEnv, CI: "1", FORCE_COLOR: "0", ...AGENT_GIT_IDENTITY };
-    // A WSL project: the command runs in its Linux distribution, in the project's folder (a login shell, so its PATH).
-    const wsl = process.platform === "win32" ? wslTarget(cwd) : undefined;
-    // A project on another computer (SSHFS-Win's path): the command runs there over ssh, in the project's folder.
-    const ssh = wsl ? undefined : sshTarget(cwd);
-    const child = wsl
-      ? spawn("wsl.exe", ["-d", wsl.distro, "--cd", wsl.dir, "--", "bash", "-lc", command], { windowsHide: true, env })
-      : ssh
-        ? spawn("ssh", sshArgs(ssh, command), { windowsHide: true, env })
-        : spawn(command, { cwd, shell: true, windowsHide: true, env });
+    const child = spawnShell(command, cwd, extraEnv);
     let out = "";
     const onData = (b: Buffer) => {
       const text = b.toString();
@@ -96,10 +126,7 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     let timedOut = false;
-    const kill = () => {
-      if (process.platform === "win32" && child.pid) spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
-      else child.kill("SIGKILL");
-    };
+    const kill = () => killTree(child.pid, child);
     const timer = setTimeout(() => {
       timedOut = true;
       kill();

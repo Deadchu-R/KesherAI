@@ -93,6 +93,8 @@ export interface ConversationDeps {
   travelTools?(): AgentTool[];
   /** set_timer and notify_user for a chat (chat-timers.ts). */
   timerTools?(convId: string): AgentTool[];
+  /** Background commands (background-commands.ts): their tools for a chat, `run_command` made able to start one, and cleanup. */
+  background?: { tools(convId: string): AgentTool[]; wrap(convId: string, tool: AgentTool): AgentTool; forget(convId: string): Promise<void> };
   /** The `canvas` tool for a chat (canvas.ts). */
   canvasTools?(convId: string): AgentTool[];
   /**

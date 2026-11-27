@@ -18,6 +18,7 @@ import { docStoreFor, docTools } from "../docs.js";
 import { versionNumber } from "../versions.js";
 import { sheetStoreFor, sheetTools } from "../sheets.js";
 import { timerTools } from "../chat-timers.js";
+import type { BackgroundCommands } from "../background-commands.js";
 import { scheduleTools } from "../chat-schedule.js";
 import { Checkpoints } from "../checkpoints.js";
 import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
@@ -129,6 +130,7 @@ export interface ConversationParts {
   memory: MemoryStore;
   canvases: CanvasStore;
   chatTimers: ChatTimers;
+  background: BackgroundCommands;
   /** Travel search and price watches (travel/). */
   travel: ReturnType<typeof buildTravel>;
   /** The worker's link to the main app (a window-less KesherAI that runs self-work), if this is the worker. */
@@ -148,7 +150,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { renderPdf, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, travel, worker, mainSlot, persist, helperEngine, translator } = p;
+  const { renderPdf, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, background, travel, worker, mainSlot, persist, helperEngine, translator } = p;
   /** Starts ComfyUI when nothing answers at its address. */
   const comfyUp = async () => {
     if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
@@ -358,6 +360,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
       }, true);
       return { id: saved.id, ver: versionNumber(saved) };
     },
+    background: { tools: (convId) => background.tools(convId), wrap: (convId, tool) => background.wrap(convId, tool), forget: (convId) => background.forget(convId) },
     timerTools: (convId) => (library.summary(convId)?.incognito ? [] : [...timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined)), ...scheduleTools(chatTimers, convId)]),
     memory,
   });

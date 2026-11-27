@@ -11,6 +11,7 @@ import { features } from "@kesher/shared";
 import type { ApiKeys } from "../api-keys.js";
 import type { CanvasStore } from "../canvas.js";
 import type { ChatTimers } from "../chat-timers.js";
+import type { BackgroundCommands } from "../background-commands.js";
 import type { DataPaths } from "../config.js";
 import type { Library } from "../library.js";
 import { Pages } from "../pages.js";
@@ -85,6 +86,7 @@ import { mcpRoutes } from "../routes/mcp.js";
 import { journalRoutes } from "../routes/journal.js";
 import { gameRoutes } from "../routes/game.js";
 import { timerRoutes } from "../routes/timers.js";
+import { backgroundRoutes } from "../routes/background.js";
 import { studyRoutes } from "../routes/study.js";
 import { appLinkRoutes, focusRoomRoutes, liveQuizRoutes, projectRoutes } from "../routes/live-quiz.js";
 import { moodleRoutes } from "../routes/moodle.js";
@@ -134,8 +136,8 @@ import { onedriveRoutes } from "../routes/onedrive.js";
  * @param p - The data folders, the chats' library, the API keys, chat timers, canvases and Telegram (the few routes
  *   that take their own part instead of the services).
  */
-export async function registerRoutes(app: FastifyInstance, services: KesherServices, p: { paths: DataPaths; library: Library; apiKeys: ApiKeys; chatTimers: ChatTimers; canvases: CanvasStore; telegram: TelegramBridge; travel: ReturnType<typeof buildTravel> }): Promise<void> {
-  const { paths, library, apiKeys, chatTimers, canvases, telegram, travel } = p;
+export async function registerRoutes(app: FastifyInstance, services: KesherServices, p: { paths: DataPaths; library: Library; apiKeys: ApiKeys; chatTimers: ChatTimers; background: BackgroundCommands; canvases: CanvasStore; telegram: TelegramBridge; travel: ReturnType<typeof buildTravel> }): Promise<void> {
+  const { paths, library, apiKeys, chatTimers, background, canvases, telegram, travel } = p;
   await systemRoutes(app, services);
   shortcutRoutes(app, services);
   await modelRoutes(app, services);
@@ -171,6 +173,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await gameRoutes(app, services);
   await textHelperRoutes(app, services);
   await timerRoutes(app, chatTimers, (id) => library.summary(id)?.title);
+  await backgroundRoutes(app, background);
   await studyRoutes(app, services);
   await liveQuizRoutes(app, services.study);
   await focusRoomRoutes(app);
