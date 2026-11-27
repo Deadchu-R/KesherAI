@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| r-20261127-07 | Research: a private travel skill — flight and stay prices in ILS with phone alerts | [r-20261127-07.md](r-20261127-07.md) |
 | r-20261127-05 | Research (short): working with a local AI app from inside the Claude app (connector, MCP Apps UI, desktop extension) | [r-20261127-05.md](r-20261127-05.md) |
 | r-20261127-02 | Research (short): detect heavy apps and games and switch KesherAI to a light profile by itself | [r-20261127-02.md](r-20261127-02.md) |
 | r-20261127-04 | Research (short): several small dedicated models on the CPU at once without overloading it | [r-20261127-04.md](r-20261127-04.md) |
