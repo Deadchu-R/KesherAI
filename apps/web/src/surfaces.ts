@@ -26,6 +26,7 @@
  */
 import type { ComponentType } from "react";
 import { ITEM_KINDS, itemFromResult as docFromResult, selectionMessage, type ItemKind } from "./doc-items";
+import { CODE_FILES, askMessage, codeFileFromResult } from "./code-surface";
 import { EDITOR_FILES, EDITOR_NAMES, type EditorId } from "./editor-handoff";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
@@ -43,6 +44,8 @@ export interface SurfaceItem {
   path?: string;
   /** The version a tool step made, for the card's "v3". */
   ver?: number;
+  /** The unified diff a file-writing step made (the code surface's card counts it, its panel opens on it). */
+  diff?: string;
 }
 
 /** What the panel shell gives a surface's panel. */
@@ -124,6 +127,25 @@ function docSurface(kind: ItemKind, title: { he: string; en: string }): ChatSurf
   };
 }
 
+/** Code files: the agent's `write_file` / `edit_file` results and "Open in chat" on a source file open the code panel (CodePanel.tsx). */
+const CODE_SURFACE: ChatSurface = {
+  id: "code",
+  title: { he: "קוד", en: "Code" },
+  kinds: ["code"],
+  fileTypes: CODE_FILES,
+  fromResult: (tool, ok, output) => {
+    const path = codeFileFromResult(tool, ok, output);
+    return path ? { kind: "code", id: path, path, title: path.split("/").pop() ?? path } : undefined;
+  },
+  card: () => import("./CodePanel").then((m) => ({ default: m.CodeCard })),
+  panel: () => import("./CodePanel").then((m) => ({ default: m.CodePanel })),
+  panelClass: "code-panel",
+  tools: ["write_file", "edit_file"],
+  phone: "edit",
+  selection: (p) => askMessage({ path: p.item.path ?? p.item.id, selection: p.selection, from: 1, to: 1, instruction: p.instruction, change: p.change, he: p.he }),
+  versions: "none",
+};
+
 /** The item kind and agent tools of each editor. */
 const EDITOR_SURFACE: Record<EditorId, { kind: string; tools: readonly string[]; phone: SurfacePhone }> = {
   "image-editor": { kind: "image", tools: ["generate_image", "make_ui_sprite"], phone: "edit" },
@@ -155,6 +177,7 @@ export const BUILT_IN: readonly ChatSurface[] = [
   docSurface("doc", { he: "מסמך", en: "Document" }),
   docSurface("sheet", { he: "גיליון", en: "Sheet" }),
   docSurface("deck", { he: "מצגת", en: "Slides" }),
+  CODE_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 

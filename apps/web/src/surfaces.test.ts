@@ -7,11 +7,11 @@ const ids = (l: ReadonlyArray<{ id: string }>) => l.map((s) => s.id);
 const nothing = { parts: [], pluginPages: [] };
 
 test("the registry is built from what is installed: an off part or an unloaded plugin is not registered", () => {
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code"]);
   const on = buildSurfaces(BUILT_IN, { parts: [{ id: "image-editor", on: true }, { id: "model-editor", on: false }], pluginPages: [{ pluginId: "image-editor" }, { pluginId: "model-editor" }] });
-  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "image-editor"]);
+  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image-editor"]);
   // A part the server does not list counts as on (as partOn does), but its plugin page must be loaded.
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "sound-editor"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "sound-editor"]);
 });
 
 test("the surface contract: every surface has an id, kinds, a lazy panel, tools, phone and versions", () => {

@@ -1016,7 +1016,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     ...[...new Map(b.steps.flatMap((st) => {
                       const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output) : undefined;
                       const title = typeof st.call.input.title === "string" ? st.call.input.title : undefined;
-                      return it ? [[`${it.surface}:${it.id}`, { ...it, convId: id, ...(title ? { title } : {}) }] as const] : [];
+                      const diff = st.result?.diff;
+                      return it ? [[`${it.surface}:${it.id}`, { ...it, convId: id, ...(title ? { title } : {}), ...(diff && it.surface === "code" ? { diff } : {}) }] as const] : [];
                     })).values()].map((it) => <SurfaceCard key={`${it.surface}:${it.id}:${it.ver ?? 0}`} item={it} live={busy} />),
                     // A chat file the agent opened with open_in_chat: Open in chat (or the install offer when its tool is off).
                     ...b.steps.flatMap((st) => {

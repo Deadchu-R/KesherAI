@@ -112,6 +112,17 @@ export function openCanvas(m: CanvasItem): void {
   changed();
 }
 
+/**
+ * Whether two page addresses are the same page: only the query (`?file=a.ts`) differs. The panel stays open on a
+ * change of the query and closes on another page.
+ *
+ * @param a - The address before; `b` the address now (`location.hash`).
+ */
+export function sameRoute(a: string, b: string): boolean {
+  const path = (h: string) => h.replace(/^#/, "").split("?")[0]!.replace(/\/+$/, "");
+  return path(a) === path(b);
+}
+
 /** Closes the panel (✕, or "Back to chat" on the phone). */
 export function closePanel(): void {
   item = null;
@@ -192,8 +203,13 @@ export function ArtifactPanel() {
   useEffect(() => {
     const f = () => tick((n) => n + 1);
     listeners.add(f);
-    // Another chat or page: the panel closes.
+    // Another chat or page: the panel closes. The same page with another query (an editor that writes the file or
+    // line it shows into the address, `#/c/x?file=a.ts`) keeps it open.
+    let route = location.hash;
     const away = () => {
+      const was = route;
+      route = location.hash;
+      if (sameRoute(was, route)) return;
       versions = [];
       accepted = null;
       current = -1;

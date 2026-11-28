@@ -12,6 +12,7 @@ import { paintModel, pictureTo3d } from "../chat-tools-media.js";
 import { checkSegments, cutVideo, EXPORT_HEIGHTS, TRANSITIONS, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
 import { pickLanguage, toWav } from "../speech-tools.js";
 import { folderOutline, zipOutline } from "../attach-outline.js";
+import { searchFolder } from "../folder-search.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
 const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "build", ".next", ".cache"]);
@@ -66,6 +67,13 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     return { folder: root, files: await listFiles(root) };
+  });
+
+  /** "Search in the folder" of the code panel: `?q=` text, case-insensitive; the lines that hold it. */
+  app.get<{ Params: { id: string }; Querystring: { q?: string } }>("/api/conversations/:id/files/search", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    return { hits: await searchFolder(root, String(req.query.q ?? "").slice(0, 200)) };
   });
 
   /**

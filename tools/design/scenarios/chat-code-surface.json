@@ -1,0 +1,173 @@
+{
+ "group": "צ'אט · Chat",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c9",
+   "method": "GET",
+   "json": {
+    "id": "c9",
+    "projectId": null,
+    "title": "קפיצה של השועל",
+    "kind": "code",
+    "modelId": "qwen3",
+    "mode": "ask",
+    "createdAt": {
+     "$ago": "30m"
+    },
+    "updatedAt": {
+     "$ago": "2m"
+    },
+    "messageCount": 6,
+    "session": {
+     "id": "c8",
+     "status": "idle",
+     "modelId": "qwen3",
+     "mode": "ask",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "5m"
+      },
+      "type": "user",
+      "text": "תגביל את הקפיצה של השועל ותתקן את איסוף המטבעות"
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_call",
+      "callId": "k1",
+      "name": "edit_file",
+      "input": {
+       "path": "src/jump.ts",
+       "old_text": "held * 30",
+       "new_text": "Math.min(held, 0.4) * 30"
+      }
+     },
+     {
+      "seq": 3,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_result",
+      "callId": "k1",
+      "name": "edit_file",
+      "ok": true,
+      "output": "Edited src/jump.ts.",
+      "diff": "--- a/src/jump.ts\n+++ b/src/jump.ts\n@@ -1,8 +1,8 @@\n import { Fox } from \"./fox\";\n \n /** The fox's jump: speed and how long the button was held. */\n export function jump(fox: Fox, held: number): number {\n-  const power = held * 30;\n+  const power = Math.min(held, 0.4) * 30;\n   fox.vy = -power;\n   return power;\n }\n@@ -11,5 +11,5 @@\n export class Coin {\n   constructor(public x: number, public y: number) {}\n   collect(fox: Fox): boolean {\n-    return fox.x === this.x && fox.y === this.y;\n+    return Math.abs(fox.x - this.x) < 16 && Math.abs(fox.y - this.y) < 16;\n   }\n }"
+     },
+     {
+      "seq": 4,
+      "at": {
+       "$ago": "3m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "הגבלתי את הקפיצה ל-0.4 שניות ותיקנתי את איסוף המטבעות."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c9/events*",
+   "body": ": hi\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/parts",
+   "json": {
+    "simple": false,
+    "parts": [
+     {
+      "id": "model-editor",
+      "pages": [],
+      "icon": "🧊",
+      "downloadGb": 0,
+      "plugin": "model-editor",
+      "title": {
+       "en": "3D editor",
+       "he": "עורך תלת ממד"
+      },
+      "description": {
+       "en": "",
+       "he": ""
+      },
+      "on": false
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c9/files",
+   "method": "GET",
+   "json": {
+    "folder": "/work/fox",
+    "files": [
+     {
+      "path": "src/jump.ts",
+      "size": 420,
+      "modifiedAt": "2026-11-28T10:00:00Z"
+     },
+     {
+      "path": "src/fox.ts",
+      "size": 900,
+      "modifiedAt": "2026-11-28T09:00:00Z"
+     },
+     {
+      "path": "src/main.ts",
+      "size": 1500,
+      "modifiedAt": "2026-11-28T08:00:00Z"
+     },
+     {
+      "path": "package.json",
+      "size": 300,
+      "modifiedAt": "2026-11-28T07:00:00Z"
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c9/files/text*",
+   "method": "GET",
+   "json": {
+    "path": "src/jump.ts",
+    "text": "import { Fox } from \"./fox\";\n\n/** The fox's jump: speed and how long the button was held. */\nexport function jump(fox: Fox, held: number): number {\n  const power = Math.min(held, 0.4) * 30;\n  fox.vy = -power;\n  return power;\n}\n\nexport class Coin {\n  constructor(public x: number, public y: number) {}\n  collect(fox: Fox): boolean {\n    return Math.abs(fox.x - this.x) < 16 && Math.abs(fox.y - this.y) < 16;\n  }\n}\n"
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "ChatCodeSurface",
+   "title": "כלים בצ'אט: קוד כמו ב-Rider. כרטיס עם +/− שורות, לשוניות, עץ קבצים, מבנה, חיפוש, שינויים עם אישור/החזרה",
+   "titleEn": "Tools in chat: code like Rider. A card with +/- lines, tabs, file tree, outline, search, changes with Accept/Reject",
+   "route": "#/c/c9",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 820,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".code-card"
+    },
+    {
+     "click": ".code-card"
+    },
+    {
+     "wait": ".code-hunk"
+    }
+   ]
+  }
+ ]
+}
