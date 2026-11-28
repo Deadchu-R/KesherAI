@@ -33,12 +33,64 @@ const he = () => getLocale() === "he";
 const nameOf = (s: Source) => (he() ? s.nameHe : s.name);
 const timeText = (t?: number) => (t ? new Date(t).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "");
 
+/** A file:line reference parsed from a log line (mirrors core/log-reader.ts FileLink). */
+interface FileLink { file: string; line?: number; col?: number }
+
+/** Extracts file:line references from a log line. Supports `path:line`, `path:line:col`, and `(path:line)`. */
+function parseFileLinks(text: string): FileLink[] {
+  const out: FileLink[] = [];
+  // Matches paths like /foo/bar.ts:12, C:\foo\bar.ts:12:5, (src/x.js:42), ./lib/y.ts:8
+  const re = /(?:^|[\s(])([A-Za-z]:\\[^\s:)]+|\/[^\s:)]+|\.[\/\\][^\s:)]+|[^\s:)(]+?\.(?:ts|tsx|js|jsx|cs|gd|py|go|rs|c|cpp|h|hpp|java|kt|swift|m|mm|sh|bash|zsh|css|scss|html|vue|svelte)):(\d+)(?::(\d+))?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    out.push({ file: m[1]!, line: Number(m[2]!), col: m[3] ? Number(m[3]) : undefined });
+  }
+  return out;
+}
+
+/** Opens a file in the user's preferred IDE via POST /api/ides/open. */
+async function openInIde(link: FileLink): Promise<void> {
+  try {
+    const ides = await api<Array<{ id: string }>>("/api/ides").catch(() => []);
+    const id = ides[0]?.id;
+    if (!id) { toast(L("לא נמצא עורך קוד.", "No code editor found.")); return; }
+    await api("/api/ides/open", { method: "POST", body: { id, file: link.file, line: link.line ?? 1 } });
+  } catch (e) {
+    toast((e as Error).message);
+  }
+}
+
+/** Renders a message with clickable file:line links. */
+function MsgWithLinks({ text }: { text: string }) {
+  const links = useMemo(() => parseFileLinks(text), [text]);
+  if (!links.length) return <span dir="auto">{text}</span>;
+  // Split text by matched links and interleave <a> tags.
+  const parts: Array<{ kind: "text" | "link"; value: string; link?: FileLink }> = [];
+  let last = 0;
+  const re = /(?:^|[\s(])([A-Za-z]:\\[^\s:)]+|\/[^\s:)]+|\.[\/\\][^\s:)]+|[^\s:)(]+?\.(?:ts|tsx|js|jsx|cs|gd|py|go|rs|c|cpp|h|hpp|java|kt|swift|m|mm|sh|bash|zsh|css|scss|html|vue|svelte)):(\d+)(?::(\d+))?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) parts.push({ kind: "text", value: text.slice(last, m.index) });
+    const link: FileLink = { file: m[1]!, line: Number(m[2]!), col: m[3] ? Number(m[3]) : undefined };
+    parts.push({ kind: "link", value: m[0].trimStart(), link });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ kind: "text", value: text.slice(last) });
+  return (
+    <span dir="auto">
+      {parts.map((p, i) => p.kind === "link" && p.link ? (
+        <a key={i} href="#" className="log-file-link" onClick={(ev) => { ev.preventDefault(); void openInIde(p.link!); }}>{p.value}</a>
+      ) : <span key={i}>{p.value}</span>)}
+    </span>
+  );
+}
+
 /** One entry: its level, time, category and message, and its stack trace folded. */
 function EntryLine({ e, dim }: { e: Entry; dim?: boolean }) {
   return (
     <div className={`log-line lvl-${e.level}${dim ? " dim" : ""}`}>
       <span className="log-meta" dir="ltr">{e.t ? new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : `#${e.n}`}{e.cat ? ` ${e.cat}` : ""}</span>
-      <span className="log-msg" dir="auto">{e.msg}</span>
+      <span className="log-msg"><MsgWithLinks text={e.msg} /></span>
       {!!e.extra?.length && (
         <details className="log-extra">
           <summary>{L(`${e.extra.length} שורות נוספות`, `${e.extra.length} more lines`)}</summary>

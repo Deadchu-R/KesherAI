@@ -47,6 +47,8 @@
 .log-line.dim { opacity: .55; }
 .log-meta { color: var(--muted); white-space: nowrap; }
 .log-msg { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.log-file-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; background: transparent; border: 0; padding: 0; font: inherit; }
+.log-file-link:hover { text-decoration-thickness: 2px; }
 .log-extra { flex-basis: 100%; }
 .log-extra summary { cursor: pointer; color: var(--muted); }
 .log-extra pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }

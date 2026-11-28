@@ -604,6 +604,41 @@ export function explainPrompt(sourceName: string, p: LogPattern, lines: readonly
  * @param list - The error patterns (log-reader recentErrors).
  * @param he - Answer in Hebrew.
  */
+/** A file:line reference parsed from a log line. */
+export interface FileLink {
+  /** Absolute or relative path as written in the log. */
+  file: string;
+  /** 1-based line number, if present. */
+  line?: number;
+  /** 1-based column number, if present. */
+  col?: number;
+}
+
+/**
+ * Extracts file:line references from a log line. Supports `path:line`, `path:line:col`,
+ * `path(line)` and `path(line,col)` (C#/C++ compilers). Returns at most 8 links to avoid
+ * runaway matches on minified output.
+ *
+ * @param text - The raw log line.
+ * @param cwd - Optional base folder for resolving relative paths (not resolved here; the UI keeps the raw string).
+ */
+export function parseFileLinks(text: string, cwd?: string): FileLink[] {
+  void cwd; // reserved for future resolution; kept in the signature for callers
+  const out: FileLink[] = [];
+  // Unix/Windows paths ending with a common code extension, followed by :line(:col) or (line[,col]).
+  const re = /(?:\.{0,2}\/|[A-Za-z]:\\)?[\w@\-./\\]+\.(?:ts|tsx|js|jsx|mjs|cjs|cs|cpp|cc|cxx|h|hpp|java|go|rs|py|rb|swift|kt|kts|gd|shader|hlsl|glsl|vert|frag|compute)(?::(\d+)(?::(\d+))?|\((\d+)(?:,(\d+))?\))/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (out.length >= 8) break;
+    const file = m[0].replace(/[:\(]\d+(?::\d+)?\)?$/i, "");
+    const line = m[1] != null ? Number(m[1]) : m[3] != null ? Number(m[3]) : undefined;
+    const col = m[2] != null ? Number(m[2]) : m[4] != null ? Number(m[4]) : undefined;
+    if (!file || !Number.isFinite(line ?? 0)) continue;
+    out.push({ file, line: line && line > 0 ? line : undefined, col: col && col > 0 ? col : undefined });
+  }
+  return out;
+}
+
 export function summaryPrompt(list: ReadonlyArray<LogPattern & { sourceName: string }>, he: boolean): { system: string; user: string } {
   const rows = list.map((p) => `- [${p.sourceName}] ×${p.count}${p.rising ? " (rising)" : ""}${p.label ? ` (marked ${p.label})` : ""}: ${clip(p.sample, 300)}`);
   const ask = he ? "סכם את השגיאות האלה מהשעה האחרונה: מה החשוב ביותר, מה קשור למה, ומה לעשות קודם. עד 8 שורות." : "Summarize these errors from the last hour: what matters most, what is related, and what to do first. At most 8 lines.";

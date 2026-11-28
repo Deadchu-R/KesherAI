@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkAddedFile, explainPrompt, inboxRunLines, isInside, LogReader, readTail, selfWorkLines, summaryPrompt, usageLines } from "./log-reader.js";
+import { checkAddedFile, explainPrompt, inboxRunLines, isInside, LogReader, parseFileLinks, readTail, selfWorkLines, summaryPrompt, usageLines } from "./log-reader.js";
 import { parseLog } from "./log-parse.js";
 
 test("isInside: Windows paths in any case and slash; no escape with .. or a sibling prefix", () => {
@@ -131,4 +131,27 @@ test("usage log lines: event, task, model, reason and numbers in the message; ex
   const [a, b] = parseLog(usageLines(['{"at":1764000000000,"level":"error","executor":"opencode","model":"go/beam-free","task":"r-1","event":"stop","why":"no progress for 20 min","numbers":{"steps":40}}', "not json", '{"at":1764000001000,"level":"suggestion","executor":"local","event":"saving"}'].join("\n")).join("\n"));
   assert.deepEqual([a!.level, a!.cat, a!.msg, a!.t], ["error", "opencode", "stop r-1 (go/beam-free): no progress for 20 min [steps=40]", 1764000000000]);
   assert.deepEqual([b!.level, b!.msg], ["info", "saving (suggestion)"]);
+});
+
+test("parseFileLinks: colon and parenthesis forms, with optional column", () => {
+  const a = parseFileLinks("error at src/app.ts:42:10 boom");
+  assert.equal(a.length, 1);
+  assert.equal(a[0].file, "src/app.ts");
+  assert.equal(a[0].line, 42);
+  assert.equal(a[0].col, 10);
+
+  const b = parseFileLinks("Build FAILED: Main.cs(17) or Utils.cpp(8,23)");
+  assert.equal(b.length, 2);
+  assert.equal(b[0].file, "Main.cs");
+  assert.equal(b[0].line, 17);
+  assert.equal(b[0].col, undefined);
+  assert.equal(b[1].file, "Utils.cpp");
+  assert.equal(b[1].line, 8);
+  assert.equal(b[1].col, 23);
+
+  const c = parseFileLinks("no path here");
+  assert.equal(c.length, 0);
+
+  // cwd parameter is accepted (reserved) and does not throw
+  assert.doesNotThrow(() => parseFileLinks("x.ts:1", "/tmp"));
 });
