@@ -618,6 +618,14 @@ Ordered by user impact (RESEARCH_LOG "2026-11-28 night — chats like Claude, ga
 - ⬜ S: default-model advice: prefer dense 27B over 35B-A3B MoE for agent chats in the model picker note (measure with the chat-checks runner first).
 
 ## Tools inside the chat (Roee 28.11 02:17)
+
+Roee's decisions (28.11 02:20-02:25): display = inline card in the message + side panel + full screen (phone: the panel
+opens full screen); code = a FULL editor in the chat panel (Rider-like: highlighting, file tree, search, diffs, hand
+editing); Word = real .docx files (open/edit/save) besides KesherAI docs; new libraries approved: a .docx library and
+`sharp` (both loaded only with their part); video/music on the phone = watch + ask the model AND hand editing, the
+editing as a SEPARATE phone-fitted component, built only after researching how phone video/music editors do it
+(CapCut, VN, InShot, BandLab, GarageBand iOS, Audiomass…). Tonight's order, and keep going after: contract + doc/sheet/
+deck → code → images → 3D + scenes → video/music → .docx.
 Every installed tool opens, edits and creates inside the chat, like Claude's artifacts. Research: RESEARCH_LOG "2026-11-28 — every tool inside the chat". In rollout order by user value; each ships checked in remote (390 px phone, Hebrew/RTL), with a "live / static preview" switch per platform for the heavy ones.
 - ⬜ M: the chat-surface contract (`apps/web/src/surfaces.ts`: id, kinds, fileTypes, `fromResult`, lazy `card`/`panel`, tools, `phone`, selection text, versions) built from `/api/parts` and `/api/plugins/ui`; `PanelItem` gets `surface`; `ArtifactPanel` keeps the shell; migrate doc, sheet and deck onto it with no visible change (tests: `fromResult`, selection message, phone sheet, nothing loaded when a part is off). First task.
 - ⬜ S: `open_in_chat` agent tool and an "Open" chip on every file chip, picked by file type (reuses `EDITOR_FILES`); shows the install offer when the part is off.
