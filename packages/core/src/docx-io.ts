@@ -203,30 +203,33 @@ function blocksMd(kids: Array<Node | string>): string[] {
 }
 
 /**
- * A Word file as Markdown.
- *
- * @param data - The .docx bytes.
- * @param saveImage - Keeps a picture and says the address to use in the Markdown.
- * @returns The Markdown.
- * @throws With status 400 when the bytes are not a Word file.
- */
-export async function docxToMarkdown(data: Uint8Array, saveImage: SaveImage): Promise<string> {
-  if (data.length < 4 || data[0] !== 0x50 || data[1] !== 0x4b) throw httpError(400, "This is not a Word (.docx) file.");
-  if (data.length > MAX_DOCX_BYTES) throw httpError(400, "The file is larger than 30 MB.");
-  const mammoth = await import("mammoth");
-  let html: string;
-  try {
-    html = (
-      await mammoth.convertToHtml(
+   * A Word file as Markdown, with warnings about potential lossy conversion.
+   *
+   * @param data - The .docx bytes.
+   * @param saveImage - Keeps a picture and says the address to use in the Markdown.
+   * @returns The Markdown and an array of warning messages from mammoth.
+   * @throws With status 400 when the bytes are not a Word file.
+   */
+  export async function docxToMarkdown(data: Uint8Array, saveImage: SaveImage): Promise<{ markdown: string; warnings: string[] }> {
+    if (data.length < 4 || data[0] !== 0x50 || data[1] !== 0x4b) throw httpError(400, "This is not a Word (.docx) file.");
+    if (data.length > MAX_DOCX_BYTES) throw httpError(400, "The file is larger than 30 MB.");
+    const mammoth = await import("mammoth");
+    let html: string;
+    let messages: Array<{ type: string; message: string }>;
+    try {
+      const result = await mammoth.convertToHtml(
         { buffer: Buffer.from(data) },
         { convertImage: mammoth.images.imgElement(async (img) => ({ src: await saveImage(new Uint8Array(await img.readAsBuffer()), img.contentType) })) },
-      )
-    ).value;
-  } catch {
-    throw httpError(400, "This Word file could not be read.");
+      );
+      html = result.value;
+      messages = result.messages ?? [];
+    } catch {
+      throw httpError(400, "This Word file could not be read.");
+    }
+    const markdown = blocksMd(parseHtml(html).kids).join("\n\n");
+    const warnings = messages.filter((m) => m.type === "warning").map((m) => m.message);
+    return { markdown, warnings };
   }
-  return blocksMd(parseHtml(html).kids).join("\n\n");
-}
 
 // ---------------------------------------------------------------- Markdown to Word
 
