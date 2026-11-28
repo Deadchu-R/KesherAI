@@ -3412,6 +3412,11 @@ html.handheld .palette-list button { min-height: 44px; }
   .artifact-bar strong { flex-basis: 100%; order: 1; }
 }
 .artifact-panel.full .artifact-resize { display: none; }
+/* A chat surface from an editor plugin (chat/PluginSurface.tsx): its page fills the panel under the bar. */
+.plugin-surface-body { flex: 1; min-height: 0; display: flex; }
+p.plugin-surface-body { padding: 16px; }
+/* "Open in chat" chip and its card for a file the agent opened (chat/surface-ui.tsx). */
+.surface-open-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* Documents, sheets and decks in the panel (design DocPanel). */
 .doc-panel-view, .doc-panel-edit { flex: 1; overflow: auto; min-height: 0; }
 .doc-panel-view { padding: 12px; }

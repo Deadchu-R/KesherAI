@@ -20,6 +20,7 @@ const TOOLS: Record<string, ToolInfo> = {
   web_fetch: { icon: "🌐", he: "קריאת עמוד", en: "Read web page", hePlural: "{n} עמודים נקראו", enPlural: "{n} web pages read" },
   download_file: { icon: "⬇️", he: "הורדת קובץ", en: "Download file", hePlural: "{n} הורדות", enPlural: "{n} downloads" },
   send_file: { icon: "📤", he: "שליחת קובץ", en: "Send file", hePlural: "{n} קבצים נשלחו", enPlural: "{n} files sent" },
+  open_in_chat: { icon: "▣", he: "פתיחה בצ'אט", en: "Open in chat", hePlural: "{n} נפתחו בצ'אט", enPlural: "{n} opened in chat" },
   read_file: { icon: "📄", he: "קריאת קובץ", en: "Read file", hePlural: "{n} קבצים נקראו", enPlural: "{n} files read" },
   read_document: { icon: "📄", he: "קריאת מסמך", en: "Read document" },
   list_files: { icon: "📁", he: "רשימת קבצים", en: "List files" },

@@ -3,6 +3,7 @@ import { addr, computeSheet, docxFiles, fenceAt, isEditShortcut, locateSpan, she
 import { api, withToken } from "./api";
 import { closePanel, openItem } from "./ArtifactPanel";
 import { ITEM_KINDS, selectionMessage, type ItemKind, type PanelItem } from "./doc-items";
+import type { SurfaceCardProps, SurfaceItem, SurfacePanelProps } from "./surfaces";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { RichText } from "./RichText";
@@ -58,6 +59,21 @@ export function ItemCard({ item, ver, live = false }: { item: PanelItem; ver?: n
       <span className="item-card-open">{L("פתיחה", "Open")} ›</span>
     </button>
   );
+}
+
+/** A surface item as the document, sheet or deck it is (surfaces.ts registers doc, sheet and deck). */
+function asPanelItem(s: SurfaceItem): PanelItem {
+  return { kind: s.kind as ItemKind, id: s.id, ...(s.convId ? { convId: s.convId } : {}), ...(s.title ? { title: s.title } : {}) };
+}
+
+/** {@link ItemCard} as the doc, sheet and deck surfaces' card in the message. */
+export function ItemSurfaceCard({ item, ver, live }: SurfaceCardProps) {
+  return <ItemCard item={asPanelItem(item)} {...(ver ? { ver } : {})} {...(live ? { live } : {})} />;
+}
+
+/** {@link ItemPanel} as the doc, sheet and deck surfaces' panel. */
+export function ItemSurface({ item, full, onFull }: SurfacePanelProps) {
+  return <ItemPanel item={asPanelItem(item)} full={full} onFull={onFull} />;
 }
 
 /**

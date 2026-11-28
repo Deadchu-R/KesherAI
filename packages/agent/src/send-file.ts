@@ -77,3 +77,41 @@ export const sendFileTool: AgentTool = {
     return { output: `Sent ${rel} (${size} bytes) to the chat as a card. The user can preview and download it; do not paste its content.`, files: [rel], cards: [card] };
   },
 };
+
+/** A document, sheet or deck the agent may open by its page address. */
+const ITEM_REF = /^#\/(docs|sheets|slides)\/[\w-]{1,80}$/;
+
+/**
+ * Opens a chat file or a document, sheet or deck in the chat's side panel (full screen on the phone), in the
+ * installed tool for its type (the interface picks it: surfaces.ts). When that tool is off, the user gets the
+ * install offer on the card. Nothing is changed or copied, except a file of a granted folder outside the chat's
+ * folder, which is copied into `sent/` as `send_file` does.
+ */
+export const openInChatTool: AgentTool = {
+  risk: "read",
+  spec: {
+    name: "open_in_chat",
+    description: "Open a file or a document in the chat's side panel, in the installed tool for its type (pictures in the picture editor, video, sound, 3D models, and documents, sheets and slides by their #/docs/<id>, #/sheets/<id> or #/slides/<id> address), so the user sees and edits it without leaving the chat. If the tool for that type is not installed, the user is offered to install it. Give path or item, not both.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "A file, relative to the project folder." },
+        item: { type: "string", description: "A document, sheet or deck address: #/docs/<id>, #/sheets/<id> or #/slides/<id>." },
+      },
+    },
+  },
+  async preview(input) {
+    return `Open ${String(input.path ?? input.item ?? "")} in the chat`;
+  },
+  async run(input, ctx: ToolContext) {
+    const item = typeof input.item === "string" ? input.item.trim() : "";
+    const path = typeof input.path === "string" ? input.path.trim() : "";
+    if (!item === !path) throw new Error("Give either path (a file) or item (#/docs/<id>, #/sheets/<id> or #/slides/<id>).");
+    if (item) {
+      if (!ITEM_REF.test(item)) throw new Error("item must be #/docs/<id>, #/sheets/<id> or #/slides/<id>.");
+      return { output: `Opened in the chat: ${item}\nThe user sees it in the side panel.` };
+    }
+    const { rel } = await resolveSendable(ctx, path);
+    return { output: `Opened in the chat: ${rel}\nThe user sees it in the side panel, in the installed tool for its type (or is offered to install that tool).` };
+  },
+};

@@ -6,6 +6,7 @@ import { getLocale, he$ } from "../i18n";
 import { MediaView, fileUrl, useNear } from "../MediaView";
 import { RichText } from "../RichText";
 import { FilePreview, framed } from "./Attachments";
+import { OpenInChat } from "./surface-ui";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -16,8 +17,9 @@ type Peek = { kind: "text"; text: string } | { kind: "html"; html: string } | { 
  * A file the agent posted with `send_file`, as Claude shows a delivered file: the name, size, type icon and the
  * caption, a preview that fits the file (a picture, a PDF's first page, rendered Markdown, a page in a sandbox with
  * no scripts, the first 40 lines of text or code, a table, a player), and the buttons Open, Show in folder (the
- * computer app) and Download. On the phone the file streams from the PC through the same authorized download
- * address as every other chat file (`fileUrl` adds the device's token); there is never a public address.
+ * computer app), Download and Open in chat (when an installed tool opens its type). On the phone the file streams
+ * from the PC through the same authorized download address as every other chat file (`fileUrl` adds the device's
+ * token); there is never a public address.
  *
  * @param props.convId - The chat.
  * @param props.card - The card from the tool's result.
@@ -63,6 +65,7 @@ export function SentFileCard({ convId, card }: { convId: string; card: FileCardI
         <button type="button" onClick={() => (desktop()?.openPath ? void absolute().then((p) => desktop()!.openPath!(p)) : window.open(url, "_blank", "noopener"))}>{L("פתח", "Open")}</button>
         {desktop()?.openPath && <button type="button" onClick={() => void absolute().then((p) => desktop()!.openPath!(p.replace(/[\\/][^\\/]+$/, "")))}>{L("הצג בתיקייה", "Show in folder")}</button>}
         <a className="button" href={url} download={card.name}>{L("הורד", "Download")}</a>
+        <OpenInChat convId={convId} name={card.name} path={card.path} />
       </div>
     </div>
   );

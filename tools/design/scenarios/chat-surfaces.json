@@ -1,0 +1,260 @@
+{
+ "group": "צ'אט · Chat",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c8",
+   "method": "GET",
+   "json": {
+    "id": "c8",
+    "projectId": null,
+    "title": "מסמך עיצוב ומודל לשועל",
+    "kind": "chat",
+    "modelId": "qwen3",
+    "mode": "ask",
+    "createdAt": {
+     "$ago": "30m"
+    },
+    "updatedAt": {
+     "$ago": "2m"
+    },
+    "messageCount": 6,
+    "session": {
+     "id": "c8",
+     "status": "idle",
+     "modelId": "qwen3",
+     "mode": "ask",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "5m"
+      },
+      "type": "user",
+      "text": "תכתוב מסמך עיצוב קצר לפלטפורמר, ותפתח לי את מודל השועל"
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_call",
+      "callId": "d1c",
+      "name": "document",
+      "input": {
+       "title": "מסמך עיצוב: השועל והיער",
+       "body": "## תקציר\n\nהמשחק הוא פלטפורמר דו-ממדי שבו שועל קטן אוסף מטבעות ביער קסום ונלחם ביצורים מוזרים לאורך הדרך.\n\n## קהל יעד\n\nשחקנים בני 10 ומעלה שאוהבים משחקי פעולה קצרים בטלפון."
+      }
+     },
+     {
+      "seq": 3,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_result",
+      "callId": "d1c",
+      "name": "document",
+      "ok": true,
+      "output": "Saved v3 of the document. The user sees it at #/docs/d1"
+     },
+     {
+      "seq": 4,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_call",
+      "callId": "o1c",
+      "name": "open_in_chat",
+      "input": {
+       "path": "shared/fox.glb"
+      }
+     },
+     {
+      "seq": 5,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_result",
+      "callId": "o1c",
+      "name": "open_in_chat",
+      "ok": true,
+      "output": "Opened in the chat: shared/fox.glb\nThe user sees it in the side panel, in the installed tool for its type (or is offered to install that tool)."
+     },
+     {
+      "seq": 6,
+      "at": {
+       "$ago": "3m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "כתבתי את המסמך ופתחתי את המודל בצ'אט. אפשר לסמן חלק מהמסמך ולבקש שינוי רק בו."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c8/events*",
+   "body": ": hi\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/docs/d1/events*",
+   "body": "data: {\"rev\":3}\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/docs/d1",
+   "method": "GET",
+   "json": {
+    "id": "d1",
+    "title": "מסמך עיצוב: השועל והיער",
+    "body": "## תקציר\n\nהמשחק הוא פלטפורמר דו-ממדי שבו שועל קטן אוסף מטבעות ביער קסום ונלחם ביצורים מוזרים לאורך הדרך.\n\n## קהל יעד\n\nשחקנים בני 10 ומעלה שאוהבים משחקי פעולה קצרים בטלפון.",
+    "rev": 3,
+    "ver": 3,
+    "convId": "c8",
+    "versions": []
+   }
+  },
+  {
+   "url": "**/api/parts",
+   "json": {
+    "simple": false,
+    "parts": [
+     {
+      "id": "model-editor",
+      "pages": [],
+      "icon": "🧊",
+      "downloadGb": 0,
+      "plugin": "model-editor",
+      "title": {
+       "en": "3D editor",
+       "he": "עורך תלת ממד"
+      },
+      "description": {
+       "en": "",
+       "he": ""
+      },
+      "on": false
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/installables/model-editor",
+   "json": {
+    "id": "model-editor",
+    "he": "עורך תלת ממד",
+    "en": "3D editor",
+    "aboutHe": "חלקים, חומרים ומידות של מודל תלת ממד, וייצוא חזרה לצ'אט.",
+    "aboutEn": "Parts, materials and measurements of a 3D model, exported back to the chat.",
+    "sizeGb": 0,
+    "where": "KesherAI/plugins",
+    "changeHref": "#/settings/parts",
+    "ready": false,
+    "busy": false
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "ChatSurfaces",
+   "title": "כלים בצ'אט: כרטיס בהודעה לכל פריט, \"פתיחה בצ'אט\", ו\"התקנה ופתיחה\" כשהכלי כבוי",
+   "titleEn": "Tools in chat: a card in the message per item, \"Open in chat\", or \"Install and open\" when its tool is off",
+   "route": "#/c/c8",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".surface-open-card"
+    }
+   ]
+  },
+  {
+   "id": "ChatSurfacesPanel",
+   "title": "כלים בצ'אט: הפאנל בצד פתוח על הפריט; בטלפון במסך מלא עם \"חזרה לצ'אט\"",
+   "titleEn": "Tools in chat: the side panel open on the item; on the phone it is full screen with \"Back to chat\"",
+   "route": "#/c/c8",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "button.item-card"
+    },
+    {
+     "click": "button.item-card"
+    },
+    {
+     "wait": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    }
+   ]
+  },
+  {
+   "id": "ChatSurfacesFull",
+   "title": "כלים בצ'אט: מסך מלא (⛶), והצ'אט חוזר בלחיצה",
+   "titleEn": "Tools in chat: full screen (⛶); one tap back to the chat",
+   "route": "#/c/c8",
+   "viewports": [
+    "desktop"
+   ],
+   "height": {
+    "desktop": 800
+   },
+   "steps": [
+    {
+     "wait": "button.item-card"
+    },
+    {
+     "click": "button.item-card"
+    },
+    {
+     "wait": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    },
+    {
+     "click": ".artifact-panel button[aria-pressed]"
+    }
+   ]
+  },
+  {
+   "id": "ChatSurfacesInstall",
+   "title": "כלים בצ'אט: \"התקנה ופתיחה\" פותח את חלון ההתקנה, ואחריו הקובץ נפתח בפאנל",
+   "titleEn": "Tools in chat: \"Install and open\" shows the Install window, then the file opens in the panel",
+   "route": "#/c/c8",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".surface-open-card button"
+    },
+    {
+     "click": ".surface-open-card button"
+    },
+    {
+     "wait": ".install-dialog"
+    }
+   ]
+  }
+ ]
+}

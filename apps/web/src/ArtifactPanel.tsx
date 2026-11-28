@@ -1,13 +1,20 @@
-import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type LazyExoticComponent, type PointerEvent as ReactPointerEvent } from "react";
 import { isEditShortcut, type TextSpan } from "@kesher/shared";
 import { CodeView } from "./ide/CodeView";
 import type { PanelItem } from "./doc-items";
+import { BUILT_IN, type SurfaceItem, type SurfacePanelProps } from "./surfaces";
 import type { CanvasItem } from "./chat/canvas-items";
 import { getLocale, he$ } from "./i18n";
 
 const DesignBoard = lazy(() => import("./DesignBoard").then((m) => ({ default: m.DesignBoard })));
-// Documents, sheets and decks (DocPanel.tsx imports this file for openItem, so it is loaded when first needed).
-const ItemPanel = lazy(() => import("./DocPanel").then((m) => ({ default: m.ItemPanel })));
+// A surface's panel (documents, sheets, decks, editors…; surfaces.ts), loaded the first time that surface opens.
+const panels = new Map<string, LazyExoticComponent<ComponentType<SurfacePanelProps>>>();
+function surfacePanel(id: string): { Panel: LazyExoticComponent<ComponentType<SurfacePanelProps>>; className: string } | undefined {
+  const s = BUILT_IN.find((x) => x.id === id);
+  if (!s) return undefined;
+  if (!panels.has(id)) panels.set(id, lazy(s.panel));
+  return { Panel: panels.get(id)!, className: s.panelClass ?? "" };
+}
 // Pictures, PBR map sets and code diffs (CanvasPanel.tsx, design ChatCanvas), loaded when first opened.
 const CanvasPanel = lazy(() => import("./CanvasPanel").then((m) => ({ default: m.CanvasPanel })));
 // "Edit with AI" on a selection in the code (SpanEdit.tsx), loaded when first used.
@@ -38,8 +45,8 @@ let versions: string[] = [];
  */
 let accepted: { at: number; from: number } | null = null;
 let current = -1;
-/** The document, sheet or deck open in the panel (instead of a page block), if any. */
-let item: PanelItem | null = null;
+/** The item open in a surface's panel (a document, sheet, deck, an editor's file…), if any. */
+let item: SurfaceItem | null = null;
 /** The picture, PBR set or diff open in the panel (the side canvas), if any. */
 let media: CanvasItem | null = null;
 const listeners = new Set<() => void>();
@@ -72,6 +79,16 @@ export function openArtifact(code: string): void {
  * @param p - The item: its kind, id, the chat it was opened from and its title.
  */
 export function openItem(p: PanelItem): void {
+  openSurface({ surface: p.kind, ...p });
+}
+
+/**
+ * Opens the panel on an item of a chat surface (surfaces.ts): a card's Open, a file's "Open in chat", or the agent's
+ * `open_in_chat`. On the phone the panel is full screen.
+ *
+ * @param p - The item and the surface that shows it.
+ */
+export function openSurface(p: SurfaceItem): void {
   item = p;
   media = null;
   versions = [];
@@ -201,11 +218,13 @@ export function ArtifactPanel() {
       </aside>
     );
   }
-  if (item) {
+  const surface = item ? surfacePanel(item.surface) : undefined;
+  if (item && surface) {
+    const { Panel, className } = surface;
     return (
-      <aside className={`artifact-panel doc-panel${full ? " full" : ""}`} aria-label={item.title || L("פריט מהצ'אט", "An item from the chat")}>
+      <aside className={`artifact-panel ${className}${full ? " full" : ""}`} aria-label={item.title || L("פריט מהצ'אט", "An item from the chat")}>
         <ResizeEdge />
-        <Suspense fallback={<p className="muted small">…</p>}><ItemPanel key={`${item.kind}:${item.id}`} item={item} full={full} onFull={() => setFull((f) => !f)} /></Suspense>
+        <Suspense fallback={<p className="muted small">…</p>}><Panel key={`${item.surface}:${item.id}`} item={item} full={full} onFull={() => setFull((f) => !f)} /></Suspense>
       </aside>
     );
   }

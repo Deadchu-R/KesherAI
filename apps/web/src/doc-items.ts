@@ -25,8 +25,8 @@ const BY_TOOL: Record<string, ItemKind> = { document: "doc", sheet: "sheet", sli
 const BY_PAGE: Record<string, ItemKind> = { docs: "doc", sheets: "sheet", slides: "deck" };
 
 /**
- * The item a tool step wrote, from its result ("Saved v3 … The user sees it at #/docs/<id>"), or undefined for a
- * read, a failure or another tool.
+ * The item a tool step wrote, from its result ("Saved v3 … The user sees it at #/docs/<id>"), or the item the agent
+ * opened with `open_in_chat` ("Opened in the chat: #/docs/<id>"); undefined for a read, a failure or another tool.
  *
  * @param name - The tool's name.
  * @param ok - Whether the step worked.
@@ -34,10 +34,11 @@ const BY_PAGE: Record<string, ItemKind> = { docs: "doc", sheets: "sheet", slides
  * @returns The item's kind, id and version number (when the output names one).
  */
 export function itemFromResult(name: string, ok: boolean, output: string): { kind: ItemKind; id: string; ver?: number } | undefined {
-  const kind = BY_TOOL[name];
-  if (!kind || !ok || !/^Saved\b/.test(output)) return undefined;
+  const opened = name === "open_in_chat";
+  if (!ok || !(opened ? /^Opened\b/ : /^Saved\b/).test(output)) return undefined;
   const at = /#\/(docs|sheets|slides)\/([\w-]{1,80})/.exec(output);
-  if (!at || BY_PAGE[at[1]!] !== kind) return undefined;
+  const kind = opened ? (at ? BY_PAGE[at[1]!] : undefined) : BY_TOOL[name];
+  if (!kind || !at || BY_PAGE[at[1]!] !== kind) return undefined;
   const ver = /^Saved v(\d+)/.exec(output)?.[1];
   return { kind, id: at[2]!, ...(ver ? { ver: Number(ver) } : {}) };
 }

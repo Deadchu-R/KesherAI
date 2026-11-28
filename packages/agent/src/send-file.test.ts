@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_FILE_CARDS_PER_TURN } from "@kesher/shared";
-import { resolveSendable, sendFileTool } from "./send-file.js";
+import { openInChatTool, resolveSendable, sendFileTool } from "./send-file.js";
 import type { ToolContext } from "./tools.js";
 
 async function setup() {
@@ -61,4 +61,18 @@ test("send_file card model: kind, caption trimmed, display, and at most 20 cards
   await assert.rejects(sendFileTool.run({ path: "a.md" }, c), /already sent 20/);
   // A new turn (a new signal) starts again.
   assert.ok((await sendFileTool.run({ path: "a.md" }, ctx())).cards);
+});
+
+test("open_in_chat: a chat file or a doc/sheet/deck address, one of them, with the same path guard", async () => {
+  const { workspace, ctx } = await setup();
+  await writeFile(join(workspace, "hero.png"), "x");
+  const file = await openInChatTool.run({ path: "hero.png" }, ctx());
+  assert.match(file.output, /^Opened in the chat: hero\.png$/m);
+  assert.equal(file.files, undefined);
+  const doc = await openInChatTool.run({ item: "#/docs/d1" }, ctx());
+  assert.match(doc.output, /^Opened in the chat: #\/docs\/d1$/m);
+  await assert.rejects(openInChatTool.run({ item: "https://x.example/docs/d1" }, ctx()), /#\/docs/);
+  await assert.rejects(openInChatTool.run({ path: "hero.png", item: "#/docs/d1" }, ctx()), /either/);
+  await assert.rejects(openInChatTool.run({}, ctx()), /either/);
+  await assert.rejects(openInChatTool.run({ path: "../secret/key.txt" }, ctx()), /outside|folders/);
 });

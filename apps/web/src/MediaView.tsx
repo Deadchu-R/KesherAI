@@ -3,8 +3,8 @@ import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { Media } from "./MediaSpeed";
-import { offerPart, usePluginUi } from "./plugins";
-import { EDITOR_FOR, assetIdOf, formatDuration, mediaKindOf, type MediaKind } from "./chat/chat-inline";
+import { OpenInChat } from "./chat/surface-ui";
+import { assetIdOf, formatDuration, mediaKindOf, type MediaKind } from "./chat/chat-inline";
 
 /*
  * What a chat shows inline for a file a tool made (like Claude's answers): one player for pictures, video and sound
@@ -118,17 +118,17 @@ function useDrive(): boolean {
 
 /**
  * The chips under a file a tool made: Download, Save to Drive (when Google Drive is connected; OneDrive has no file
- * upload yet), and Open in the editor (when it is a picture, video, sound or 3D model; an editor that is off offers to
- * turn on first). An asset is copied into the chat's folder first, because editors open a chat's files.
+ * upload yet), and Open in chat (when an installed tool opens its type, surfaces.ts: it opens in the side panel, full
+ * screen on the phone; a tool that is off offers to install first). An asset is copied into the chat's folder first,
+ * because editors open a chat's files.
  *
  * @param props.file - Where the file is.
  * @param props.name - The download's file name.
- * @param props.kind - Its kind, for the editor (null: no editor).
- * @param props.convId - The chat, for Open in the editor with an asset (no chat: no editor chip for assets).
+ * @param props.kind - Its kind (unused: the file's type picks the surface; kept for callers).
+ * @param props.convId - The chat, for Open in chat with an asset (no chat: no Open chip for assets).
  */
-export function FileChips({ file, name, kind, convId }: { file: FileRef; name: string; kind: MediaKind | null; convId?: string }) {
+export function FileChips({ file, name, convId }: { file: FileRef; name: string; kind?: MediaKind | null; convId?: string }) {
   const driveOn = useDrive();
-  const { pages } = usePluginUi();
   const [busy, setBusy] = useState<"" | "drive" | "edit">("");
   const [link, setLink] = useState("");
   const save = async () => {
@@ -144,25 +144,17 @@ export function FileChips({ file, name, kind, convId }: { file: FileRef; name: s
       setBusy("");
     }
   };
-  const editorId = kind ? EDITOR_FOR[kind] : "";
-  const editor = pages.find((p) => p.pluginId === editorId);
   const chat = "assetId" in file ? convId : file.convId;
-  const edit = async () => {
-    if (!kind || !chat) return;
-    if (!editor && !(await offerPart(editorId, L("פתיחה בעורך", "Open in the editor")))) return;
+  /** The file as a chat file: an asset goes into the chat's `shared/` folder first (editors open a chat's files). */
+  const inChat = async (): Promise<string> => {
+    if (!("assetId" in file)) return file.path;
+    if (!chat) throw new Error(L("אין צ'אט לפתוח בו", "No chat to open it in"));
     setBusy("edit");
     try {
-      let path = "assetId" in file ? "" : file.path;
-      if ("assetId" in file) {
-        // Editors open a chat's files: the asset goes into the chat's `shared/` folder first (as the phone's shares do).
-        const bytes = await (await fetch(fileUrl(file))).blob();
-        const up = await fetch(withToken(`/api/conversations/${encodeURIComponent(chat)}/files?name=${encodeURIComponent(name.slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
-        if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? `${up.status}`);
-        path = `shared/${((await up.json()) as { name: string }).name}`;
-      }
-      location.hash = `#/p/${editorId}/${editor?.id ?? "editor"}?c=${encodeURIComponent(chat)}&f=${encodeURIComponent(path)}`;
-    } catch (e) {
-      toast((e as Error).message);
+      const bytes = await (await fetch(fileUrl(file))).blob();
+      const up = await fetch(withToken(`/api/conversations/${encodeURIComponent(chat)}/files?name=${encodeURIComponent(name.slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+      if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? `${up.status}`);
+      return `shared/${((await up.json()) as { name: string }).name}`;
     } finally {
       setBusy("");
     }
@@ -175,9 +167,7 @@ export function FileChips({ file, name, kind, convId }: { file: FileRef; name: s
       ) : (
         <button type="button" className="chip-text" disabled={!!busy} onClick={() => void save()}>{busy === "drive" ? L("שומר…", "Saving…") : `☁ ${L("שמירה ל-Drive", "Save to Drive")}`}</button>
       ))}
-      {kind && chat && (
-        <button type="button" className="chip-text" disabled={!!busy} onClick={() => void edit()}>{busy === "edit" ? L("פותח…", "Opening…") : `✎ ${L("פתיחה בעורך", "Open in editor")}`}</button>
-      )}
+      {chat && (busy === "edit" ? <span className="chip-text muted">{L("פותח…", "Opening…")}</span> : <OpenInChat convId={chat} name={"assetId" in file ? name : file.path} resolve={inChat} />)}
     </div>
   );
 }

@@ -56,8 +56,8 @@ import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { ControlApproval } from "../ControlApproval";
-import { ItemCard } from "../DocPanel";
-import { itemFromResult } from "../doc-items";
+import { itemFromResult, openedFile } from "../surfaces";
+import { SurfaceCard, SurfaceOpenCard, useSurfaces } from "../chat/surface-ui";
 import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
 import { PlanCard, PlanSheet } from "../PlanCard";
 import { plansOf } from "../plan-view";
@@ -109,6 +109,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const [events, setEvents] = useState<AgentEvent[]>([]);
   // Sub-agents: their runs come with the chat's events (`helpers`), so the phone in remote sees the same.
   const helpers = useHelperRuns(id);
+  // The chat surfaces of what is installed (surfaces.ts): which tool step made which item, and its card.
+  const surfaces = useSurfaces();
   // The chat's plans (2+ sub-agents for one job, or a deep research): one Plan card each (PlanCard.tsx).
   const plans = useMemo(() => plansOf(helpers.runs), [helpers.runs]);
   const setHelperRuns = helpers.set;
@@ -1010,11 +1012,17 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     // A plan (2+ sub-agents for one job, or a deep research) is one Plan card after the call that began it.
                     ...b.steps.flatMap((st) => (st.call.name === "delegate" || st.call.name === "deep_research" ? plans.filter((v) => v.callId === st.call.callId) : [])).map((v) => <PlanCard key={v.plan.id} view={v} convId={id} busy={busy} />),
                     ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId && !r.plan) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
-                    // A document, sheet or deck a tool wrote: one card per item (its last edit in the group), Open beside the chat.
+                    // An item a tool wrote or opened (a document, sheet, deck…; surfaces.ts): one card per item (its last edit in the group), Open beside the chat.
                     ...[...new Map(b.steps.flatMap((st) => {
-                      const it = st.result ? itemFromResult(st.call.name, st.result.ok, st.result.output) : undefined;
-                      return it ? [[`${it.kind}:${it.id}`, { ...it, title: typeof st.call.input.title === "string" ? st.call.input.title : undefined }] as const] : [];
-                    })).values()].map((it) => <ItemCard key={`${it.kind}:${it.id}:${it.ver ?? 0}`} item={{ kind: it.kind, id: it.id, convId: id, ...(it.title ? { title: it.title } : {}) }} {...(it.ver ? { ver: it.ver } : {})} live={busy} />),
+                      const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output) : undefined;
+                      const title = typeof st.call.input.title === "string" ? st.call.input.title : undefined;
+                      return it ? [[`${it.surface}:${it.id}`, { ...it, convId: id, ...(title ? { title } : {}) }] as const] : [];
+                    })).values()].map((it) => <SurfaceCard key={`${it.surface}:${it.id}:${it.ver ?? 0}`} item={it} live={busy} />),
+                    // A chat file the agent opened with open_in_chat: Open in chat (or the install offer when its tool is off).
+                    ...b.steps.flatMap((st) => {
+                      const f = st.result ? openedFile(st.call.name, st.result.ok, st.result.output) : undefined;
+                      return f ? [<SurfaceOpenCard key={`open:${st.call.callId}`} convId={id} path={f} live={busy} />] : [];
+                    }),
                   ]}
                 />
               );

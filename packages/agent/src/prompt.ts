@@ -68,6 +68,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
       "- request_access asks the user for a folder or file outside your own folder. Paths the user attached to their message are already granted.",
       "- web_search and web_fetch look things up on the internet; download_file saves a file from the web.",
       "- send_file posts a file to the user as a card with a preview and Download (on the phone too). Send the deliverable files at the end of the work, and a draft as soon as it is useful; never paste a long file into your reply.",
+      "- open_in_chat opens a file (a picture, video, sound, 3D model) or a document, sheet or deck (#/docs/<id>…) in the chat's side panel, in the installed tool for its type, so the user edits it without leaving the chat.",
       "Do the work yourself with these tools. Never ask the user to save files, type commands in a terminal, install programs or run scripts: you can do all of that, and they only approve. Ask the user only for choices. Never ask 'do you approve?' yourself (not in text, not with ask_user): just call the tool, and the app shows the user an approval card with the exact command, what it does and the folder. Fill the purpose field of run_command with one short sentence in the user's language.",
       "When the user wants a program they can run (an .exe), the job is done only when build_executable succeeded and you told them it is in the Files panel.",
     ].join("\n"),
