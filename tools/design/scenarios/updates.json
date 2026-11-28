@@ -4,8 +4,8 @@
  "boards": [
   {
    "id": "UpdateInstallFailed",
-   "title": "עדכונים: ההתקנה לא הסתיימה — המתקין נגמר והאפליקציה לא חזרה: \"ההתקנה לא הסתיימה — נסה שוב\", הנעילה משתחררת, ויש כפתור נסה שוב · שורה: ניסיון העדכון האחרון נכשל + הסיבה",
-   "titleEn": "Updates: the installation did not finish — the installer ended and the app did not come back: the lock is lifted, with Retry · plus the line: Last update attempt failed + the reason",
+   "title": "עדכונים: ההתקנה לא הסתיימה — הנעילה משתחררת, כפתור נסה שוב, ושורה עם הסיבה של הניסיון האחרון שנכשל",
+   "titleEn": "Updates: the installation did not finish — the lock is lifted, Retry, and a line with the reason the last attempt failed",
    "route": "#/updates",
    "height": {
     "desktop": 760,

@@ -21,6 +21,8 @@ export function cleanFailoverOrder(kind, saved) {
     const given = Array.isArray(saved) ? saved.filter((x) => allowed.includes(x)) : [];
     return [...new Set([...given, ...allowed])];
 }
+/** The most times a task moves without having started anywhere in between (no endless juggling). */
+export const MAX_QUOTA_MOVES = 3;
 /** Statuses of a task that has not started (or stopped on its quota) and may move. */
 const MOVABLE = new Set(["waiting", "queued", "deferred-quota"]);
 /**
@@ -82,6 +84,11 @@ export function pickFailover(t, rooms, s) {
     // No bounce: a task that runs (or waits for a step's answer) stays where it is.
     if (!MOVABLE.has(t.status))
         return { action: "stay", why: "it is not waiting" };
+    // A named executor is a preference, not a lock; "only this executor" is the lock (the user chose to wait).
+    if (t.onlyThis)
+        return { action: "stay", why: "only this executor" };
+    if ((t.moves ?? 0) >= MAX_QUOTA_MOVES)
+        return { action: "stay", why: "it already moved too many times without starting" };
     // Claude's Opus agent has no quota here: it is never moved.
     if (t.runBy === "opus")
         return { action: "stay", why: "Claude's own agent" };
@@ -89,17 +96,30 @@ export function pickFailover(t, rooms, s) {
     if (!here || here.open)
         return { action: "stay", why: "its executor has quota" };
     const back = here.until;
-    for (const to of failoverOrder(t, s)) {
-        if (to === t.runBy || to === t.movedFrom?.from || t.movedFrom?.via?.includes(to))
-            continue;
-        if (failoverBlock(t, to, rooms[to]))
-            continue;
-        const handPicked = t.executor !== "auto";
+    const handPicked = t.executor !== "auto";
+    const ok = failoverOrder(t, s).filter((to) => to !== t.runBy && to !== t.movedFrom?.from && !t.movedFrom?.via?.includes(to) && !failoverBlock(t, to, rooms[to]));
+    // The one with the most quota left first; a target that waits for the user's Run tap comes after those that start by
+    // themselves; the settings' order breaks ties (the sort is stable).
+    const rank = (to) => (rooms[to]?.needsTap ? -1 : 0) + (rooms[to]?.left ?? 0.5);
+    const to = [...ok].sort((a, b) => rank(b) - rank(a))[0];
+    if (to) {
         if (handPicked && !s.moveManual)
             return { action: "ask", to, ...(back ? { back } : {}) };
         return { action: "move", to, ...(back ? { back } : {}) };
     }
     return { action: "stay", why: "no other executor has quota and may take it" };
+}
+/**
+ * The reason line of a move, for the task's note: why the first executor cannot take it and what the new one has left
+ * ("GhostCLI cooling down till 10:58, OpenCode Go has 47/60 left").
+ *
+ * @param from - The first executor's name.
+ * @param here - Its room (its `reason`).
+ * @param to - The new executor's name.
+ * @param room - Its room (its `leftText`).
+ */
+export function failoverWhy(from, here, to, room) {
+    return `${from} ${here?.reason ?? "has no quota"}, ${to} ${room?.leftText ? `has ${room.leftText}` : "has quota"}`;
 }
 /** Display names of the executors (the task row and the hub use them in "moved from X"). */
 export const EXECUTOR_NAMES = {

@@ -22,7 +22,7 @@ const scripted: ProviderFactory = {
     listModels: async () => [{ id: `${config.id}/m`, providerId: config.id, providerModelId: "m", name: "m", category: "chat", location: "local" }],
     chatWithTools: async (req, _signal, onText) => {
       const last = req.messages.at(-1) as AgentMessage;
-      if (last.role === "user" && /make a file/.test(last.content) && req.tools.some((t) => t.name === "write_file")) return { text: "", toolCalls: [{ id: `w${Date.now()}`, name: "write_file", arguments: { path: "out.txt", content: "x" } }] };
+      if (last.role === "user" && /make a file/.test(last.content) && req.tools.some((t) => t.name === "write_file")) return { text: "I will make the file.", toolCalls: [{ id: `w${Date.now()}`, name: "write_file", arguments: { path: "out.txt", content: "x" } }] };
       const text = `You said: ${String(last.content).slice(0, 80)}`;
       onText?.(text);
       return { text, toolCalls: [] };
@@ -159,11 +159,11 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
       chatWithTools: async (req, _signal, onText) => {
         seen.push(JSON.stringify(req));
         const last = req.messages.at(-1) as AgentMessage;
-        if (last.role === "user" && /read the note/.test(last.content)) return { text: "", toolCalls: [{ id: `r${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
+        if (last.role === "user" && /read the note/.test(last.content)) return { text: "I will read the note.", toolCalls: [{ id: `r${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
         // A slow owner task with a step, so a queued message could join it.
         if (last.role === "user" && /slow task/.test(last.content)) {
           await new Promise((r) => setTimeout(r, 400));
-          return { text: "", toolCalls: [{ id: `s${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
+          return { text: "I will read the note.", toolCalls: [{ id: `s${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
         }
         const text = last.role === "tool" ? "Read it." : `You said: ${String(last.content).slice(0, 80)}`;
         onText?.(text);
@@ -188,6 +188,8 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
     await mkdir(join(dataDir, "outputs", chat.id), { recursive: true });
     await writeFile(join(dataDir, "outputs", chat.id, "note.txt"), "TOOL-RESULT-SECRET");
     await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/messages`, payload: { text: "please read the note" } });
+    // The step before the tool now says a sentence (an assistant event of its own): wait for the tool result itself.
+    await until(async () => (seen.join("\n").includes("TOOL-RESULT-SECRET") ? true : undefined));
     await answers(1);
     const owner = seen.join("\n");
     assert.match(owner, /MEMORY-FACT-SECRET/, "the owner's turn has their memory");
