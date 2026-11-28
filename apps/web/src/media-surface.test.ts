@@ -6,7 +6,9 @@ import { clockText, fraction, markRange, rangeAsk, rangeMessage, spriteCell, wav
 const list = buildSurfaces(BUILT_IN, { parts: [], pluginPages: [] });
 
 test("video and sound are registered without a part, ahead of the editors, and open their file types", () => {
-  assert.deepEqual(list.map((s) => s.id).slice(-2), ["video", "sound"]);
+  // Both built in (no part needed), video before sound; other built-ins (word…) may come after them.
+  const ids = list.map((s) => s.id);
+  assert.ok(ids.includes("video") && ids.includes("sound") && ids.indexOf("video") < ids.indexOf("sound"), ids.join(","));
   for (const f of ["a.mp4", "A.MOV", "x.webm", "y.mkv"]) assert.equal(openTarget(BUILT_IN, list, f)?.surface.id, "video", f);
   for (const f of ["a.mp3", "b.WAV", "c.ogg", "d.flac", "e.m4a"]) assert.equal(openTarget(BUILT_IN, list, f)?.surface.id, "sound", f);
   assert.equal(openTarget(BUILT_IN, list, "notes.txt"), undefined);
