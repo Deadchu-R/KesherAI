@@ -6,6 +6,18 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## Every Claude connector and plugin works in KesherAI (Roee 28.11 10:39)
+Anything that works on Claude should work here: remote connectors (MCP over HTTP with OAuth sign-in), desktop
+extensions (.mcpb), and Claude Code plugins (skills, slash commands, agents, hooks, their MCP servers, marketplaces).
+Today: stdio + HTTP MCP transports (`mcp-transports.ts`, `McpNeedsSignIn`), import of Claude's MCP config
+(`mcp-import.ts`). First real test: KesherAI's own Claude connector (the hub's `/mcp`, OAuth, docs/CLAUDE_CONNECTOR.md)
+connected from a KesherAI chat — sign in, list tools, run kesher_tasks.
+- 🔨 Research first: inbox r-20261128-07 (what Claude supports exactly; the gaps here; language and weight).
+- ⬜ Then: remote MCP with full OAuth (discovery, dynamic client registration, PKCE, refresh) and the sign-in card in
+  the chat; the KesherAI connector test end to end (desktop + phone); `.mcpb` install; Claude Code plugin loader
+  (skills → our skills, commands → slash commands, agents → sub-agents, hooks → our tool hooks, plugin MCP servers);
+  a "from Claude" import page; checks per connector/plugin (works / partly / not, why).
+
 ## Task dispatcher on the CPU (Roee 28.11 10:32)
 KesherAI itself orders the task queue and starts tasks, picking the agent AND the model per task, with a dedicated chat
 on the Tasks page (desktop and phone) — run by a SMALL model on the CPU so it never loads the PC (paused while a game
