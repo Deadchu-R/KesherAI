@@ -444,6 +444,12 @@ export interface InboxTaskSpec {
   model?: string;
   /** `local_ok: true`: the local model may carry it while Claude cools down (never an Antigravity task). */
   localOk?: boolean;
+  /**
+   * "Only this executor" (file: `only_this: true`; the "Who does it" toggle): the user wants to wait for the executor
+   * named, so the quota failover never moves the task. Absent: the executor is a preference, and the task moves to one
+   * with quota when its own has none.
+   */
+  onlyThis?: boolean;
   /** `replaces: [ids]`: older tasks this one supersedes; the PC skips those that have not started, with a note. */
   replaces?: string[];
   /** The standing "what to research next" task (a fresh copy of a template, shown while Antigravity is idle; inbox-queue.ts). */
@@ -566,6 +572,8 @@ export interface InboxTaskView extends InboxTaskSpec {
    * cooldown: "waiting" until that run starts, then "used" (a second such failure ends it as failed).
    */
   searchRetry?: "waiting" | "used";
+  /** How many times a research's web search came back empty (blocked); each wait is twice the one before (30, 60, 120 minutes). */
+  searchTries?: number;
   /** Whether the result file was written to the inbox branch. */
   resultWritten?: boolean;
   /**
@@ -578,6 +586,8 @@ export interface InboxTaskView extends InboxTaskSpec {
    * executor is expected back (the row shows "↪ moved from X (quota)").
    */
   movedFrom?: InboxMove;
+  /** Quota moves since the task last started (quota-failover.ts: at most 3 without a start in between). */
+  moves?: number;
   /** When the PC last asked whether to move this hand-picked task (once per quota stop). */
   quotaAskAt?: number;
   /** Partial work handed to the next executor (task-handoff.ts): the note its prompt starts with, until that run ends. */

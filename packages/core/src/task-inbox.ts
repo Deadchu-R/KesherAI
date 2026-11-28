@@ -295,6 +295,8 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     ...(replaces.length ? { replaces } : {}),
     // The local model may carry it while Claude cools down (cooldown-handoff.ts); never for Antigravity tasks.
     ...(/^(true|yes)$/i.test(str("local_ok", 10)) && executor !== "antigravity" ? { localOk: true } : {}),
+    // "Only this executor": the quota failover never moves it (the user wants to wait).
+    ...(/^(true|yes)$/i.test(str("only_this", 10)) && executor !== "auto" ? { onlyThis: true } : {}),
     goal,
     ...(sec("read first") ? { readFirst: sec("read first")! } : {}),
     ...(sec("acceptance") ? { acceptance: sec("acceptance")! } : {}),
@@ -330,6 +332,7 @@ export function taskFileText(s: InboxTaskSpec): string {
     `max_files: ${s.maxFiles}`,
     ...(s.model ? [`model: ${one(s.model)}`] : []),
     ...(s.localOk ? ["local_ok: true"] : []),
+    ...(s.onlyThis ? ["only_this: true"] : []),
     ...(s.source ? [`source: ${one(s.source)}`] : []),
     "---",
     "",

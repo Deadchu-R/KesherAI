@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanFailoverOrder, failoverBlock, failoverOrder, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverTask } from "./quota-failover.js";
+import { cleanFailoverOrder, failoverBlock, failoverOrder, failoverWhy, FAILOVER_DEFAULTS, MAX_QUOTA_MOVES, pickFailover, type ExecutorRoom, type FailoverTask } from "./quota-failover.js";
 
 const task = (o: Partial<FailoverTask> = {}): FailoverTask => ({ kind: "code", size: "M", risk: "low", status: "waiting", executor: "auto", runBy: "antigravity", relayOk: true, trainOk: false, sensitive: false, ...o });
 const open: ExecutorRoom = { open: true };
@@ -108,4 +108,68 @@ test("Claude's own Opus agent is never moved", () => {
 test("a saved order is cleaned: unknown or wrong-kind executors dropped, missing ones kept at the end", () => {
   assert.deepEqual(cleanFailoverOrder("research", ["antigravity", "opencode", "x", "antigravity"]), ["antigravity", "gemini", "ghostcli"]);
   assert.deepEqual(cleanFailoverOrder("code", undefined), ["ghostcli", "opencode", "antigravity", "local"]);
+});
+
+test("a hand-picked executor is a preference: it moves when its quota is out (moveManual on by default)", () => {
+  const t = task({ executor: "ghostcli", runBy: "ghostcli" });
+  assert.deepEqual(pickFailover(t, rooms({ ghostcli: { open: false, until: 7, relay: true } }), FAILOVER_DEFAULTS), { action: "move", to: "opencode", back: 7 });
+});
+
+test("\"only this executor\" stays, whatever has quota, and never asks either", () => {
+  const t = task({ executor: "ghostcli", runBy: "ghostcli", onlyThis: true });
+  const r = rooms({ ghostcli: { open: false, relay: true } });
+  assert.equal(pickFailover(t, r, FAILOVER_DEFAULTS).action, "stay");
+  assert.equal(pickFailover(t, r, { ...FAILOVER_DEFAULTS, moveManual: false }).action, "stay");
+});
+
+test("the target with the most quota left goes first; the settings' order breaks a tie; a Run-tap target and the local model come last", () => {
+  const r = rooms({ ghostcli: { open: true, relay: true, left: 0.2 }, opencode: { open: true, left: 0.8 }, local: { open: true, left: 0 } });
+  assert.deepEqual(pickFailover(task(), r, FAILOVER_DEFAULTS), { action: "move", to: "opencode", back: 1_000 });
+  const tie = rooms({ ghostcli: { open: true, relay: true, left: 0.5 }, opencode: { open: true, left: 0.5 } });
+  assert.equal((pickFailover(task(), tie, FAILOVER_DEFAULTS) as { to: string }).to, "ghostcli");
+  const tapOnly = rooms({ antigravity: { open: true, needsTap: true, left: 1 }, ghostcli: { open: true, relay: true, left: 0.1 }, opencode: { open: false }, local: { open: false } });
+  assert.equal((pickFailover(task({ runBy: "local" }), tapOnly, FAILOVER_DEFAULTS) as { to: string }).to, "ghostcli");
+});
+
+test("no ping-pong: once its first executor is back, a moved task stays where it is", () => {
+  const moved = task({ executor: "ghostcli", runBy: "opencode", movedFrom: { from: "ghostcli", via: [] } });
+  assert.deepEqual(pickFailover(moved, rooms({ ghostcli: open }), FAILOVER_DEFAULTS), { action: "stay", why: "its executor has quota" });
+  // And when the new one runs dry too, never back to the one it left.
+  const r = rooms({ ghostcli: open, opencode: { open: false }, antigravity: open });
+  assert.notEqual((pickFailover(moved, r, FAILOVER_DEFAULTS) as { to?: string }).to, "ghostcli");
+});
+
+test("a task moves at most three times without starting", () => {
+  const r = rooms();
+  assert.equal(pickFailover(task({ moves: MAX_QUOTA_MOVES - 1 }), r, FAILOVER_DEFAULTS).action, "move");
+  assert.deepEqual(pickFailover(task({ moves: MAX_QUOTA_MOVES }), r, FAILOVER_DEFAULTS).action, "stay");
+});
+
+test("privacy rule: a sensitive, private or security-related task (hand-picked too) goes only to Antigravity, never to a relay or a training service", () => {
+  const t = task({ executor: "ghostcli", runBy: "ghostcli", sensitive: true, relayOk: false, trainOk: false });
+  const r = rooms({ ghostcli: { open: false, relay: true }, antigravity: { open: false, needsTap: true } });
+  assert.equal(pickFailover(t, r, FAILOVER_DEFAULTS).action, "stay");
+  const gem = task({ kind: "research", executor: "ghostcli", runBy: "ghostcli", relayOk: false, trainOk: false });
+  assert.equal(pickFailover(gem, rooms({ ghostcli: { open: false, relay: true }, antigravity: { open: false } }), FAILOVER_DEFAULTS).action, "stay");
+});
+
+test("research whose web search is blocked goes to Antigravity (it searches by itself) while Gemini and GhostCLI wait", () => {
+  const t = task({ kind: "research", runBy: "gemini" });
+  const blocked = rooms({ gemini: { open: false, until: 9, training: true }, ghostcli: { open: false, until: 9, relay: true }, antigravity: { open: true, needsTap: true } });
+  assert.deepEqual(pickFailover(t, blocked, FAILOVER_DEFAULTS), { action: "move", to: "antigravity", back: 9 });
+  // Every executor blocked or out: it stays (the search retries with backoff).
+  assert.equal(pickFailover(t, { ...blocked, antigravity: { open: false, needsTap: true } }, FAILOVER_DEFAULTS).action, "stay");
+});
+
+test("the note says why: the first executor's reason and what the new one has left", () => {
+  assert.equal(failoverWhy("GhostCLI", { open: false, reason: "cooling down till 10:58" }, "OpenCode Go", { open: true, leftText: "47/60 left" }), "GhostCLI cooling down till 10:58, OpenCode Go has 47/60 left");
+  assert.equal(failoverWhy("GhostCLI", undefined, "Gemini", { open: true }), "GhostCLI has no quota, Gemini has quota");
+});
+
+test("privacy rule: a task without security issues or private data may run on ANY provider, free ones that train on data included, picked by quota left", () => {
+  const t = task({ kind: "research", runBy: "ghostcli", executor: "ghostcli", relayOk: true, trainOk: true, risk: "medium" });
+  const r = rooms({ ghostcli: { open: false, relay: true }, gemini: { open: true, training: true, left: 0.9 }, antigravity: { open: true, needsTap: true } });
+  assert.equal((pickFailover(t, r, FAILOVER_DEFAULTS) as { to: string }).to, "gemini");
+  assert.equal(pickFailover({ ...t, trainOk: false }, r, FAILOVER_DEFAULTS).action, "move", "flagged: only Antigravity is left");
+  assert.equal((pickFailover({ ...t, trainOk: false, sensitive: true }, r, FAILOVER_DEFAULTS) as { to: string }).to, "antigravity");
 });

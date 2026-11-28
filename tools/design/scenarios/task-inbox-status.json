@@ -336,7 +336,33 @@
        "back": {
         "$inMs": "40m"
        }
-      }
+      },
+      "note": "Moved to GhostCLI: Gemini web search blocked till 10:58 UTC, GhostCLI has 24/30 left.",
+      "searchTries": 1
+     },
+     {
+      "executor": "ghostcli",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0511",
+      "title": "להוסיף מונה משימות בכותרת התיבה",
+      "goal": "להוסיף מונה משימות בכותרת התיבה",
+      "status": "deferred-quota",
+      "runBy": "ghostcli",
+      "onlyThis": true,
+      "branch": "gcli/t-0511",
+      "retryAt": {
+       "$inMs": "40m"
+      },
+      "note": "Every GhostCLI model is cooling down after \"too many requests\"; it goes again by itself."
      },
      {
       "executor": "auto",
@@ -740,12 +766,12 @@
   },
   {
    "id": "InboxQuotaMoved",
-   "title": "תיבת משימות: משימה שעברה כשנגמרה המכסה — \"↪ הועבר מ-Antigravity (מכסה) · חוזר ב-HH:MM\", ומחקר שעבר מ-Gemini ל-GhostCLI",
-   "titleEn": "Task inbox: tasks moved when a quota ran out — \"↪ moved from Antigravity (quota) · back at HH:MM\", and research moved from Gemini to GhostCLI",
+   "title": "תיבת משימות: משימה שעברה כשנגמרה המכסה — הסיבה לכל מעבר, ומשימה עם \"רק המבצע הזה\" שמחכה",
+   "titleEn": "Task inbox: tasks moved when a quota ran out — the reason for each move, and a task with \"Only this executor\" that waits",
    "route": "#/task-inbox",
    "height": {
-    "desktop": 900,
-    "phone": 1400
+    "desktop": 1100,
+    "phone": 1700
    },
    "steps": [
     {

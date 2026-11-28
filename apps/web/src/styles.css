@@ -4405,6 +4405,8 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .assign-list .assign-opt { display: flex; gap: 8px; align-items: flex-start; text-align: start; height: auto; min-height: 44px; padding: 8px 10px; white-space: normal; line-height: 1.35; width: 100%; box-sizing: border-box; }
 .assign-list .assign-opt.on { outline: 1px solid var(--accent); }
 /* The model picker under "Who does it" (an Antigravity task that has not started; inbox-models.ts). Wraps on a 390 px phone. */
+.assign-list .assign-only { display: flex; gap: 8px; align-items: flex-start; padding: 8px 6px 4px; border-top: 1px solid var(--border); line-height: 1.35; cursor: pointer; }
+.assign-list .assign-only input { flex: none; width: 22px; height: 22px; margin: 0; }
 .assign-list .assign-models { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 4px 2px; border-top: 1px solid var(--border); }
 .assign-list .assign-models .chip-text { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: start; }
 .assign-list .assign-models .chip-text.on { outline: 1px solid var(--accent); }

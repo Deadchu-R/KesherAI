@@ -18,10 +18,12 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  * @param p.current - Who has it now (marked in the list).
  * @param p.label - The button's text (default "Who does it").
  * @param p.onDone - Called after a change (to load the list again).
+ * @param p.only - For a task that has not started and was given to an executor: whether "only this executor" is on (the
+ *   quota failover then never moves it). Shown under the list as a switch.
  * @param p.model - For an Antigravity task that has not started: the models to offer, the task's pick ("" = the
  *   default) and the default's family (inbox-models.ts). Shown under the list as "Model".
  */
-export function AssignPicker({ id, current, label, onDone, model }: { id: string; current?: AssignTo; label?: string; onDone?: () => void; model?: { list: InboxModel[]; pick: string; auto: ModelFamily } }) {
+export function AssignPicker({ id, current, label, onDone, model, only }: { id: string; current?: AssignTo; label?: string; onDone?: () => void; model?: { list: InboxModel[]; pick: string; auto: ModelFamily }; only?: { on: boolean } }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const send = async (to: AssignTo, confirm = false): Promise<void> => {
@@ -38,6 +40,18 @@ export function AssignPicker({ id, current, label, onDone, model }: { id: string
         setOpen(false);
         onDone?.();
       }
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setOnly = async (on: boolean): Promise<void> => {
+    setBusy(true);
+    try {
+      await api(`/api/task-inbox/tasks/${encodeURIComponent(id)}/only-this`, { method: "PUT", body: { on } });
+      toast(on ? L("רק המבצע הזה: המשימה תחכה לו", "Only this executor: the task waits for it") : L("אפשר להעביר למבצע אחר כשנגמרת המכסה", "May move to another executor when its quota runs out"));
+      onDone?.();
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -72,6 +86,15 @@ export function AssignPicker({ id, current, label, onDone, model }: { id: string
               </span>
             </button>
           ))}
+          {only && (
+            <label className="assign-only small">
+              <input type="checkbox" role="switch" checked={only.on} disabled={busy} onChange={(e) => void setOnly(e.target.checked)} />
+              <span>
+                <b>{L("רק המבצע הזה", "Only this executor")}</b>
+                <span className="muted"> · {only.on ? L("תחכה לו גם כשנגמרת המכסה", "waits for it even when its quota is out") : L("אם נגמרת המכסה, עוברת למבצע עם מכסה", "if its quota runs out, it moves to one with quota")}</span>
+              </span>
+            </label>
+          )}
           {model && current === "antigravity" && (
             <span className="assign-models" role="group" aria-label={L("מודל ב-Antigravity", "Model in Antigravity")}>
               <span className="small muted">{L("מודל", "Model")}</span>

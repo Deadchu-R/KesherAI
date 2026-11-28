@@ -640,7 +640,7 @@ test("inbox: a Gemini limit or billing error defers the task to the reset; one a
   }
 });
 
-test("inbox: a research whose web search found nothing goes back once after the search cooldown (not a quota stop, no GhostCLI move)", async () => {
+test("inbox: a research whose web search found nothing waits and tries again with a longer wait each time (30, 60, 120 minutes), then fails (not a quota stop, no GhostCLI move)", async () => {
   const { root, repo } = await setup({ "r-20261127-01": RESEARCH_TASK("r-20261127-01") });
   let now = 1_000_000;
   let calls = 0;
@@ -660,18 +660,61 @@ test("inbox: a research whose web search found nothing goes back once after the 
     await inbox.sync();
     await inbox.idle();
     let t = await inbox.task("r-20261127-01");
-    assert.deepEqual([t.status, t.runBy, calls, t.searchRetry, t.retryAt, t.autoRetried], ["deferred-quota", "gemini", 1, "waiting", 1_000_000 + SEARCH_RETRY_MS, undefined]);
+    assert.deepEqual([t.status, t.runBy, calls, t.searchRetry, t.retryAt, t.autoRetried, t.searchTries], ["deferred-quota", "gemini", 1, "waiting", 1_000_000 + SEARCH_RETRY_MS, undefined, 1]);
     assert.match(t.note ?? "", /duckduckgo: Search answered 429[\s\S]*not the model's failure/);
     await inbox.pumpGemini();
     assert.equal(calls, 1, "nothing before the cooldown ends");
-    now += SEARCH_RETRY_MS + 1;
+    for (const n of [2, 3]) {
+      now += SEARCH_RETRY_MS * 2 ** (n - 2) + 1;
+      await inbox.pumpGemini();
+      t = await inbox.task("r-20261127-01");
+      assert.deepEqual([t.status, calls, t.searchTries, t.retryAt], ["deferred-quota", n, n, now + SEARCH_RETRY_MS * 2 ** (n - 1)]);
+    }
+    now += 4 * SEARCH_RETRY_MS + 1;
     await inbox.pumpGemini();
     t = await inbox.task("r-20261127-01");
-    assert.deepEqual([t.status, calls, t.searchRetry], ["failed", 2, "used"]);
+    assert.deepEqual([t.status, calls], ["failed", 4]);
     assert.match(t.note ?? "", /^The research failed: Web search returned nothing \(duckduckgo/);
     now += 3 * 60 * 60_000;
     await inbox.pumpGemini();
-    assert.equal(calls, 2, "one search retry only, and no immediate auto-retry");
+    assert.equal(calls, 4, "the tries are used: no further retry");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: a blocked web search gives the research to Antigravity when it has quota (a hand-picked Gemini task too); 'only this executor' waits", async () => {
+  const { root, repo } = await setup({ "r-20261128-05": RESEARCH_TASK("r-20261128-05").replace("kind: research", "executor: gemini\nkind: research"), "r-20261128-06": RESEARCH_TASK("r-20261128-06").replace("kind: research", "executor: gemini\nonly_this: true\nkind: research") });
+  const now = 1_000_000;
+  const fail = "Web search returned nothing (duckduckgo: Search answered 202 (a bot check).); no report written";
+  const notes: string[] = [];
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async () => ({ code: 1, out: "not in tests" }),
+    startAgent: () => Promise.reject(new Error("no")),
+    notify: (t, b) => void notes.push(`${t} ${b}`),
+    busy: async () => ({ free: true, reasons: [] }),
+    now: () => now,
+    agQuota: async () => ({ at: now, models: [{ name: "Gemini 3 Pro", left: 0.9 }] }),
+    research: { ready: () => true, run: async () => Promise.reject(new Error(fail)) },
+  });
+  try {
+    await inbox.loopTick();
+    await inbox.sync();
+    await inbox.idle();
+    await inbox.loopTick();
+    const moved = await inbox.task("r-20261128-05");
+    assert.deepEqual([moved.runBy, moved.executor, moved.status, moved.movedFrom?.from, moved.moves], ["antigravity", "gemini", "waiting", "gemini", 1]);
+    assert.match(moved.note ?? "", /^Moved to Antigravity: Gemini web search blocked till \d\d:\d\d UTC, Antigravity has /);
+    assert.equal(notes.filter((n) => n.startsWith("↪ r-20261128-05 moved to Antigravity")).length, 1, "notified once");
+    const kept = await inbox.task("r-20261128-06");
+    assert.deepEqual([kept.runBy, kept.status, kept.onlyThis, kept.movedFrom], ["gemini", "deferred-quota", true, undefined]);
+    // The switch off lets the next pass move it.
+    const off = await inbox.setOnlyThis("r-20261128-06", false);
+    assert.equal(off.onlyThis, undefined);
+    assert.equal((await inbox.task("r-20261128-06")).runBy, "antigravity");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

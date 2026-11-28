@@ -39,7 +39,7 @@
      {
       "id": "t-0412",
       "title": "להשוות את מסך ההגדרות למתחרים",
-      "executor": "auto",
+      "executor": "antigravity",
       "risk": "low",
       "from": "claude",
       "base": "main",
@@ -135,7 +135,8 @@
  "boards": [
   {
    "id": "InboxAssign",
-   "title": "תיבת משימות: מי מבצע, ורשימת העבודה",
+   "title": "תיבת משימות: מי מבצע (עם \"רק המבצע הזה\"), ורשימת העבודה",
+   "titleEn": "Task inbox: who does it (with \"Only this executor\") and the work list",
    "route": "#/task-inbox",
    "fullPage": true,
    "height": {

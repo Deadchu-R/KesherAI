@@ -5,8 +5,10 @@
  * {@link pickFailover} is the one decision: a task that waits on an executor with no quota now (used up, capped,
  * rate-limited, cooling down) moves to the next executor in its order that has quota now and may take it. The order is
  * the task's own preference first, then the user's fallback order for its kind (Settings › Task inbox). Safety comes
- * before throughput: a task that is not safe for a relay or a service that may train never goes to one, a
- * security-sensitive task goes only where it may go today, and nothing that costs extra money is ever picked.
+ * before throughput, but only for what is private (Roee, 28.11): a task WITHOUT security issues or private data may run
+ * on ANY ready provider, free ones that train on data included, so its candidates are every ready executor of its kind;
+ * a task flagged sensitive, private or security-related never goes to a relay or a service that may train and goes only
+ * where it may go today. Nothing that costs extra money is ever picked.
  *
  * No bouncing: only a task that has not started moves (never a running one), and never back to the executor it was moved
  * from; when that executor's quota comes back, new tasks go to it again by the normal routing.
@@ -70,7 +72,16 @@ export interface ExecutorRoom {
   training?: boolean;
   /** Using it now would cost money beyond what the user already pays: never picked. */
   extraCost?: boolean;
+  /** How much of today's allowance is left, 0 to 1 (unknown: absent). The target with the most left is picked first. */
+  left?: number;
+  /** The same in words for the task's note ("47/60 left"). */
+  leftText?: string;
+  /** Why it is not open, in words for the note ("cooling down till 10:58", "daily cap reached"). */
+  reason?: string;
 }
+
+/** The most times a task moves without having started anywhere in between (no endless juggling). */
+export const MAX_QUOTA_MOVES = 3;
 
 /** The task as the decision sees it. */
 export interface FailoverTask {
@@ -89,6 +100,10 @@ export interface FailoverTask {
   trainOk: boolean;
   /** It touches security (risk high, or safeForRelay refused it for a security path or word). */
   sensitive: boolean;
+  /** "Only this executor" (the user wants to wait for it): the task never moves. */
+  onlyThis?: boolean;
+  /** How many times it moved since it last started (absent: 0). At {@link MAX_QUOTA_MOVES} it stays where it is. */
+  moves?: number;
   /** Set when it was moved before: never moved back to any executor it left (`from` and the earlier `via`). */
   movedFrom?: { from: string; via?: readonly string[] };
 }
@@ -152,19 +167,38 @@ export function pickFailover(t: FailoverTask, rooms: Partial<Record<Exclude<Inbo
   if (!s.enabled) return { action: "stay", why: "the failover is off" };
   // No bounce: a task that runs (or waits for a step's answer) stays where it is.
   if (!MOVABLE.has(t.status)) return { action: "stay", why: "it is not waiting" };
+  // A named executor is a preference, not a lock; "only this executor" is the lock (the user chose to wait).
+  if (t.onlyThis) return { action: "stay", why: "only this executor" };
+  if ((t.moves ?? 0) >= MAX_QUOTA_MOVES) return { action: "stay", why: "it already moved too many times without starting" };
   // Claude's Opus agent has no quota here: it is never moved.
   if (t.runBy === "opus") return { action: "stay", why: "Claude's own agent" };
   const here = rooms[t.runBy];
   if (!here || here.open) return { action: "stay", why: "its executor has quota" };
   const back = here.until;
-  for (const to of failoverOrder(t, s)) {
-    if (to === t.runBy || to === t.movedFrom?.from || t.movedFrom?.via?.includes(to)) continue;
-    if (failoverBlock(t, to, rooms[to])) continue;
-    const handPicked = t.executor !== "auto";
+  const handPicked = t.executor !== "auto";
+  const ok = failoverOrder(t, s).filter((to) => to !== t.runBy && to !== t.movedFrom?.from && !t.movedFrom?.via?.includes(to) && !failoverBlock(t, to, rooms[to]));
+  // The one with the most quota left first; a target that waits for the user's Run tap comes after those that start by
+  // themselves; the settings' order breaks ties (the sort is stable).
+  const rank = (to: FailoverTarget) => (rooms[to]?.needsTap ? -1 : 0) + (rooms[to]?.left ?? 0.5);
+  const to = [...ok].sort((a, b) => rank(b) - rank(a))[0];
+  if (to) {
     if (handPicked && !s.moveManual) return { action: "ask", to, ...(back ? { back } : {}) };
     return { action: "move", to, ...(back ? { back } : {}) };
   }
   return { action: "stay", why: "no other executor has quota and may take it" };
+}
+
+/**
+ * The reason line of a move, for the task's note: why the first executor cannot take it and what the new one has left
+ * ("GhostCLI cooling down till 10:58, OpenCode Go has 47/60 left").
+ *
+ * @param from - The first executor's name.
+ * @param here - Its room (its `reason`).
+ * @param to - The new executor's name.
+ * @param room - Its room (its `leftText`).
+ */
+export function failoverWhy(from: string, here: ExecutorRoom | undefined, to: string, room: ExecutorRoom | undefined): string {
+  return `${from} ${here?.reason ?? "has no quota"}, ${to} ${room?.leftText ? `has ${room.leftText}` : "has quota"}`;
 }
 
 /** Display names of the executors (the task row and the hub use them in "moved from X"). */

@@ -901,6 +901,32 @@ test("ghostcli: a 429 cools that GhostCLI model only and the next one goes on; O
   }
 });
 
+test("quota failover: hand-picked GhostCLI tasks while every GhostCLI model cools down move at once to the provider with quota (reason in the note); 'only this executor' waits", async () => {
+  const { root, repo } = await setup({ "c-20261128-01": TASK("c-20261128-01", "ghostcli"), "c-20261128-02": TASK("c-20261128-02", "ghostcli"), "c-20261128-03": TASK("c-20261128-03", "ghostcli", "only_this: true\n") });
+  const busy = Object.assign(new Error("429 Too Many Requests"), { retryAfterMs: 3_600_000 });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-pro"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] }, fail: (m) => (m.startsWith("ghostcli/") ? busy : undefined) });
+  const { inbox, notes } = inboxFor(repo, root, coder, { opencode: { enabled: true, useFree: false, useRelay: false, dailyCap: 60 }, ghostcli: { enabled: true, takeHeavy: false, dailyCap: 30, models: [] } });
+  try {
+    await inbox.sync();
+    await inbox.pumpGhostcli();
+    await inbox.pumpOpencode();
+    await inbox.idle();
+    for (const id of ["c-20261128-01", "c-20261128-02"]) {
+      const t = await inbox.task(id);
+      assert.deepEqual([t.runBy, t.executor, t.movedFrom?.from, t.status], ["opencode", "ghostcli", "ghostcli", "done"], id);
+      // The note says why (it is cleared when the task ends; the notice kept it).
+      assert.ok(notes.some((n) => n.startsWith(`↪ ${id} moved to OpenCode Go`) && /GhostCLI cooling down till \d\d:\d\d UTC, OpenCode Go has \d+\/60 left/.test(n)), notes.join("\n"));
+    }
+    // It was moved the moment GhostCLI had nothing, not at the next 5-minute look: the second task never waited on it.
+    const pinned = await inbox.task("c-20261128-03");
+    assert.deepEqual([pinned.runBy, pinned.status, pinned.movedFrom], ["ghostcli", "deferred-quota", undefined]);
+    assert.equal(notes.filter((n) => n.startsWith("↪ c-20261128-0") && n.includes("moved to OpenCode Go")).length, 2, "one notice per move");
+    assert.ok(runs.every((r) => !r.title.includes("c-20261128-03") || r.model.startsWith("ghostcli/")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("ghostcli research: runs like Gemini's on GhostCLI's model (report kept, no branch work); a sensitive one is refused; auto research goes to GhostCLI while Gemini is not connected", async () => {
   const research = (id: string, executor: string, extra = "") => TASK(id, executor, `kind: research\n${extra}`);
   const { root, repo } = await setup({ "c-20261127-58": research("c-20261127-58", "ghostcli"), "c-20261127-59": research("c-20261127-59", "auto"), "c-20261127-60": research("c-20261127-60", "ghostcli").replace("Add a clear button", "Rotate the API token") });

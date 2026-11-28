@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { failoverBlock, RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask, buildHandoffNote, handoffPromptHead, handoffWorth, leftoverSize, pickHandoff, type HandoffTarget, type InboxHandoff } from "@kesher/shared";
+import { failoverBlock, RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, failoverWhy, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask, buildHandoffNote, handoffPromptHead, handoffWorth, leftoverSize, pickHandoff, type HandoffTarget, type InboxHandoff } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -157,6 +157,8 @@ interface Saved {
   quota?: InboxState["quota"];
   /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
   geminiUntil?: number;
+  /** Every web-search backend came back empty (blocked) until this time (ms): research waits, or goes to an agent that searches by itself. */
+  searchUntil?: number;
   lastFetch?: number;
   lastError?: string;
   /** The models Antigravity listed in its last session, and when (the per-task picker shows the available ones). */
@@ -362,6 +364,8 @@ export class TaskInbox {
   private saved: Saved = { tasks: [], today: { date: "", used: 0 } };
   private loaded = false;
   private active?: Active;
+  /** The failover pass is running (a quota stop inside it does not start a second pass). */
+  private failingOver = false;
   /**
    * Tasks the user pressed Run on while another ran, in order. Nothing in it starts by itself: when the running task
    * ends, the first one gets the ask "Next in line — Start?" and starts only on the user's own Start. Kept in memory:
@@ -704,17 +708,23 @@ export class TaskInbox {
     const gcReady = this.gc.enabled && !!this.d.coder?.free?.ghostcli?.ready() && this.saved.relayHealth?.ok !== false && (t.kind !== "research" || !!this.d.research?.viaModel);
     // Gemini (research): the free key's quota stop.
     const gemUntil = (this.saved.geminiUntil ?? 0) > now ? this.saved.geminiUntil : undefined;
+    // Research whose search came back empty: while every web-search backend is blocked, Gemini and GhostCLI (both search through this PC) cannot help;
+    // Antigravity searches by itself.
+    const searchUntil = t.kind === "research" && t.searchTries && (this.saved.searchUntil ?? 0) > now ? this.saved.searchUntil : undefined;
     const claude = this.claudeBlocked();
-    const out = (until: number | undefined): ExecutorRoom => ({ open: false, ...(until ? { until } : {}) });
+    const at = (ms: number | undefined) => (ms ? ` till ${hhmmUtc(ms)}` : "");
+    const out = (until: number | undefined, reason: string): ExecutorRoom => ({ open: false, reason, ...(until ? { until } : {}) });
+    // What is left of a daily allowance, for choosing the target with the most room and for the note.
+    const left = (used: number, cap: number): Pick<ExecutorRoom, "left" | "leftText"> => (cap > 0 ? { left: Math.max(0, 1 - used / cap), leftText: `${Math.max(0, cap - used)}/${cap} left` } : {});
     return {
-      antigravity: agOut ? { ...out(agUntil), needsTap: true } : { open: mine("antigravity") || this.agQuotaLeft(), needsTap: true },
-      opencode: ocLimit || ocCapped ? out(ocLimit ?? midnight) : { open: mine("opencode") || ocReady },
-      ghostcli: gcCool || gcCapped ? { ...out(gcCool ?? midnight), relay: true } : { open: mine("ghostcli") || gcReady, relay: true },
-      gemini: gemUntil ? { ...out(gemUntil), training: true } : { open: mine("gemini") || !!this.d.research?.ready(), training: true },
-      // The local model has no quota; it takes tasks through the board (self-work).
-      local: { open: mine("local") || !!this.d.board },
+      antigravity: agOut ? { ...out(agUntil, `is out of quota${at(agUntil)}`), needsTap: true } : { open: mine("antigravity") || this.agQuotaLeft(), needsTap: true, ...left(this.today().used, this.s.dailyCap) },
+      opencode: ocLimit || ocCapped ? out(ocLimit ?? midnight, ocLimit ? `plan limit${at(ocLimit)}` : "daily cap reached") : { open: mine("opencode") || ocReady, ...left(this.ocToday().used, this.oc.dailyCap) },
+      ghostcli: searchUntil ? { ...out(searchUntil, `web search blocked${at(searchUntil)}`), relay: true } : gcCool || gcCapped ? { ...out(gcCool ?? midnight, gcCool ? `cooling down${at(gcCool)}` : "daily cap reached"), relay: true } : { open: mine("ghostcli") || gcReady, relay: true, ...left(this.gcToday().used, this.gc.dailyCap) },
+      gemini: searchUntil ? { ...out(searchUntil, `web search blocked${at(searchUntil)}`), training: true } : gemUntil ? { ...out(gemUntil, `free limit reached${at(gemUntil)}`), training: true } : { open: mine("gemini") || !!this.d.research?.ready(), training: true },
+      // The local model has no quota; it takes tasks through the board (self-work). It is the last choice (left 0).
+      local: { open: mine("local") || !!this.d.board, left: 0 },
       // Claude Code is never a target (not in a fallback order); only whether a task on it is stopped by its limits.
-      claude: claude && claude.code === 429 && claude.until ? out(claude.until) : { open: true },
+      claude: claude && claude.code === 429 && claude.until ? out(claude.until, `limit reached${at(claude.until)}`) : { open: true },
       opus: { open: true },
     };
   }
@@ -726,9 +736,14 @@ export class TaskInbox {
     const sent = t.kind === "research" ? researchQuestion(t) : agentPrompt(t, t.branch);
     const clean = !scanDiff(sent.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length;
     const relayOk = safe.ok && clean;
-    const trainOk = t.kind === "research" ? relayOk : clean && safeForTrainingProvider({ ...t, size }).ok;
     const sensitive = t.risk === "high" || /security|sensitive/.test(safe.why ?? "");
-    return { kind: t.kind ?? "code", size, risk: t.risk, status: t.status, executor: t.executor, runBy: t.runBy, relayOk, trainOk, sensitive, ...(t.movedFrom ? { movedFrom: t.movedFrom } : {}) };
+    // Roee's rule (28.11): a task without security issues or private data may run on ANY provider, free ones that train
+    // on data included. Only a sensitive, private or security-related task (or one the privacy scan flags) keeps the
+    // restriction and never goes to a service that may train.
+    const trainOk = clean && !sensitive;
+    // The count of quota moves restarts once the task has started somewhere after its last move.
+    const started = t.startedAt !== undefined && t.startedAt >= (t.movedFrom?.at ?? 0);
+    return { kind: t.kind ?? "code", size, risk: t.risk, status: t.status, executor: t.executor, runBy: t.runBy, relayOk, trainOk, sensitive, ...(t.onlyThis ? { onlyThis: true } : {}), moves: started ? 0 : t.moves ?? 0, ...(t.movedFrom ? { movedFrom: t.movedFrom } : {}) };
   }
 
   /**
@@ -740,14 +755,25 @@ export class TaskInbox {
   private async quotaFailover(): Promise<void> {
     const s = this.s;
     const fo: FailoverSettings = { ...FAILOVER_DEFAULTS, ...s.failover };
-    if (!s.enabled || s.paused || !fo.enabled) return;
+    if (!s.enabled || s.paused || !fo.enabled || this.failingOver) return;
+    this.failingOver = true;
+    try {
+      await this.failoverPass(fo);
+    } finally {
+      this.failingOver = false;
+    }
+  }
+
+  /** One pass of {@link quotaFailover} (the guard keeps two from running inside each other). */
+  private async failoverPass(fo: FailoverSettings): Promise<void> {
     let changed = false;
     for (const t of this.saved.tasks) {
       if (t.status !== "waiting" && t.status !== "queued" && t.status !== "deferred-quota") continue;
       if (this.active?.id === t.id) continue;
-      const d = pickFailover(this.failoverTask(t), this.failoverRooms(t), fo);
+      const rooms = this.failoverRooms(t);
+      const d = pickFailover(this.failoverTask(t), rooms, fo);
       if (d.action === "move") {
-        await this.moveForQuota(t, d.to, d.back);
+        await this.moveForQuota(t, d.to, d.back, failoverWhy(EXECUTOR_NAMES[t.runBy], rooms[t.runBy], EXECUTOR_NAMES[d.to], rooms[d.to]));
         changed = true;
       } else if (d.action === "ask" && (!t.quotaAskAt || this.now() - t.quotaAskAt > 6 * 3_600_000)) {
         t.quotaAskAt = this.now();
@@ -768,23 +794,27 @@ export class TaskInbox {
    * @param to - The executor with quota left.
    * @param back - When the first executor is expected back (ms), when known.
    */
-  private async moveForQuota(t: InboxTaskView, to: FailoverTarget, back?: number): Promise<void> {
+  private async moveForQuota(t: InboxTaskView, to: FailoverTarget, back?: number, why?: string): Promise<void> {
     const from = t.runBy;
+    const started = t.startedAt !== undefined && t.startedAt >= (t.movedFrom?.at ?? 0);
+    t.moves = (started ? 0 : t.moves ?? 0) + 1;
     const via = [...new Set([...(t.movedFrom?.via ?? []), ...(t.movedFrom ? [t.movedFrom.from] : [])])].filter((x) => x !== from).slice(-6);
     this.lines.remove(t.id);
     delete t.boardState;
     t.runBy = to;
     if (t.model && !this.offersModel(to, t.model)) delete t.model;
-    for (const k of ["retryAt", "autoRetried", "runAsk", "endedAt", "quotaAskAt"] as const) delete t[k];
+    for (const k of ["retryAt", "autoRetried", "runAsk", "endedAt", "quotaAskAt", "searchRetry"] as const) delete t[k];
     t.status = to === "local" ? "queued" : "waiting";
     if (!(t.headSha && t.branch.endsWith("-partial") && to !== "gemini" && to !== "local")) t.branch = branchFor(t, to);
     t.movedFrom = { from, at: this.now(), ...(back ? { back } : {}), ...(via.length ? { via } : {}) };
     t.resultWritten = false;
-    const line = `Moved from ${EXECUTOR_NAMES[from]}: quota${back ? `, back at ${hhmmUtc(back)}` : ""}.`;
+    const line = why ? `Moved to ${EXECUTOR_NAMES[to]}: ${why}.` : `Moved from ${EXECUTOR_NAMES[from]}: quota${back ? `, back at ${hhmmUtc(back)}` : ""}.`;
     t.note = `${line} ${to === "antigravity" ? "Antigravity runs it after your Run." : to === "local" ? "Self-work takes it from the task board." : `${EXECUTOR_NAMES[to]} runs it by itself.`}`;
     this.log(t, "quota", "info", back ? { backInMinutes: Math.max(0, Math.round((back - this.now()) / 60_000)) } : {}, `moved from ${from} to ${to}`);
     if (t.boardId) await this.d.board?.change("kesher", to === "local" ? [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: "small", forKesher: true }] : [{ op: "note", text: line, task: t.boardId }]).catch(() => undefined);
     await this.save();
+    // One notice per move (a task moves at most three times before it starts).
+    this.d.notify(`↪ ${t.id} moved to ${EXECUTOR_NAMES[to]}`, `${t.title} · ${why ?? line}`, { path: `#/task-inbox/${t.id}` });
     if (to === "antigravity") this.makeAsk(t);
     else if (to === "gemini") void this.pumpGemini().catch(() => undefined);
     else if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
@@ -812,7 +842,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.ghostcli ? { ghostcli: raw.ghostcli } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}), ...(raw.relayHealth ? { relayHealth: raw.relayHealth } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.searchUntil ? { searchUntil: raw.searchUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.ghostcli ? { ghostcli: raw.ghostcli } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}), ...(raw.relayHealth ? { relayHealth: raw.relayHealth } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -1364,7 +1394,12 @@ export class TaskInbox {
       const now = this.now();
       const due = (x: InboxTaskView) => x.runBy === "gemini" && (x.status === "waiting" || (x.status === "deferred-quota" && (!x.autoRetried || x.searchRetry === "waiting") && x.retryAt !== undefined && x.retryAt <= now));
       const t = this.saved.tasks.find(due);
-      if (!t || (this.saved.geminiUntil ?? 0) > now) return;
+      if (!t) return;
+      if ((this.saved.geminiUntil ?? 0) > now) {
+        // The free key's limit is on: the failover may give the task to an executor with quota.
+        await this.quotaFailover().catch(() => undefined);
+        return;
+      }
       const r = this.d.research;
       if (!r?.ready()) {
         const note = "Waiting for a Gemini connection: add Google Gemini with a free AI Studio key (Settings > Connections).";
@@ -1420,16 +1455,19 @@ export class TaskInbox {
       t.summary = clean.slice(0, 2000);
     } catch (e) {
       const msg = (e as Error).message || String(e);
-      if (!stop.signal.aborted && searchRetryDue(msg, t.searchRetry)) {
-        // The web search found nothing (engines blocking or down), not the model: back once after the search cooldown.
+      if (!stop.signal.aborted && msg.includes(NO_SEARCH_START) && (t.searchTries ?? 0) < MAX_SEARCH_TRIES) {
+        // The web search found nothing (engines blocking or down), not the model: it waits and tries again, each wait
+        // twice the one before (30, 60, 120 minutes), unless another executor takes it meanwhile (the failover below).
         // First, because the reasons may carry an engine's "429", which is not Gemini's quota.
         status = "deferred-quota";
         searchDeferred = true;
+        t.searchTries = (t.searchTries ?? 0) + 1;
         t.searchRetry = "waiting";
-        t.retryAt = this.now() + SEARCH_RETRY_MS;
-        t.note = `${msg.slice(0, 340)} — not the model's failure; it tries once more by itself at ${new Date(t.retryAt).toISOString()}.`;
+        t.retryAt = this.now() + searchBackoffMs(t.searchTries);
+        this.saved.searchUntil = t.retryAt;
+        t.note = `${msg.slice(0, 340)} — not the model's failure; it tries again by itself at ${new Date(t.retryAt).toISOString()} (try ${t.searchTries} of ${MAX_SEARCH_TRIES}), or another executor takes it.`;
       } else if (!stop.signal.aborted && msg.startsWith(NO_SEARCH_START)) {
-        // Its one search retry is used: it ends here (an engine's "429" in the reasons is not a model's quota).
+        // Its search retries are used: it ends here (an engine's "429" in the reasons is not a model's quota).
         status = "failed";
         t.note = `The research failed: ${msg.slice(0, 400)}`;
       } else if (gh && !stop.signal.aborted && (isQuotaError(msg) || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(msg))) {
@@ -1519,6 +1557,7 @@ export class TaskInbox {
           t.note = no;
           await this.save();
         }
+        await this.quotaFailover().catch(() => undefined);
         return;
       }
       await this.runOpencode(t, this.d.coder!);
@@ -1572,6 +1611,7 @@ export class TaskInbox {
           t.note = no;
           await this.save();
         }
+        await this.quotaFailover().catch(() => undefined);
         return;
       }
       if (t.kind === "research") await this.runGhostcliResearch(t, this.d.coder!);
@@ -1689,6 +1729,8 @@ export class TaskInbox {
         const back = Math.min(...order.map((m) => cooldowns()[m] ?? Infinity));
         Object.assign(t, { status: "deferred-quota" as InboxStatus, retryAt: back, note: `Every GhostCLI model is cooling down after "too many requests"; it goes again by itself at ${new Date(back).toISOString()}.` });
         await this.save();
+        // Another executor with quota takes it now instead of waiting for the cooldown.
+        await this.quotaFailover().catch(() => undefined);
         return;
       }
       model = first;
@@ -1714,6 +1756,7 @@ export class TaskInbox {
       const when = Number.isFinite(back) ? ` A free model opens again at ${new Date(back).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : " It runs again after midnight.";
       Object.assign(t, { status: "deferred-quota" as InboxStatus, note: `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached, and no free model is open.${when}` });
       await this.save();
+      await this.quotaFailover().catch(() => undefined);
       return;
     }
     const repo = this.repo();
@@ -2887,6 +2930,24 @@ export class TaskInbox {
   }
 
   /**
+   * "Only this executor" (Roee, 28.11): on, the quota failover never moves the task (the user chose to wait for its
+   * executor); off, the executor is a preference and the task moves when it has no quota. Off also lets the next
+   * failover pass look at it at once.
+   *
+   * @param id - The task.
+   * @param on - Whether the task stays with its executor.
+   */
+  async setOnlyThis(id: string, on: boolean): Promise<InboxTaskView> {
+    await this.load();
+    const t = this.find(id);
+    if (on) t.onlyThis = true;
+    else delete t.onlyThis;
+    await this.save();
+    if (!on) await this.quotaFailover().catch(() => undefined);
+    return t;
+  }
+
+  /**
    * Picks the model a task runs on ("Who does it" → model, on the PC, the phone or the hub page). Empty: the default
    * for its kind. Only a model Antigravity lists as available (or a known name before it was asked once).
    *
@@ -3922,6 +3983,8 @@ export class TaskInbox {
     delete t.boardState;
     t.runBy = to;
     t.executor = to;
+    // The user's own choice starts the count of quota moves again.
+    delete t.moves;
     if (t.model && !this.offersModel(to, t.model)) delete t.model;
     delete t.retryAt;
     t.status = to === "antigravity" || to === "gemini" || to === "opencode" || to === "ghostcli" || to === "claude" ? "waiting" : "queued";
@@ -4036,6 +4099,17 @@ export function retryable(note?: string): boolean {
 
 /** How long a research whose web search found nothing waits before its one retry (the engines' block cooldown). */
 export const SEARCH_RETRY_MS = 30 * 60_000;
+/** How many times a research whose web search found nothing waits and tries again before it fails. */
+export const MAX_SEARCH_TRIES = 3;
+
+/**
+ * The wait before a research's next search try: 30 minutes, then 60, then 120.
+ *
+ * @param tries - How many times the search came back empty so far (1 = the first).
+ */
+export function searchBackoffMs(tries: number): number {
+  return SEARCH_RETRY_MS * 2 ** Math.max(0, Math.min(tries, MAX_SEARCH_TRIES) - 1);
+}
 
 /**
  * Whether a research run's failure is only "the web search found nothing" and its one search retry is still unused.

@@ -42,6 +42,11 @@ function modelProp(t: InboxTaskView, state: InboxState): { model?: { list: Inbox
   return { model: { list: state.models ?? [], pick: t.model ?? "", auto: defaultFamilyFor(t) } };
 }
 
+/** The "only this executor" switch of "Who does it": for a task given to an executor that has not started or ended. */
+function onlyProp(t: InboxTaskView): { only?: { on: boolean } } {
+  return t.executor !== "auto" && ["waiting", "queued", "deferred-quota"].includes(t.status) ? { only: { on: !!t.onlyThis } } : {};
+}
+
 /** The provider filter's order. */
 const PROVIDERS = ["ghostcli", "opencode", "opencode-free", "zai", "openrouter", "cloudflare", "nvidia", "gemini", "antigravity", "local", "claude", "opus"];
 
@@ -129,6 +134,7 @@ function MovedLine({ t }: { t: InboxTaskView }) {
     const back = m.back && m.back > Date.now() ? L(` · חוזר ב-${hhmm(m.back)}`, ` · back at ${hhmm(m.back)}`) : "";
     return <div className="small tinbox-moved" dir="auto" title={L(`הועבר ב-${hhmm(m.at)}`, `Moved at ${hhmm(m.at)}`)}>↪ {L(`הועבר מ-${exName(m.from)} (מכסה)`, `moved from ${exName(m.from)} (quota)`)}{back}</div>;
   }
+  if (t.onlyThis && t.status === "deferred-quota") return <div className="small muted" dir="auto">📌 {L(`רק ${exName(t.runBy)}: מחכה לו`, `Only ${exName(t.runBy)}: waits for it`)}</div>;
   if (t.quotaAskAt && (t.status === "waiting" || t.status === "deferred-quota")) return <div className="small warn" dir="auto">↪ {L(`ל-${exName(t.runBy)} נגמרה המכסה: להעביר? (מי מבצע)`, `${exName(t.runBy)} is out of quota: move it? (Who does it)`)}</div>;
   return null;
 }
@@ -519,7 +525,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}
         {["running", "needs-approval", "partial", "failed", "deferred-quota", "declined"].includes(t.status) && <button type="button" onClick={open}>{L("פתח", "Open")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} onDone={onAssigned} {...modelProp(t, state)} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} onDone={onAssigned} {...modelProp(t, state)} {...onlyProp(t)} />}
       </span>
     </div>
   );
@@ -641,7 +647,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} {...modelProp(t, state)} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} {...modelProp(t, state)} {...onlyProp(t)} />}
       </div>
       <MovedLine t={t} />
       <HandoffLine t={t} />

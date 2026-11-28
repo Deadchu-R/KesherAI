@@ -116,6 +116,8 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     const model = typeof req.body?.model === "string" ? req.body.model.slice(0, 80) : "";
     return inbox.setModel(req.params.id, model).catch((e) => failed(reply, e));
   });
+  /** "Only this executor" on or off (the failover never moves a task that has it). */
+  app.put<{ Params: { id: string }; Body: { on?: unknown } }>("/api/task-inbox/tasks/:id/only-this", async (req, reply) => inbox.setOnlyThis(req.params.id, req.body?.on === true).catch((e) => failed(reply, e)));
   // Settings › Connections › Claude Code: check the install and the login again (Claude Code's own `auth status`).
   app.post("/api/task-inbox/claude/check", async (_req, reply) => (await inbox.claudeCheckNow()) ?? reply.code(404).send({ error: "Claude Code is not available here." }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
