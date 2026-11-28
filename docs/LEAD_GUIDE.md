@@ -79,6 +79,13 @@ A scheduled task on Roee's Claude account ("KesherAI daily feature review vs com
 - Fewer agents: group related steps into one agent task; do small edits (a few lines, docs) as the lead. Model per agent by the job: big or risky code = Opus; small UI/doc/test fixes, boards, research, reviews = Sonnet; lookups and mechanical loops = Haiku.
 - His PC: use it only when a feature needs it (setup, real checks); keep KesherAI on the newest release there and things tidy; close what was opened.
 
+## Read as little as possible (Roee, 2026-11-28 10:35)
+
+Reading files is where tokens go. The lead and every helper: search first, read only ~40 lines around the hit, never a
+whole big file, never "for context", never the same file twice, never a re-read to check an edit (AGENTS.md has the
+same rule for the PC agents). The lead gives each helper the exact files, functions and line areas it needs (from what
+the lead already knows), so the helper does not explore; a helper that must explore says so in its report.
+
 ## Which provider may run what (Roee, 2026-11-28 10:34)
 
 Any task WITHOUT security issues or private data may run on ANY provider (GhostCLI, OpenCode Go, Gemini, free cloud

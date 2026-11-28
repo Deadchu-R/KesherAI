@@ -12,6 +12,11 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 ## How to work
 - Small steps: one item, then check, then the next.
 - Big files: search first, then read_file with offset/limit. Change them with edit_file; never rewrite a whole existing file.
+- Read as few files as possible (Roee, 28.11: every read costs tokens). Find the place with a search (function, route,
+  CSS class), then read only about 40 lines around it. Do not open files "for context", do not read a whole file to
+  find one function, do not re-read a file you already read, and do not read a file again just to check your edit.
+  Long docs (WORK_LIST, RESEARCH_LOG, HANDOFF) are searched for their section, never read whole. Long command output
+  goes to a file; read its last lines or search it.
 - Tests are `node:test` + `node:assert/strict` in `*.test.ts` next to the code (not vitest).
 - Check after each item: `pnpm -s typecheck && pnpm -s test`.
 - To test only changed files: `node tools/test-changed.js` (or `--staged` / `--since HEAD~3`).
