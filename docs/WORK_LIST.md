@@ -584,6 +584,28 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
 - ⬜ When the PC is back: version, the model button, the line runs on Claude, agQuota or agQuotaWhy shown.
 - ⬜ GPT-OSS 120B refused by setModel ("Antigravity does not offer that model") although listed: check pickableModels / saved.models.
 
+## Travel assistant — Roee's spec (28.11 11:53)
+Three SEPARATE systems in the chat, each shown on its own unless the user asks for them together, each with advanced
+filters and deep understanding of context (it works out from the conversation what to search):
+1. **Flights** — a Skyscanner-like price calendar right in the chat: dates with prices, in USD plus an optional second
+   currency beside it (user picks, e.g. ₪). Options: direct; round trip; one-way out + one-way back booked separately;
+   connections; and self-made connections split by a few days (separate tickets) to find the cheapest. Runs as
+   requests ("where is it cheapest in March?" → shows the cheapest dates/places).
+2. **Stays** — hotels, hostels, apartments: finds the options and asks what the user wants to do there (near X or Y,
+   price), then gives near / far / mid options by price and needs; shows the real pages (Booking, Hostelworld, …).
+3. **Tours and places** — organized tours (GetYourGuide-style) and places worth being in the area; a separate request
+   from flights unless asked together.
+Goal: the best for the request — usually the cheapest per category.
+- Links the user sends (YouTube videos, articles, posts): pull the facts (places, prices, tips; YouTube transcript) and
+  use them in the search.
+- Everything opens INCOGNITO (no cookies/history, so prices don't climb); the user sees and books through KesherAI's own
+  browser. KesherAI never books, pays or types card details (existing rule).
+- Every system is a chat surface (card → panel → full screen; phone: view, filter, open the page) per the 28.11 rule.
+- Before building: research how Skyscanner (calendar, "everywhere"), Google Flights (date grid, price graph), Kiwi
+  (virtual interlining / self-transfer), Hopper, Booking, Hostelworld, GetYourGuide do it end to end, which data
+  sources are free or keyed (Amadeus key from Roee, Kiwi Tequila, …), and the private-browsing approach. Builds on the
+  27.11 research below (r-20261127-08 / -10).
+
 ## Idea: travel skill — flights and stays, local and private (Roee, 27.11)
 Like Skyscanner, but on the PC and private ("like incognito"): the sites should not learn who searches, so prices do not climb.
 - ⬜ Research first (Gemini, with a "Language and weight" part): how Skyscanner, Google Flights, Kayak, Hopper, Kiwi search and show results; which open sources / APIs / scraping are allowed (Amadeus self-service, Kiwi Tequila, Duffel, fast-flights, SerpAPI, Booking/Hostelworld/Airbnb affiliate APIs); terms; how to stay private (no login, fresh browser profile, no cookies, no tracking; whether price tracking by cookies is real).
