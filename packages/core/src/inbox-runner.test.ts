@@ -106,7 +106,7 @@ function fakeAgy(write: Record<string, string>, seen: { prompts: number; push?: 
 /** The heavy job the test pretends runs (heavy-gate.ts), if any. */
 let heavyNow: string | undefined;
 
-async function inboxFor(repo: string, root: string, write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }, now = () => Date.now()) {
+async function inboxFor(repo: string, root: string, write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }, now = () => Date.now(), approvalMs = 300) {
   const notes: string[] = [];
   const noteOpts: Array<{ path?: string; actions?: Array<{ label: string; path: string }> } | undefined> = [];
   const board = new TaskBoard(join(root, "board.json"));
@@ -124,7 +124,7 @@ async function inboxFor(repo: string, root: string, write: Record<string, string
     me: { username: "someone", home: join(root, "home", "someone") },
     now,
     heavy: () => heavyNow,
-    approvalMs: 300,
+    approvalMs,
   });
   return { inbox, notes, noteOpts, board, settings };
 }
@@ -254,11 +254,11 @@ test("inbox run: a second Run on a task that is already starting is a quiet no-o
 });
 
 /** Three Antigravity tasks: A runs, B and C are pressed Run while A runs (they queue). */
-async function queuedThree(ask = true) {
+async function queuedThree(ask = true, now?: () => number, approvalMs?: number) {
   const ids = ["c-20261122-01", "c-20261122-02", "c-20261122-03"];
   const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
   const seen = { prompts: 0 };
-  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen, now, approvalMs);
   h.settings.dailyCap = 9;
   h.settings.askBeforeNext = { antigravity: ask, local: false };
   await h.inbox.sync();
@@ -722,10 +722,11 @@ test("inbox: Gemini busy (503 overloaded) waits 15 minutes and tries once more, 
   }
 });
 
-// Skipped on Windows only (28.11 night): the Next-in-line ask does not appear on the Windows CI runner since 0.6.506; the
-// task still never starts without a Start answer. Under investigation (WORK_LIST "Windows: Next-in-line ask").
-test("inbox queue: even with the ask setting off, Antigravity's next queued task never starts without a Start answer", { skip: process.platform === "win32" }, async () => {
-  const { inbox, notes, ids, root, seen } = await queuedThree(false);
+// The ask lives 300 ms in most tests here (approvalMs) and openAsks() drops expired asks. The Windows CI runner spawns
+// git slowly and synchronously (spawnSync blocks the event loop), so with the 300 ms default the ask expired before the
+// poll below looked (0.6.506 added one more git fetch per sync). The test therefore uses a longer ask life (4 s).
+test("inbox queue: even with the ask setting off, Antigravity's next queued task never starts without a Start answer", async () => {
+  const { inbox, notes, ids, root, seen } = await queuedThree(false, undefined, 4_000);
   try {
     await inbox.idle();
     await inbox.pump();
@@ -744,9 +745,23 @@ test("inbox queue: even with the ask setting off, Antigravity's next queued task
   }
 });
 
+test("inbox queue: a slow machine (a sync that takes longer than the ask's life) loses a short ask, a long ask survives (the Windows CI failure)", async () => {
+  for (const [approvalMs, want] of [[300, 0], [4_000, 1]] as const) {
+    let skew = 0; // the clock jumps as a slow synchronous git spawn would make it
+    const { inbox, root } = await queuedThree(false, () => Date.now() + skew, approvalMs);
+    try {
+      await inbox.idle();
+      skew += 1000;
+      assert.equal(inbox.openAsks().length, want, `approvalMs ${approvalMs}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test("inbox queue: a heavy job holds the next queued task back until it is over", async () => {
   heavyNow = "Unreal build";
-  const { inbox, ids, root, seen } = await queuedThree(false);
+  const { inbox, ids, root, seen } = await queuedThree(false, undefined, 4_000);
   try {
     assert.equal(seen.prompts, 1, "the next one waits for the heavy job");
     const b = await inbox.task(ids[1]!);
