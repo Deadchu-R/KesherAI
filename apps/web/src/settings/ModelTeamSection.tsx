@@ -17,15 +17,17 @@ export function ModelTeamSection() {
   const [toolCap, setToolCap] = useState(24);
   const [smallTurns, setSmallTurns] = useState(true);
   const [shortAnswers, setShortAnswers] = useState(true);
+  const [stopOnLow, setStopOnLow] = useState(true);
   const [models, setModels] = useState<Model[]>([]);
   // Downloaded translation models (TranslateGemma…): chosen by file, loaded beside the main model when needed.
   const [files, setFiles] = useState<Array<{ path: string; name: string }>>([]);
   useEffect(() => {
-    void api<{ translator: string; toolCap?: number; smallTurns?: boolean; shortAnswers?: boolean }>("/api/model-team").then((r) => {
+    void api<{ translator: string; toolCap?: number; smallTurns?: boolean; shortAnswers?: boolean; stopOnLowMemory?: boolean }>("/api/model-team").then((r) => {
       setTranslator(r.translator);
       if (r.toolCap) setToolCap(r.toolCap);
       setSmallTurns(r.smallTurns !== false);
       setShortAnswers(r.shortAnswers !== false);
+      setStopOnLow(r.stopOnLowMemory !== false);
     }, () => undefined);
     void api<{ models: Model[] }>("/api/models").then((r) => setModels(r.models.filter((m) => (m.category ?? "chat") === "chat")), () => undefined);
     void api<Array<{ path: string; name: string; gguf?: boolean; source?: string }>>("/api/models/local").then((r) => setFiles(r.filter((m) => m.gguf && m.source === "KesherAI" && /translat/i.test(m.name)).map((m) => ({ path: m.path, name: m.name.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") }))), () => undefined);
@@ -42,6 +44,10 @@ export function ModelTeamSection() {
   const saveShort = (on: boolean) => {
     setShortAnswers(on);
     void api("/api/model-team", { method: "PUT", body: { shortAnswers: on } }).catch((e: Error) => toast(e.message));
+  };
+  const saveStopOnLow = (on: boolean) => {
+    setStopOnLow(on);
+    void api("/api/model-team", { method: "PUT", body: { stopOnLowMemory: on } }).catch((e: Error) => toast(e.message));
   };
   const saveCap = (n: number) => {
     setToolCap(n);
@@ -78,6 +84,11 @@ export function ModelTeamSection() {
         <span className="grow">✂️ {L("לענות כמו Claude (לסיים את העבודה, תשובות קצרות)", "Answer like Claude (finish the job, short answers)")}</span>
       </label>
       <p className="muted small">{L("במודל מקומי: אם התשובה הסופית ארוכה ומונה את כל השלבים שנעשו, או שנכתבה באנגלית למי שכתב בעברית, המודל מתבקש פעם אחת לכתוב אותה מחדש: מה יצא, הקובץ, והצעד הבא.", "On a local model: when the final answer is long and lists every step taken, or is in English for someone who wrote Hebrew, the model is asked once to rewrite it: what came out, the file, and the next step.")}</p>
+      <label className="row">
+        <input type="checkbox" checked={stopOnLow} onChange={(e) => saveStopOnLow(e.target.checked)} />
+        <span className="grow">🧠 {L("לעצור פקודות ברקע כשהזיכרון נגמר", "Stop background commands when memory runs low")}</span>
+      </label>
+      <p className="muted small">{L("כשהמחשב כמעט בלי זיכרון פנוי, הפקודה החדשה ביותר שרצה ברקע נעצרת ראשונה, והצ'אט והטלפון מקבלים הודעה.", "When the computer is almost out of free memory, the newest background command is stopped first, and the chat and the phone are told.")}</p>
     </section>
   );
 }

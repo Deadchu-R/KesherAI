@@ -271,6 +271,8 @@ export class OpenAICompatibleProvider implements Provider {
     signal?: AbortSignal,
     onText?: (delta: string) => void,
   ): Promise<ProviderToolChatResult> {
+    // Only llama.cpp takes `json_schema` (see ProviderToolChatRequest.jsonSchema).
+    const constrained = !!this.llamaCpp && !!request.jsonSchema;
     const res = await this.reach(() => fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: this.chatHeaders(request.messages),
@@ -278,7 +280,7 @@ export class OpenAICompatibleProvider implements Provider {
       body: JSON.stringify({
         model: request.providerModelId,
         messages: toOpenAIMessages(withNoThink(request.messages, request.providerModelId, request.thinking, !!this.llamaCpp)),
-        ...(request.tools.length > 0
+        ...(request.tools.length > 0 && !constrained
           ? {
               tools: request.tools.map((t) => ({
                 type: "function",
@@ -286,6 +288,7 @@ export class OpenAICompatibleProvider implements Provider {
               })),
             }
           : {}),
+        ...(constrained ? { json_schema: request.jsonSchema!.schema } : {}),
         temperature: request.temperature,
         ...(request.topP !== undefined ? { top_p: request.topP } : {}),
         ...(request.topK !== undefined ? { top_k: request.topK } : {}),
@@ -330,7 +333,7 @@ export class OpenAICompatibleProvider implements Provider {
         if (part.reasoning) thought = true;
         if (part.text) {
           text += part.text;
-          onText?.(part.text);
+          if (!constrained) onText?.(part.text);
         }
       }
       for (const tc of delta?.tool_calls ?? []) {
@@ -351,6 +354,8 @@ export class OpenAICompatibleProvider implements Provider {
     }
     // Cut off while still thinking: no answer and no call came out, so say why instead of ending the turn empty.
     if (truncated && thought && !text.trim() && ![...calls.values()].some((c) => c.name)) throw new Error(THINKING_BUDGET_MESSAGE);
+    // A schema-constrained turn (a retry after broken JSON): the whole answer is the arguments of the named tool.
+    if (constrained) return { text: "", toolCalls: [{ id: newToolCallId(), name: request.jsonSchema!.name, arguments: parseToolArguments(text) }], ...(truncated ? { truncated } : {}), ...(usage ? { usage } : {}) };
     const toolCalls: ToolCall[] = [...calls.entries()]
       .sort(([a], [b]) => a - b)
       .filter(([, c]) => c.name)

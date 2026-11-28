@@ -94,3 +94,25 @@ test("readUsage: streaming, timings and usage in separate chunks", async () => {
     srv.close();
   }
 });
+
+test("jsonSchema: llama.cpp gets json_schema and no tools, and the answer comes back as that tool's call; others ignore it", async () => {
+  const srv = await sseServer([{ choices: [{ delta: { content: '{"path":"a.txt"}' } }] }, "[DONE]"]);
+  try {
+    const schema = { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
+    const tools = [{ name: "read_file", description: "d", inputSchema: schema }];
+    const llama = new OpenAICompatibleProvider({ id: "llamacpp", type: "openai-compatible", baseUrl: srv.url, options: { llamaCpp: { slots: () => 1 } } });
+    const streamed: string[] = [];
+    const r = await llama.chatWithTools!({ providerModelId: "m", messages: [{ role: "user", content: "x" }], tools, jsonSchema: { name: "read_file", schema } }, undefined, (t) => streamed.push(t));
+    assert.deepEqual(srv.body().json_schema, schema);
+    assert.equal("tools" in srv.body(), false);
+    assert.equal(r.toolCalls[0]?.name, "read_file");
+    assert.deepEqual(r.toolCalls[0]?.arguments, { path: "a.txt" });
+    assert.deepEqual(streamed, []);
+    const cloud = new OpenAICompatibleProvider({ id: "openai", type: "openai-compatible", baseUrl: srv.url });
+    await cloud.chatWithTools!({ providerModelId: "m", messages: [{ role: "user", content: "x" }], tools, jsonSchema: { name: "read_file", schema } });
+    assert.equal("json_schema" in srv.body(), false);
+    assert.ok(Array.isArray(srv.body().tools));
+  } finally {
+    srv.close();
+  }
+});

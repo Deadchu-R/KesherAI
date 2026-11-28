@@ -7,7 +7,7 @@ import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import type { AgentTool } from "@kesher/agent";
 import type { ChildProcess } from "node:child_process";
-import { BackgroundCommands, duration, RUNNING_PER_CHAT, RUNNING_TOTAL, tailLines } from "./background-commands.js";
+import { BackgroundCommands, duration, isLowMemory, LOW_MEMORY_NOTE, RUNNING_PER_CHAT, RUNNING_TOTAL, tailLines } from "./background-commands.js";
 
 /** A fake process: write to `out`, end it with `exit(code)`. */
 class Fake extends EventEmitter {
@@ -237,4 +237,53 @@ test("a stopped command is killed, not handed over", async () => {
   assert.equal(await bg.stop("c1", c.id), true);
   assert.equal(f.killed, true);
   assert.equal(bg.list("c1")[0]!.state, "stopped");
+});
+
+test("isLowMemory: under 5% of the RAM or 1.5 GB, whichever is more", () => {
+  const GB = 1024 ** 3;
+  assert.equal(isLowMemory(1 * GB, 16 * GB), true);
+  assert.equal(isLowMemory(2 * GB, 16 * GB), false);
+  assert.equal(isLowMemory(3 * GB, 64 * GB), true, "5% of 64 GB is 3.2 GB");
+  assert.equal(isLowMemory(4 * GB, 64 * GB), false);
+});
+
+test("low memory stops the newest command first, records why, tells the chat once; the setting turns it off", async () => {
+  const s = await setup();
+  let free = 8 * 1024 ** 3;
+  let on = true;
+  const bg = new BackgroundCommands({
+    dir: s.dir,
+    send: async (convId, text) => void s.sent.push({ convId, text }),
+    onWake: (c) => void s.woke.push(c),
+    spawn: () => {
+      const f = new Fake();
+      s.procs.push(f);
+      return f as unknown as ChildProcess;
+    },
+    kill: (_pid, child) => void (child as unknown as Fake | undefined)?.kill(),
+    now: () => Date.now(),
+    memory: () => ({ free, total: 16 * 1024 ** 3 }),
+    memoryPollMs: 20,
+    lowMemoryStop: () => on,
+  });
+  const old = await bg.run("c1", "old job", "/p");
+  await new Promise((r) => setTimeout(r, 5));
+  const newest = await bg.run("c1", "new job", "/p");
+  await flush();
+  assert.equal(old.state, "running", "enough memory: nothing stops");
+  on = false;
+  free = 100 * 1024 ** 2;
+  await flush();
+  assert.equal(newest.state, "running", "setting off: nothing stops");
+  on = true;
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(newest.state, "stopped");
+  assert.equal(s.procs[1]!.killed, true);
+  assert.match(await readFile(newest.file, "utf8"), new RegExp(LOW_MEMORY_NOTE));
+  assert.equal(s.sent.filter((m) => m.text.includes(LOW_MEMORY_NOTE) && m.text.includes(newest.id)).length, 1, "the chat is told once");
+  assert.ok(s.woke.includes("c1"));
+  // Memory still low: the next reading stops the older one too (one per reading).
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(old.state, "stopped");
+  assert.equal(s.sent.filter((m) => m.text.includes(LOW_MEMORY_NOTE)).length, 2);
 });

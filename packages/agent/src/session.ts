@@ -53,7 +53,7 @@ export function sortSpecs(specs: readonly ToolSpec[]): ToolSpec[] {
 
 /** One model turn: give it the conversation and tools, get text and tool calls back. */
 export type ModelTurn = (
-  request: { messages: AgentMessage[]; tools: ToolSpec[]; /** The longest answer to ask for, thinking included (unset: the model's own limit). */ maxTokens?: number },
+  request: { messages: AgentMessage[]; tools: ToolSpec[]; /** The longest answer to ask for, thinking included (unset: the model's own limit). */ maxTokens?: number , /** A retry after broken JSON: a local llama.cpp server is held to this schema for the named tool's arguments and answers with that one call; others ignore it. */ jsonSchema?: { name: string; schema: Record<string, unknown> } },
   signal: AbortSignal,
   onText: (delta: string) => void,
 ) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; cacheWriteTokens?: number }; truncated?: boolean }>;
@@ -1573,6 +1573,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             result = await this.model({ messages: conversation, tools: [] }, abort.signal, onText);
           } else throw err;
         }
+        result = await this.repairBrokenArguments(result, conversation, abort.signal, onText);
         this.recordUsage(quick && small ? small.modelId : this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
         // The turn hit the token limit (a thinking model that reasoned without end): its tool call, if any, is cut
         // off. Ask once for a brief answer or the next step instead of running a broken call.
@@ -1876,6 +1877,37 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       for (const c of calls) for (const [e, persist] of held.get(c.id) ?? []) this.push(e, persist);
     }
     return outputs;
+  }
+
+  /**
+   * A tool call whose arguments came back as broken JSON gets one more try before it fails the step: a local llama.cpp
+   * model is held to the tool's own JSON schema (so only valid arguments can come out); any other model gets a plain
+   * retry with a short "not valid JSON" note. Each broken call is tried once; a retry that fails too leaves the call as
+   * it was (the step then tells the model, as before).
+   *
+   * @param result - The model's turn.
+   * @param conversation - What was sent.
+   * @param signal - Stops it with the session.
+   * @param onText - Streams the new answer (not used by a constrained retry).
+   * @returns The turn, with the repaired calls where the retry gave valid arguments.
+   */
+  private async repairBrokenArguments(result: Awaited<ReturnType<ModelTurn>>, conversation: AgentMessage[], signal: AbortSignal, onText: (delta: string) => void): ReturnType<ModelTurn> {
+    if (!result.toolCalls.some((c) => typeof c.arguments._invalidJson === "string") || signal.aborted) return result;
+    const toolCalls = [...result.toolCalls];
+    for (const [i, call] of toolCalls.entries()) {
+      if (typeof call.arguments._invalidJson !== "string" || signal.aborted) continue;
+      const spec = this.tools.get(call.name)?.spec;
+      const note: AgentMessage = { role: "user", content: `[KesherAI] Your last tool call (${call.name}) was not valid JSON. Send it again with valid JSON arguments.` };
+      this.push({ type: "note", text: `The model's call to ${call.name} had broken JSON arguments; KesherAI asked for it again${spec ? " with the tool's JSON schema" : ""}.` });
+      try {
+        const again = await this.model({ messages: [...conversation, note], tools: this.specs(), ...(spec ? { jsonSchema: { name: call.name, schema: spec.inputSchema as Record<string, unknown> } } : {}) }, signal, onText);
+        const fixed = again.toolCalls.find((c) => c.name === call.name && typeof c.arguments._invalidJson !== "string");
+        if (fixed) toolCalls[i] = { ...call, arguments: fixed.arguments };
+      } catch {
+        // the retry failed: the broken call stays and the step tells the model, as before
+      }
+    }
+    return { ...result, toolCalls };
   }
 
   /** Runs one tool call, asking for approval when needed. Returns what the model sees. */

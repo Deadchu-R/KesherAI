@@ -15,6 +15,7 @@ import { killTree, spawnShell } from "@kesher/agent";
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { freemem, totalmem } from "node:os";
 import { join } from "node:path";
 
 /** The output file keeps about this much (the last part). */
@@ -27,6 +28,14 @@ export const RUNNING_TOTAL = 12;
 export const FINISHED_KEPT = 20;
 /** The last lines given to the chat when a command ends. */
 export const WAKE_TAIL_LINES = 30;
+/** How often free memory is read while a background command runs (ms). */
+export const MEMORY_POLL_MS = 5000;
+/** Memory is "low" under this share of the computer's RAM or under {@link LOW_MEMORY_FLOOR} bytes, whichever is more. */
+export const LOW_MEMORY_SHARE = 0.05;
+/** 1.5 GB. */
+export const LOW_MEMORY_FLOOR = 1.5 * 1024 ** 3;
+/** Written at the end of a command's output, and sent to the chat, when it is stopped for low memory. */
+export const LOW_MEMORY_NOTE = "stopped: the computer was low on memory";
 /** `command_output` gives at most this many lines. */
 export const MAX_TAIL_LINES = 200;
 
@@ -63,6 +72,22 @@ export interface BackgroundDeps {
   startedAtOf?(pid: number): Promise<number | undefined>;
   /** The clock (tests). */
   now?(): number;
+  /** Whether a command may be stopped for low memory (the setting; default on). */
+  lowMemoryStop?(): boolean;
+  /** Free and total RAM in bytes (default: os.freemem / os.totalmem). */
+  memory?(): { free: number; total: number };
+  /** How often memory is read while commands run, ms (default {@link MEMORY_POLL_MS}). */
+  memoryPollMs?: number;
+}
+
+/**
+ * Whether free memory is low: under 5% of the RAM or under 1.5 GB, whichever is more.
+ *
+ * @param free - Free bytes.
+ * @param total - Total bytes.
+ */
+export function isLowMemory(free: number, total: number): boolean {
+  return free < Math.max(total * LOW_MEMORY_SHARE, LOW_MEMORY_FLOOR);
 }
 
 /**
@@ -111,6 +136,7 @@ export class BackgroundCommands {
   private loaded?: Promise<void>;
   private saving: Promise<void> = Promise.resolve();
   private readonly now: () => number;
+  private memoryTimer?: ReturnType<typeof setInterval>;
 
   /** @param deps - Where it lives and how it reaches the chat. */
   constructor(private readonly deps: BackgroundDeps) {
@@ -195,6 +221,7 @@ export class BackgroundCommands {
     const live = { child, written, queue: ready } as { child: ChildProcess; written: number; queue: Promise<void> };
     this.live.set(c.id, live);
     this.list_.push(c);
+    this.watchMemory();
     const onData = (b: Buffer | string) => {
       const buf = Buffer.from(b);
       live.queue = live.queue.then(() => this.append(c, live, buf)).catch(() => undefined);
@@ -306,6 +333,46 @@ export class BackgroundCommands {
       // the chat is gone or cannot take a message now
     }
     this.trim(c.convId);
+  }
+
+  /**
+   * Reads free memory every few seconds, only while a background command runs (the timer ends with the last one).
+   * When it is low (see {@link isLowMemory}) the newest running command is stopped, one per reading, so the others
+   * get a chance once memory is back.
+   */
+  private watchMemory(): void {
+    if (this.memoryTimer) return;
+    this.memoryTimer = setInterval(() => {
+      const running = this.list_.filter((c) => c.state === "running");
+      if (!running.length) {
+        clearInterval(this.memoryTimer);
+        this.memoryTimer = undefined;
+        return;
+      }
+      if (this.deps.lowMemoryStop && !this.deps.lowMemoryStop()) return;
+      const m = (this.deps.memory ?? (() => ({ free: freemem(), total: totalmem() })))();
+      if (!isLowMemory(m.free, m.total)) return;
+      const newest = running.sort((a, b) => b.startedAt - a.startedAt)[0]!;
+      void this.stopForMemory(newest, m.free);
+    }, this.deps.memoryPollMs ?? MEMORY_POLL_MS);
+    this.memoryTimer.unref?.();
+  }
+
+  /** Stops one command for low memory: the reason goes at the end of its output, and the chat (and phone) is told once. */
+  private async stopForMemory(c: BackgroundCommand, free: number): Promise<void> {
+    if (c.state !== "running") return;
+    const live = this.live.get(c.id);
+    this.kill(c, "stopped");
+    console.warn(`[kesher] background command ${c.id} stopped: ${Math.round(free / 1024 ** 2)} MB of memory free`);
+    if (live) await live.queue;
+    await appendFile(c.file, `\n[KesherAI] ${LOW_MEMORY_NOTE}\n`).catch(() => undefined);
+    await this.save();
+    try {
+      this.deps.onWake?.(c.convId);
+      await this.deps.send(c.convId, `[KesherAI] Background command ${c.id} was ${LOW_MEMORY_NOTE} (${Math.round(free / 1024 ** 2)} MB free): ${c.command.slice(0, 200)}. Its output so far is in command_output. Run it again when memory is free, or run it with less memory.`);
+    } catch {
+      // the chat is gone or cannot take a message now
+    }
   }
 
   /** Kills a running command's process tree and marks it. */

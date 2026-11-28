@@ -1231,3 +1231,46 @@ test("parallel: the limit holds (CPU-only: 3 of 5 at once) and a mixed step stay
   const single = await parallelRun(["read_file"]);
   assert.match(single.lines[0] ?? "", /0 steps run side by side|\(0 steps/);
 });
+
+test("broken JSON in a tool call is asked for again once, with the tool's schema, and then runs", async () => {
+  const { session, workspace } = await makeSession([
+    { text: "Creating it.", calls: [{ name: "write_file", arguments: { _invalidJson: '{"path": "a.txt", "content": "hi' } }] },
+    { text: "Done." },
+  ], "auto-edit");
+  // The retry (flagged with jsonSchema) gives valid arguments; the first retry attempt is the second model call.
+  const turns: Array<Parameters<ModelTurn>[0]> = [];
+  const inner = (session as unknown as { model: ModelTurn }).model;
+  (session as unknown as { model: ModelTurn }).model = async (req, signal, onText) => {
+    turns.push(req);
+    if (req.jsonSchema) return { text: "", toolCalls: [{ id: "r", name: req.jsonSchema.name, arguments: { path: "a.txt", content: "hi\n" } }] };
+    return inner(req, signal, onText);
+  };
+  session.send("make a file");
+  await waitFor(session, (e) => e.type === "assistant" && e.text === "Done.");
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "hi\n");
+  const retry = turns.find((t) => t.jsonSchema);
+  assert.equal(retry?.jsonSchema?.name, "write_file");
+  assert.match(String(retry?.messages.at(-1)?.content), /not valid JSON/);
+  assert.ok(session.events.some((e) => e.type === "note" && /broken JSON/.test(e.text)));
+});
+
+test("broken JSON that stays broken after the retry fails the call as before (one retry only)", async () => {
+  const { session } = await makeSession([
+    { text: "x", calls: [{ name: "write_file", arguments: { _invalidJson: "{oops" } }] },
+    { text: "Done." },
+  ], "auto-edit");
+  let retries = 0;
+  const inner = (session as unknown as { model: ModelTurn }).model;
+  (session as unknown as { model: ModelTurn }).model = async (req, signal, onText) => {
+    if (req.jsonSchema) {
+      retries++;
+      return { text: "", toolCalls: [{ id: "r", name: "write_file", arguments: { _invalidJson: "{still" } }] };
+    }
+    return inner(req, signal, onText);
+  };
+  session.send("make a file");
+  await waitFor(session, (e) => e.type === "assistant" && e.text === "Done.");
+  assert.equal(retries, 1);
+  const res = session.events.find((e) => e.type === "tool_result");
+  assert.ok(res?.type === "tool_result" && !res.ok && /not valid JSON/.test(res.output));
+});

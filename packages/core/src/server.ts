@@ -545,6 +545,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     dir: join(paths.root, "background"),
     send: (convId, text) => services.conversations.send(convId, text),
     onWake: (convId) => notifier.messageFromPhone(convId),
+    lowMemoryStop: () => config.stopOnLowMemory !== false,
   });
   void background.start().catch(() => undefined);
   // Travel search and price watches (travel/): search only; a drop in a watched price tells the phone.

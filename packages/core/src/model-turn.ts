@@ -137,7 +137,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
       // The vendor's sampling for this family (local llama.cpp only; a persona's or the user's own settings win).
       const preset = provider.id === "llamacpp" ? samplingFor(providerModelId, { agent: req.tools.length > 0, thinking: thinking ? thinking !== "off" : isReasoningModel(providerModelId) }, settingsOf?.(`${providerModelId.replace(/\.gguf$/i, "")}.gguf`), params) : {};
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...preset, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: req.maxTokens ?? LOCAL_TURN_MAX_TOKENS } : req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...preset, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: req.maxTokens ?? LOCAL_TURN_MAX_TOKENS } : req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}), ...(req.jsonSchema ? { jsonSchema: req.jsonSchema } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

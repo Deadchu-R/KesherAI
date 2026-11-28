@@ -387,6 +387,8 @@ export const KesherConfigSchema = z.object({
   smallTurns: z.boolean().optional(),
   /** "Keep answers short like Claude" (agent turn-shape.ts): on local models, one rewrite of a long step-by-step recap or a wrong-language answer. On unless false. */
   shortAnswers: z.boolean().optional(),
+  /** Background commands are stopped (newest first) when the computer runs low on memory (background-commands.ts). On unless false. */
+  stopOnLowMemory: z.boolean().optional(),
   /** The length, in lines, above which a recap answer is rewritten. Unset: 25. */
   shortAnswerLines: z.number().int().min(10).max(100).optional(),
   /**

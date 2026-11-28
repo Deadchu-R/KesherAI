@@ -76,6 +76,12 @@ export interface ProviderToolChatRequest {
   slotKind?: SlotKind;
   /** Local reasoning models: how much to think (shared thinking.ts); unset leaves the model's default. */
   thinking?: ThinkingLevel;
+  /**
+   * llama.cpp only: write one call of the tool `name` whose arguments must fit `schema` (sent as `json_schema`, so the
+   * server's grammar only lets valid JSON out). The turn is sent without tools and comes back as that one tool call.
+   * Other providers ignore it (and answer as usual).
+   */
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
 }
 
 /** Which agent asks: the chat's main model, a helper (sub-agent), or anything else (router, teammate, side jobs). */
