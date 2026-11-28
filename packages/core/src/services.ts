@@ -184,6 +184,8 @@ export interface KesherServices {
   routines: Routines;
   /** KesherAI working on a git project by itself (set once the chats exist). */
   selfWork?: SelfWork;
+  /** Self-work is not running now (set by the watchdog each minute); the inbox's local line then does not wait for it. */
+  selfWorkDown?: boolean;
   /** When each model was last loaded (PC Health's "Fix it for me"). */
   modelUse?: ModelUse;
   /** The task board self-work shares with Claude. */

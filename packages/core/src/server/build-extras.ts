@@ -256,12 +256,12 @@ export function buildJournal(paths: DataPaths, config: KesherConfig, registry: P
  * code chat. In the worker process it also stops between items when asked to move to a newer version, and ends after
  * 10 idle minutes (the main app starts it again for the next run).
  *
- * @param p - The data folders, the chats (made later), the notifier, the worker's settings (worker mode only) and
- *   the shared folder (board and handoff).
+ * @param p - The data folders, the chats (made later), the notifier, the worker's settings (worker mode only), the
+ *   shared folder (board and handoff) and the models to fall back to when a model keeps failing.
  * @returns Self-work (loading) and, in the worker, how to move it to a newer version.
  */
-export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationManager; notifier: Notifier; worker: KesherServerOptions["worker"]; sharedDir: string }): { selfWork: SelfWork; upgrade?: () => void } {
-  const { paths, chats, notifier, worker, sharedDir } = p;
+export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationManager; notifier: Notifier; worker: KesherServerOptions["worker"]; sharedDir: string; fallbackModels?: () => Promise<string[]> }): { selfWork: SelfWork; upgrade?: () => void } {
+  const { paths, chats, notifier, worker, sharedDir, fallbackModels } = p;
   let workerUpgrade = false;
   const selfWork = new SelfWork(join(paths.root, "self-work.json"), {
     createChat: async (folder, title, modelId, extra = []) => {
@@ -286,6 +286,12 @@ export function buildSelfWork(p: { paths: DataPaths; chats: () => ConversationMa
       return { status: opened?.session.info().status ?? "error", last: last && last.type === "assistant" ? last.text : "", events: opened?.session.events.length ?? 0 };
     },
     stopTurn: (id) => chats().stop(id),
+    ...(fallbackModels ? { fallbackModels } : {}),
+    // The error text the chat's last turn ended with (the run's note says what the error was).
+    lastError: async (id) => {
+      const e = [...((await chats().open(id))?.session.events ?? [])].reverse().find((x) => x.type === "status" && x.status === "error" && x.message);
+      return e && e.type === "status" ? (e.message ?? "") : "";
+    },
     // The chat's tokens so far (its usage events), for each self-work item's cost.
     tokens: async (id) => {
       const opened = await chats().open(id);

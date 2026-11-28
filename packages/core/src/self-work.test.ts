@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commitItem, REVIEW, SelfWork, readOutcome, tickedItem, type SelfWorkDeps } from "./self-work.js";
+import { commitItem, modelErrorNote, nextFallbackModel, REVIEW, SelfWork, readOutcome, tickedItem, type SelfWorkDeps } from "./self-work.js";
 
 test("reads the model's outcome line", () => {
   assert.deepEqual(readOutcome("did it\n**ITEM DONE: add the button**"), { kind: "item", text: "add the button" });
@@ -265,4 +265,68 @@ test("an item still going 20 minutes past the run's end is stopped, and the run 
   assert.match(sw.current?.note ?? "", /20 minutes/);
   assert.ok(!git.some((a) => a[0] === "commit"), "nothing was committed");
   assert.ok(clock - Date.now() < 60 * 60_000, "about 15 minutes of run and 20 past it, not two hours");
+});
+
+/** A run whose chats end with an error: `bad` chats always fail, the others answer with `good`. */
+async function setupErrors(bad: string[], good: string[], fallbacks?: string[]) {
+  const root = await mkdtemp(join(tmpdir(), "selfwork-err-"));
+  const repo = join(root, "repo");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  const chats: Array<{ id: string; model?: string }> = [];
+  const sent: Array<{ id: string; text: string }> = [];
+  const notes: string[] = [];
+  let turn = 0;
+  const d: SelfWorkDeps = {
+    createChat: async (_f, _t, modelId) => {
+      const id = `c${chats.length + 1}`;
+      chats.push({ id, ...(modelId ? { model: modelId } : {}) });
+      return id;
+    },
+    send: async (id, text) => void sent.push({ id, text }),
+    state: async (id) => {
+      const model = chats.find((c) => c.id === id)?.model ?? "";
+      if (bad.includes(model)) return { status: "error", last: "" };
+      return { status: "idle", last: good[Math.min(turn++, good.length - 1)] ?? "" };
+    },
+    lastError: async (id) => (bad.includes(chats.find((c) => c.id === id)?.model ?? "") ? `429 rate limit for ${chats.find((c) => c.id === id)?.model}` : ""),
+    git: async (_r, args) => (args[0] === "rev-parse" ? { code: 0, out: "abc\n" } : { code: 0, out: "" }),
+    check: async () => ({ code: 0, out: "" }),
+    notify: async (title, body) => void notes.push(`${title} ${body}`),
+    sleep: async () => undefined,
+    ...(fallbacks ? { fallbackModels: async () => fallbacks } : {}),
+  };
+  return { sw: new SelfWork(join(root, "selfwork.json"), d), repo, chats, sent, notes };
+}
+
+test("a model that keeps failing: self-work moves to the next fallback model, in order, and goes on", async () => {
+  const { sw, repo, chats, sent, notes } = await setupErrors(["main/opencode-go/flash", "llamacpp/loaded"], ["ALL DONE: goal met"], ["llamacpp/loaded", "main/opencode-go/flash", "zai/glm-free", "openrouter/x:free"]);
+  await sw.start({ repo, goal: "x", modelId: "main/opencode-go/flash" });
+  await sw.settled();
+  // The first model is skipped in the list (it is the one that failed); the loaded model fails too, then the free one works.
+  assert.deepEqual(chats.map((c) => c.model), ["main/opencode-go/flash", "llamacpp/loaded", "zai/glm-free"]);
+  assert.equal(sw.current?.status, "done");
+  assert.equal(sw.current?.modelId, "zai/glm-free");
+  assert.deepEqual(sw.current?.triedModels, ["main/opencode-go/flash", "llamacpp/loaded", "zai/glm-free"]);
+  assert.ok(notes.some((n) => /changed model/.test(n) && /429 rate limit/.test(n)), "the phone is told which error moved it");
+  assert.ok(sent.some((m) => m.id === "c3" && /take over from another model/.test(m.text)));
+});
+
+test("when every model fails the run fails with the model and the error text in its note", async () => {
+  const { sw, repo } = await setupErrors(["m1", "m2"], ["x"], ["m1", "m2"]);
+  await sw.start({ repo, goal: "x", modelId: "m1" });
+  await sw.settled();
+  const r = sw.current!;
+  assert.equal(r.status, "failed");
+  assert.match(r.note ?? "", /stopped with errors 3 times in a row/);
+  assert.match(r.note ?? "", /\[model m2; last error: 429 rate limit for m2\]/);
+  assert.match(r.note ?? "", /Models tried: m1, m2/);
+  assert.equal(r.lastError, "429 rate limit for m2");
+  assert.ok(typeof r.endedAt === "number", "the end time is kept for the watchdog");
+});
+
+test("fallback order helpers: skips tried models (with or without the main/ prefix) and the note keeps the error", () => {
+  assert.equal(nextFallbackModel(["main/a"], ["a", "b", "c"]), "b");
+  assert.equal(nextFallbackModel(["a", "b", "c"], ["a", "b", "c"]), undefined);
+  assert.match(modelErrorNote("m", "  boom\n  happened "), /\[model m; last error: boom happened\]/);
+  assert.match(modelErrorNote(undefined, ""), /\[model default; no error text\]/);
 });

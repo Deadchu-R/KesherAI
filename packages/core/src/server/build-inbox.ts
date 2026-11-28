@@ -273,7 +273,7 @@ export function claudeCode(p: { root: string }): NonNullable<TaskInboxDeps["clau
  *   tasks run on its "gemini" provider), and the chats (OpenCode Go code tasks run in code chats).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager; localChat?: () => string | undefined; watchdog?: WatchdogModel; githubToken?: () => string | undefined; draining?: () => boolean; lightPaused?: () => string[] }): TaskInbox {
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager; localChat?: () => string | undefined; watchdog?: WatchdogModel; githubToken?: () => string | undefined; draining?: () => boolean; lightPaused?: () => string[]; selfWorkDown?: () => boolean }): TaskInbox {
   // The inbox's own fetches and pushes use the GitHub device sign-in's token when there is one (through the
   // environment only, never the remote URL); task programs ("run") never get it.
   const git = runner("git", false, (args) => {
@@ -398,6 +398,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     // A running Antigravity task's live progress: the phone app only (one notification per task, updated in place).
     progress: (n) => void p.notifier.phone({ title: n.title, body: n.body, ref: n.ref, path: `#/task-inbox/${n.taskId}`, tags: ["inbox_tray"], progress: n.progress }).catch(() => undefined),
     busy,
+    ...(p.selfWorkDown ? { selfWorkDown: p.selfWorkDown } : {}),
     me: { username: (() => {
       try {
         return userInfo().username;

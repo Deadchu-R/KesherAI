@@ -58,6 +58,12 @@ export interface SelfWorkState {
   planTicked?: string[];
   /** Items given up on (their changes undone) so the run could go on with the next one. */
   skipped?: Array<{ at: number; why: string }>;
+  /** When the run last ended (stopped, blocked, failed or done); the watchdog counts its backoff from here. */
+  endedAt?: number;
+  /** The last error text the model's chat ended with (what the "stopped with errors" note used to leave out). */
+  lastError?: string;
+  /** Models the run already used and gave up on, in order (the first is the one it started with). */
+  triedModels?: string[];
 }
 
 /** What self-work needs from KesherAI (injected, so it can be tested). */
@@ -84,6 +90,30 @@ export interface SelfWorkDeps {
   between?: () => Promise<void>;
   /** The chat's tokens so far, read and written together (for each item's cost). */
   tokens?: (convId: string) => Promise<number>;
+  /** The models to fall back to when the model keeps stopping with errors, best first (the loaded local model, then the free providers); the run skips the ones it already tried. */
+  fallbackModels?: () => Promise<string[]>;
+  /** The error text the chat's last turn ended with (empty when it has none). */
+  lastError?: (convId: string) => Promise<string>;
+}
+
+/** What the run says about its model and the last error, appended to why it ended. */
+export function modelErrorNote(modelId: string | undefined, error: string | undefined, tried: readonly string[] = []): string {
+  const e = (error ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const t = tried.length > 1 ? ` Models tried: ${tried.join(", ")}.` : "";
+  return ` [model ${modelId || "default"}${e ? `; last error: ${e}` : "; no error text"}]${t}`;
+}
+
+/**
+ * The next model to try: the first candidate the run has not used yet.
+ *
+ * @param tried - Models already used (the first is the one the run started with).
+ * @param candidates - The fallback list, best first.
+ * @returns The model id, or undefined when every one was tried.
+ */
+export function nextFallbackModel(tried: readonly string[], candidates: readonly string[]): string | undefined {
+  const norm = (m: string) => m.replace(/^main\//, "");
+  const used = new Set(tried.map(norm));
+  return candidates.find((c) => c && !used.has(norm(c)));
 }
 
 const MAX_STEPS = 80;
@@ -293,10 +323,11 @@ export class SelfWork {
    * and chat, with a new time limit. Its finished items stay; the model is told to read the plan and go on.
    *
    * @param hours - How long it may go on (1/4 to 12).
+   * @param why - What the model is told first (the watchdog says it restarted the run).
    * @returns The run.
    * @throws When there is no run to resume, or one is still working.
    */
-  async resume(hours = 2): Promise<SelfWorkState> {
+  async resume(hours = 2, why = "Resumed by you"): Promise<SelfWorkState> {
     const r = this.run_;
     if (!r) throw Object.assign(new Error("There is no run to resume."), { code: 404 });
     if (r.status === "running" || r.status === "waiting") throw Object.assign(new Error("The run is still working."), { code: 409 });
@@ -309,9 +340,11 @@ export class SelfWork {
     r.until = Date.now() + h * 3_600_000;
     r.steps = Math.min(r.steps, MAX_STEPS - 20);
     delete r.note;
+    delete r.endedAt;
+    delete r.triedModels;
     this.stopRequested = false;
     await this.save();
-    this.loop = this.work(false, "Resumed by you");
+    this.loop = this.work(false, why);
     return r;
   }
 
@@ -337,6 +370,7 @@ export class SelfWork {
     if (!r || (r.status !== "running" && r.status !== "waiting")) return;
     r.status = status;
     r.note = note;
+    r.endedAt = this.now();
     await this.save();
     const title = status === "done" ? "✅ Self-work finished" : status === "blocked" ? "✋ Self-work needs you" : "⏹ Self-work stopped";
     await this.d.notify(title, `${note} ${r.items.length} item(s) committed on ${r.branch}.`, "#/self-work");
@@ -444,6 +478,32 @@ export class SelfWork {
     return true;
   }
 
+  /**
+   * Moves the run to the next fallback model: a new chat in the same worktree on that model, told to read the plan and
+   * go on. The change is saved and notified, with the error that caused it.
+   *
+   * @returns Whether a model was left to try.
+   */
+  private async switchModel(): Promise<boolean> {
+    const r = this.run_!;
+    if (!this.d.fallbackModels || !r.worktree) return false;
+    r.triedModels ??= [r.modelId ?? "default"];
+    const next = nextFallbackModel(r.triedModels, await this.d.fallbackModels().catch(() => []));
+    if (!next) return false;
+    const from = r.modelId ?? "default";
+    const convId = await this.d.createChat(r.worktree, `🤖 Self-work · ${r.goal.slice(0, 50)}`, next, this.d.shared ? [this.d.shared] : []).catch(() => "");
+    if (!convId) return false;
+    r.triedModels.push(next);
+    r.modelId = next;
+    r.convId = convId;
+    r.failures = 0;
+    await this.save();
+    await this.d.notify("🤖 Self-work changed model", `${from} stopped with errors${r.lastError ? ` (${r.lastError.slice(0, 100)})` : ""}; it goes on with ${next}.`, "#/self-work");
+    await this.d.send(convId, selfWorkBrief(r, Math.max(0.25, (r.until - this.now()) / 3_600_000), this.d.shared));
+    await this.d.send(convId, "You take over from another model that stopped. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).");
+    return true;
+  }
+
   /** The loop: a turn, its outcome, the check, a commit, the next turn. */
   private async work(fresh: boolean, why = "KesherAI restarted"): Promise<void> {
     const r = this.run_!;
@@ -458,8 +518,12 @@ export class SelfWork {
         if (st.status === "error") {
           r.failures++;
           if (r.failures >= MAX_FAILURES) {
-            if (await this.skip("The model stopped with errors 3 times in a row.")) continue;
-            return await this.end("failed", "The model stopped with errors 3 times in a row.");
+            r.lastError = ((await this.d.lastError?.(r.convId).catch(() => "")) || st.last || "").slice(0, 300);
+            // Another model first (the PC's loaded one, then the free providers); only when none is left the item is skipped or the run fails.
+            if (await this.switchModel()) continue;
+            const why = `The model stopped with errors 3 times in a row.${modelErrorNote(r.modelId, r.lastError, r.triedModels)}`;
+            if (await this.skip(why)) continue;
+            return await this.end("failed", why);
           }
           await this.d.send(r.convId, "The last turn ended with an error. Continue with the current item.");
           continue;

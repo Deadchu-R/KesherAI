@@ -11,6 +11,7 @@ import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
 import { getWorktreesRoot } from "../session-worktrees.js";
+import { SelfWorkWatchdog } from "../self-work-watchdog.js";
 import { CooldownHandoff, onClaudeError, type HandoffSettings } from "../cooldown-handoff.js";
 
 /**
@@ -299,5 +300,29 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       void handoff.tick().catch(() => undefined);
       return handoff.view();
     });
+  }
+  // The watchdog (self-work-watchdog.ts): tasks handed to the local model wait for self-work, so a run that died must
+  // not stay dead. Restarts it with a growing wait, hands the tasks on when it stays down. Not in the worker itself.
+  if (!s.worker && s.taskInbox) {
+    const inbox = s.taskInbox;
+    const dog = new SelfWorkWatchdog({
+      localQueued: () => inbox.localQueuedCount(),
+      run: async () => {
+        const r = await current();
+        // The inbox's local line must not wait for a run that is not working (slotFree).
+        s.selfWorkDown = !(r && (r.status === "running" || r.status === "waiting"));
+        return r ? { status: r.status, ...(r.endedAt ? { endedAt: r.endedAt } : {}), ...(r.note ? { note: r.note } : {}) } : undefined;
+      },
+      busy: () => inbox.busyNow(),
+      restart: async (why) => {
+        if (host) await toWorker("/api/self-work/resume", "POST", { hours: 2 }, true);
+        else if (s.selfWork) await s.selfWork.resume(2, `The watchdog restarted this run (${why.slice(0, 120)})`);
+        else throw new Error("Self-work is not available.");
+      },
+      handOff: (why) => inbox.releaseLocalQueue(why),
+      notify: (title, body) => void s.notifier.send({ title, body, path: "#/self-work", tags: ["robot"] }).catch(() => undefined),
+    });
+    dog.start();
+    app.addHook("onClose", async () => dog.stop());
   }
 }

@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask, buildHandoffNote, handoffPromptHead, handoffWorth, leftoverSize, pickHandoff, type HandoffTarget, type InboxHandoff } from "@kesher/shared";
+import { failoverBlock, RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask, buildHandoffNote, handoffPromptHead, handoffWorth, leftoverSize, pickHandoff, type HandoffTarget, type InboxHandoff } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -43,6 +43,9 @@ import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parse
  */
 export type RunCmd = (cwd: string, args: string[], timeoutMs?: number) => Promise<{ code: number; out: string }>;
 
+/** What a task kept for Claude's own Opus agent shows: it does not run by itself. */
+export const OPUS_WAIT_NOTE = "Waiting for Claude: Claude's own agent takes it (it never runs by itself here).";
+
 /** What the inbox needs from KesherAI (injected, so it can be tested with a local bare repo and a fake agent). */
 export interface TaskInboxDeps {
   /** Settings > Task inbox (already filled with defaults). */
@@ -69,6 +72,8 @@ export interface TaskInboxDeps {
    */
   progress?: (n: ProgressNote) => void;
   busy: () => Promise<InboxBusy>;
+  /** Whether self-work is not running (the local line then does not wait for board items nobody takes). Absent: assumed running. */
+  selfWorkDown?: () => boolean;
   /** This computer's user name and home folder, which the privacy scan looks for. */
   me?: { username?: string; home?: string };
   /**
@@ -862,6 +867,8 @@ export class TaskInbox {
 
   /** A copy of a task with its place in the user's line (never stored). */
   private withPlace<T extends InboxTaskView>(t: T): T {
+    // A task kept for Claude's own agent never runs here: the page says so, whatever its note was before.
+    if (t.runBy === "opus" && t.status === "queued") t = { ...t, note: OPUS_WAIT_NOTE };
     const ex: QueueExecutor | undefined = t.runBy === "antigravity" || t.runBy === "local" ? t.runBy : undefined;
     const queued = ex && this.lines.has(t.id) ? this.ordered(ex).indexOf(t.id) + 1 : 0;
     return queued ? { ...t, queued } : { ...t };
@@ -1181,7 +1188,7 @@ export class TaskInbox {
       runBy,
       branch: branchFor(spec, runBy),
       status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" || runBy === "ghostcli" || runBy === "claude" ? "waiting" : "queued",
-      ...(runBy === "claude" ? { note: this.claudeNote() } : runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : runBy === "ghostcli" ? { note: spec.kind === "research" ? "GhostCLI writes this research by itself (no sensitive content)." : "Runs on GhostCLI (its models, no sensitive content)." } : {}),
+      ...(runBy === "claude" ? { note: this.claudeNote() } : runBy === "opus" ? { note: OPUS_WAIT_NOTE } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : runBy === "ghostcli" ? { note: spec.kind === "research" ? "GhostCLI writes this research by itself (no sensitive content)." : "Runs on GhostCLI (its models, no sensitive content)." } : {}),
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
@@ -3109,7 +3116,43 @@ export class TaskInbox {
   /** Whether an executor's slot is free: Antigravity runs nothing, the local model has nothing open or claimed on the board. */
   private slotFree(ex: QueueExecutor): boolean {
     if (ex === "antigravity") return !this.active;
+    // Self-work down: its board items wait for nobody, so they must not hold the line (found on the PC: 7 hours of nothing).
+    if (this.d.selfWorkDown?.()) return true;
     return !this.saved.tasks.some((t) => t.runBy === "local" && t.status === "queued" && (t.boardState === "open" || t.boardState === "claimed"));
+  }
+
+  /** Whether a game or another heavy job holds this PC now (the self-work watchdog waits then). */
+  async busyNow(): Promise<boolean> {
+    return !(await this.d.busy().catch(() => ({ free: true }) as InboxBusy)).free;
+  }
+
+  /** How many tasks wait for the local model (self-work takes them from the board). */
+  async localQueuedCount(): Promise<number> {
+    await this.load();
+    return this.saved.tasks.filter((t) => t.runBy === "local" && t.status === "queued").length;
+  }
+
+  /**
+   * Hands the tasks waiting for the local model to the next executor that is ready (OpenCode Go, then GhostCLI; their
+   * own safety rules apply), with a note. Used by the self-work watchdog when self-work stays down. A task nobody may
+   * take stays where it is.
+   *
+   * @param why - What went wrong, for the note.
+   * @returns How many tasks moved.
+   */
+  async releaseLocalQueue(why: string): Promise<number> {
+    await this.load();
+    let moved = 0;
+    for (const t of this.saved.tasks.filter((x) => x.runBy === "local" && x.status === "queued")) {
+      const task = this.failoverTask(t);
+      const rooms = this.failoverRooms(t);
+      const to = (["opencode", "ghostcli"] as const).find((x) => !failoverBlock(task, x, rooms[x]));
+      if (!to) continue;
+      t.note = `Self-work is down (${why.slice(0, 160)}).`;
+      await this.handOff(t, to, []);
+      moved++;
+    }
+    return moved;
   }
 
   /**
@@ -3887,7 +3930,7 @@ export class TaskInbox {
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;
-    t.note = to === "ghostcli" ? "Runs on GhostCLI (its models, no sensitive content)." : to === "claude" ? this.claudeNote() : to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
+    t.note = to === "ghostcli" ? "Runs on GhostCLI (its models, no sensitive content)." : to === "claude" ? this.claudeNote() : to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? OPUS_WAIT_NOTE : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
     await this.save();
     // Antigravity asks "Run this?" on the PC and the phone, as for a new task.

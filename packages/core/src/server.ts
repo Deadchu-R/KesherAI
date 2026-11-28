@@ -132,6 +132,7 @@ import { addProviders, openPersonasAndSkills } from "./server/build-chat.js";
 import { buildConversations } from "./server/build-conversations.js";
 import { registerRoutes } from "./server/routes.js";
 import { startEngines } from "./server/start-engines.js";
+import { fallbackModelList } from "./self-work-fallback.js";
 import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
 import { Study } from "./study.js";
 import { VisionService, visionServiceOf } from "./vision-service.js";
@@ -692,7 +693,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   chatsBusy = () => Object.values(services.conversations.activity()).includes("running");
   stopConversation = (id) => services.conversations.stop(id);
   // Self-work: KesherAI works on a git project by itself, on its own branch, item by item.
-  const { selfWork, upgrade: workerUpgrade } = buildSelfWork({ paths, chats: () => services.conversations, notifier, worker, sharedDir });
+  const { selfWork, upgrade: workerUpgrade } = buildSelfWork({ paths, chats: () => services.conversations, notifier, worker, sharedDir,
+    // Where self-work goes on when its model keeps failing: the model loaded here, the other local ones, then the free ones.
+    fallbackModels: async () => {
+      const st = engine.status();
+      const loaded = st.running && st.modelPath && !st.job ? `llamacpp/${basename(st.modelPath).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}` : undefined;
+      const all = await registry.listAllModels().then((r) => r.models.filter((m) => !m.id.startsWith("main/")), () => []);
+      return fallbackModelList(all, loaded);
+    } });
   services.selfWork = selfWork;
   services.modelUse = modelUse;
   services.worker = worker && workerUpgrade ? { version: worker.version, upgrade: workerUpgrade } : undefined;
@@ -732,6 +740,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
     githubToken: () => github.pushToken(),
     draining: () => updateDrain.pending,
+    selfWorkDown: () => services.selfWorkDown === true,
     lightPaused: () => services.lightProfile?.pausesInbox() ?? [],
     localChat: () => {
       const st = engine.status();
