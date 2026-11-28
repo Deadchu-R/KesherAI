@@ -6,7 +6,10 @@ const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
 test("imageFromResult: picture steps only, ids from the step or the text", () => {
   assert.equal(imageFromResult("generate_image", true, "Generated 1 image(s).", [ID]), ID);
-  assert.equal(imageFromResult("edit_image", true, `Done (ids: ${ID}).`), ID);
+  assert.equal(imageFromResult("edit_image", true, `Done (ids: ${ID}).`), undefined);
+  assert.equal(imageFromResult("edit_image", true, `Edited the picture (cropped) as a new version (id: ${ID}).`), ID);
+  assert.equal(imageFromResult("edit_image", true, `No picture at "${ID}".`), undefined);
+  assert.equal(imageFromResult("edit_image", true, "Edited", ["x"]), "x");
   assert.equal(imageFromResult("generate_image", false, "x", [ID]), undefined);
   assert.equal(imageFromResult("write_file", true, ID, [ID]), undefined);
   assert.equal(imageFromResult("generate_image", true, "no picture"), undefined);

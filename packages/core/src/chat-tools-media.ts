@@ -13,6 +13,7 @@ import type { ConversationDeps } from "./conversation-deps.js";
 import type { Translator } from "./translate.js";
 import type { QuickServices } from "./chat-quick-actions.js";
 import { PBR_NOTE, pbrTools } from "./pbr-tools.js";
+import { editImageTool } from "./image-tools.js";
 
 
 /**
@@ -139,6 +140,11 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         return { output: `Generated ${assets.length} image(s); the user can see them (ids: ${assets.map((a) => a.id).join(", ")}).${switched}${en.translated ? ` The prompt was translated to English and is shown under the picture: "${en.prompt}".` : ""}`, assetIds: assets.map((a) => a.id), promptUsed: en.prompt };
       },
     });
+  }
+  // Editing a picture the chat shows (crop, rotate, resize, repaint an area): a new version each time.
+  if (on("images")) {
+    notes.push("edit_image changes a picture already made or attached (crop, rotate, resize, repaint an area) and saves a new version; use it instead of generate_image when the user wants the same picture changed.");
+    tools.push(editImageTool(deps, () => (usable(active) ? active : undefined)));
   }
   // A part the user switched off: say so instead of "I have no such tool" (found on the PC: the model told the
   // user video was impossible when it was only off).

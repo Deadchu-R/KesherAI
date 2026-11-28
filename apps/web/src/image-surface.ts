@@ -21,6 +21,8 @@ const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/;
  */
 export function imageFromResult(tool: string, ok: boolean, output: string, assetIds?: readonly string[]): string | undefined {
   if (!ok || !IMAGE_TOOLS.includes(tool)) return undefined;
+  // A failed edit says "No picture at <id>" / "Not edited: …": the id in it is the input's, not a new version.
+  if (tool === "edit_image" && !assetIds?.length && !/^Edited\b/.test(output)) return undefined;
   return assetIds?.[0] ?? UUID.exec(output)?.[0];
 }
 

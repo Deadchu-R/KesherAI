@@ -4,11 +4,14 @@
  * carries. When `sharp` is not there (an unsupported platform, or the part not installed) {@link resizeImage} says so
  * and the panel resizes on its own canvas instead, so nothing breaks.
  */
+import { deflateSync } from "node:zlib";
 
 /** The little of `sharp` used here (the real module fits; tests pass a fake). */
 export interface SharpLike {
   (input: Uint8Array): {
     resize(o: { width?: number; height?: number; fit: "inside" | "fill"; withoutEnlargement?: boolean }): { toBuffer(): Promise<Uint8Array> };
+    extract(o: { left: number; top: number; width: number; height: number }): { toBuffer(): Promise<Uint8Array> };
+    rotate(degrees: number): { toBuffer(): Promise<Uint8Array> };
   };
 }
 
@@ -82,4 +85,96 @@ export function imageSize(d: Uint8Array): { width: number; height: number } | un
 export function versionMeta(parent: { id: string; meta?: Record<string, unknown> | undefined }, op: string): Record<string, unknown> {
   const n = typeof parent.meta?.version === "number" ? parent.meta.version : 1;
   return { ...(typeof parent.meta?.prompt === "string" ? { prompt: parent.meta.prompt } : {}), parent: parent.id, version: n + 1, op };
+}
+
+/** A rectangle in pixels of the picture. */
+export interface PixelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Checks a rectangle the model sent against the picture: whole numbers, at least 1 px, inside the picture.
+ *
+ * @param r - The model's `x`, `y`, `width`, `height` (untrusted).
+ * @param size - The picture's size when known (from its header).
+ * @returns The rectangle.
+ * @throws With a readable message when it is not usable.
+ */
+export function checkRect(r: Partial<Record<keyof PixelRect, unknown>>, size?: { width: number; height: number }): PixelRect {
+  const n = (v: unknown): number => (typeof v === "number" && Number.isInteger(v) ? v : NaN);
+  const out = { x: n(r.x), y: n(r.y), width: n(r.width), height: n(r.height) };
+  if (!(out.x >= 0 && out.y >= 0 && out.width >= 1 && out.height >= 1)) throw new Error("Give x, y (from 0) and width, height (at least 1) as whole pixel numbers.");
+  if (size && (out.x + out.width > size.width || out.y + out.height > size.height)) throw new Error(`The area goes outside the picture (${size.width} x ${size.height}).`);
+  return out;
+}
+
+/**
+ * Crops a picture to a rectangle with `sharp`.
+ *
+ * @param data - The picture's bytes.
+ * @param rect - The checked rectangle ({@link checkRect}).
+ * @param load - How to get `sharp` (tests pass a fake).
+ * @returns The cropped bytes, or undefined when `sharp` is not available.
+ */
+export async function cropImage(data: Uint8Array, rect: PixelRect, load: SharpLoader = loadSharp): Promise<Uint8Array | undefined> {
+  const sharp = await load();
+  return sharp ? sharp(data).extract({ left: rect.x, top: rect.y, width: rect.width, height: rect.height }).toBuffer() : undefined;
+}
+
+/**
+ * Rotates a picture by a quarter turn multiple with `sharp`.
+ *
+ * @param data - The picture's bytes.
+ * @param degrees - 90, 180, 270 or -90 (clockwise).
+ * @param load - How to get `sharp` (tests pass a fake).
+ * @returns The rotated bytes, or undefined when `sharp` is not available.
+ * @throws When the angle is not a quarter turn.
+ */
+export async function rotateImage(data: Uint8Array, degrees: number, load: SharpLoader = loadSharp): Promise<Uint8Array | undefined> {
+  if (![90, 180, 270, -90].includes(degrees)) throw new Error("Rotate by 90, 180, 270 or -90 degrees.");
+  const sharp = await load();
+  return sharp ? sharp(data).rotate(degrees).toBuffer() : undefined;
+}
+
+/**
+ * A black picture with a white rectangle, as the inpainting mask (white = repaint, black = keep): an 8-bit grey PNG
+ * written by hand (no `sharp` needed).
+ *
+ * @param width - The picture's width.
+ * @param height - The picture's height.
+ * @param rect - The area to repaint.
+ * @returns The PNG bytes.
+ */
+export function rectMaskPng(width: number, height: number, rect: PixelRect): Uint8Array {
+  const raw = Buffer.alloc((width + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * (width + 1);
+    if (y >= rect.y && y < rect.y + rect.height) raw.fill(255, row + 1 + rect.x, row + 1 + Math.min(width, rect.x + rect.width));
+  }
+  const chunk = (type: string, body: Buffer): Buffer => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(body.length, 0);
+    head.write(type, 4, "latin1");
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])), 0);
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth; colour type 0 = grey
+  return new Uint8Array(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
+}
+
+/** CRC-32 of a buffer (PNG chunks). */
+function crc32(b: Buffer): number {
+  let c = ~0;
+  for (const x of b) {
+    c ^= x;
+    for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
+  }
+  return ~c >>> 0;
 }
