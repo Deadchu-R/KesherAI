@@ -17,6 +17,13 @@ nano-v2). The phone app is Capacitor (apps/android, plugins/), so this is a smal
   questions, drafts of new tasks to send when the PC is back), summarize/translate notifications and messages,
   voice-note to text tidy-up. Settings: on/off, "only when the PC is offline". Every platform: iOS has Apple's
   Foundation Models on-device API — same provider shape (later).
+- ⬜ The phone model as the task organizer (Roee 28.11 10:59): in the phone app (remote and the hub view), the Tasks
+  chat can run on the phone's own model (Gemini Nano / the loaded LiteRT model) instead of the PC's CPU model — always,
+  or only when the PC is offline. It maps the user's words to the SAME fixed action list as the hub task chat (add,
+  split, assign, queue, unqueue, skip) with Apply/Cancel; applied actions go to the PC as sealed commands (queued until
+  the PC is back) and the PC still checks them with its own rules (privacy, Claude never automatic). Read-only answers
+  ("what runs next?", "why is X waiting?") come from the last board the PC sent the phone. Works with the dispatcher
+  above: the phone model proposes, the PC's rules decide.
 
 ## Every Claude connector and plugin works in KesherAI (Roee 28.11 10:39)
 Anything that works on Claude should work here: remote connectors (MCP over HTTP with OAuth sign-in), desktop
