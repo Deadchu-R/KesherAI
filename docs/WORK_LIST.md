@@ -21,7 +21,9 @@ Finish one category, release it as a set, then the next. PC agents take the smal
    the view" switches.
 5. **Task dispatcher on the CPU + its chat** (research r-20261128-06), with the phone model as the organizer.
 6. **The phone's own model** (Gemini Nano / LiteRT) as a provider when the PC is offline.
-7. **Every Claude connector and plugin** (research r-20261128-07): remote MCP with OAuth, .mcpb, Claude Code plugins,
+7. **Travel assistant** (Roee moved it up 28.11 11:57): flights price calendar, stays and tours as three separate chat
+   systems (spec in "Travel assistant — Roee's spec").
+8. **Every Claude connector and plugin** (research r-20261128-07): remote MCP with OAuth, .mcpb, Claude Code plugins,
    first test with KesherAI's own Claude connector.
 
 ## The phone's own on-device model (Roee 28.11 10:56)
