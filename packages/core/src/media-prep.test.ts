@@ -73,6 +73,9 @@ test("prepare with a fake FFmpeg: video gets proxy, sprite and peaks; sound gets
     const steps: string[] = [];
     const v = await prepare(fake(VIDEO), "in.mp4", join(dir, "v"), "a".repeat(40), (s) => steps.push(s.step ?? ""));
     assert.deepEqual(steps, ["proxy", "sprite", "peaks"]);
+    // The sprite is cut from the proxy just made (480 p), not decoded again from the original.
+    const spriteCall = calls.find((c) => c.at(-1)!.endsWith(".tmp-sprite.jpg"))!;
+    assert.equal(spriteCall[spriteCall.indexOf("-i") + 1], join(dir, "v", "proxy.mp4"));
     assert.equal(v.kind, "video");
     assert.deepEqual(v.sprite, spriteLayout(3.5));
     assert.deepEqual(v.peaks, { rate: 8000, perColumn: 256, columns: 4 });

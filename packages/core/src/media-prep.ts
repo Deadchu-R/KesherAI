@@ -205,7 +205,9 @@ export async function prepare(r: PrepRunner, input: string, dir: string, id: str
   if (kind === "video") {
     step("sprite");
     const layout = spriteLayout(duration);
-    await r.run(spriteArgs(input, tmp("sprite.jpg"), layout));
+    // From the 480 p proxy just made, not the original: the same 160 px thumbnails, about 5 times faster (measured: a 2 min
+    // 1080 p file, 9.0 s from the original, 1.8 s from the proxy).
+    await r.run(spriteArgs(join(dir, proxy), tmp("sprite.jpg"), layout));
     await rename(tmp("sprite.jpg"), join(dir, "sprite.jpg"));
     await writeFile(join(dir, "sprite.json"), JSON.stringify(layout));
     st.sprite = layout;

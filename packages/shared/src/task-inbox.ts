@@ -273,6 +273,19 @@ export function safeForRelay(t: { risk?: string; allowedPaths?: readonly string[
   return { ok: true };
 }
 
+/**
+ * Whether a task touches security: high risk, a path in a security or unlimited area, or security words in its text
+ * (English or Hebrew). Unlike {@link safeForRelay} it reads the text even when the task has no path limit (a research
+ * task has none), so a security question is never taken for a harmless one.
+ *
+ * @param t - The task.
+ */
+export function touchesSecurity(t: { risk?: string; allowedPaths?: readonly string[]; title?: string; goal?: string; readFirst?: string; acceptance?: string; outOfScope?: string }): boolean {
+  if (t.risk === "high") return true;
+  if ((t.allowedPaths ?? []).some((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g))) return true;
+  return SECURITY_WORDS.test([t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n"));
+}
+
 /** The free service a model id belongs to, when it is one of the free tier's models. */
 export const freeProviderOf = (id: string): FreeProvider | undefined => FREE_PROVIDERS.find((p) => p.allowed(id));
 

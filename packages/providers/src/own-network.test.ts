@@ -11,3 +11,10 @@ test("an openai-compatible provider with no saved location is the cloud on the i
   assert.equal(new OpenAICompatibleProvider({ id: "g", type: "openai-compatible", name: "G", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai" }).location, "cloud");
   assert.equal(new OpenAICompatibleProvider({ id: "l", type: "openai-compatible", name: "L", baseUrl: "http://localhost:1234/v1" }).location, "server");
 });
+
+test("isOwnNetworkUrl: tricks that make a cloud address look local stay cloud", () => {
+  for (const u of ["http://127.0.0.1.evil.com/v1", "http://localhost.evil.com", "http://127.0.0.1@evil.com/v1", "http://evil.com#@127.0.0.1", "http://[::ffff:8.8.8.8]/v1", "http://2.2.2.2", "http://100.128.0.1", "http://172.32.0.1", "http://192.169.1.1", "https://evil.com/.local", "http://localhost./v1"]) assert.equal(isOwnNetworkUrl(u), false, u);
+  // The URL parser reads decimal, hex and short spellings as the real address; an IPv4-mapped IPv6 address is not matched (cloud: the safe side).
+  for (const u of ["http://2130706433/v1", "http://0x7f000001/v1", "http://127.1/v1"]) assert.equal(isOwnNetworkUrl(u), true, u);
+  assert.equal(isOwnNetworkUrl("http://[::ffff:127.0.0.1]/v1"), false);
+});

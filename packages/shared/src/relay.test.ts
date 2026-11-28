@@ -61,3 +61,12 @@ test("the relay check runs only when not known to answer or after 3 failed runs 
   // Runs before the last good reading do not count.
   assert.equal(relayNeedsProbe([run(2, "failed"), run(3, "failed"), run(4, "failed")], { ok: true, at: 10 }), false);
 });
+
+test("touchesSecurity reads the text even without a path limit (a research task), English and Hebrew", async () => {
+  const { touchesSecurity } = await import("./task-inbox.js");
+  assert.equal(touchesSecurity({ title: "Research: how competitors handle login tokens", goal: "..." }), true);
+  assert.equal(touchesSecurity({ title: "מחקר על אבטחת סיסמאות" }), true);
+  assert.equal(touchesSecurity({ risk: "high", title: "x" }), true);
+  assert.equal(touchesSecurity({ allowedPaths: ["packages/core/src/auth/**"], title: "x" }), true);
+  assert.equal(touchesSecurity({ title: "Research: how competitors design a timeline editor", goal: "layout and gestures" }), false);
+});

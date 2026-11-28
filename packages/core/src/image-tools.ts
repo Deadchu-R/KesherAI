@@ -5,8 +5,8 @@
  * used); "inpaint" repaints a rectangle through the active image model with a mask built here.
  */
 import { readFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
 import type { AgentTool } from "@kesher/agent";
+import { resolveInWorkspace } from "@kesher/agent";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { checkRect, cropImage, imageSize, rectMaskPng, resizeImage, rotateImage, versionMeta, type SharpLoader } from "./image-ops.js";
 
@@ -101,8 +101,9 @@ export function editImageTool(deps: ConversationDeps, usableModel: () => string 
         return f && f.asset.kind === "image" ? { data: f.data, mimeType: f.asset.mimeType, parent: f.asset } : undefined;
       }
       if (!workspace) return undefined;
-      const file = resolve(workspace, ref);
-      if (relative(workspace, file).startsWith("..")) return undefined;
+      // The chat's folder only, links followed (a plain relative() check let another drive's absolute path through on Windows).
+      const file = await resolveInWorkspace(workspace, ref).catch(() => undefined);
+      if (!file) return undefined;
       const data = await readFile(file).catch(() => undefined);
       const mimeType = /\.jpe?g$/i.test(ref) ? "image/jpeg" : /\.webp$/i.test(ref) ? "image/webp" : /\.png$/i.test(ref) ? "image/png" : undefined;
       return data && mimeType ? { data, mimeType } : undefined;

@@ -134,7 +134,13 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
     if (exporting) return reply.code(429).send({ error: "Another export is running; try again when it is done." });
     exporting = true;
     const dir = join(folder, "shared");
-    await mkdir(dir, { recursive: true });
+    // A folder that cannot be made must not leave "exporting" set (every later export would be refused until a restart).
+    try {
+      await mkdir(dir, { recursive: true });
+    } catch (err) {
+      exporting = false;
+      return reply.code(500).send({ error: (err as Error).message });
+    }
     const base = (basename(first).replace(/\.[^.]+$/, "") + "-edit").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 100);
     const ext = graph.video ? "mp4" : "m4a";
     let out = join(dir, `${base}.${ext}`);

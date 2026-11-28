@@ -87,3 +87,22 @@ test("edit_image tool: registered as safe with a schema that needs image and op"
   assert.equal(t.risk, "safe");
   assert.deepEqual((t.spec.inputSchema as { required: string[] }).required, ["image", "op"]);
 });
+
+test("edit_image: a file outside the chat's folder (an absolute path, a link out) is not read", async () => {
+  const { mkdtemp, writeFile, symlink, mkdir } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const base = await mkdtemp(join(tmpdir(), "kesher-edit-"));
+  const ws = join(base, "chat");
+  await mkdir(ws);
+  await writeFile(join(ws, "in.png"), png);
+  await writeFile(join(base, "secret.png"), png);
+  await symlink(join(base, "secret.png"), join(ws, "link.png")).catch(() => undefined);
+  const saved: unknown[] = [];
+  const tool = editImageTool({ assets: { save: async (...a: unknown[]) => (saved.push(a), { id: "n" }) }, registry: {} } as never, () => undefined, async () => ({ ...({} as object), } as never));
+  const ctx = (workspace: string) => ({ workspace }) as never;
+  for (const image of [join(base, "secret.png"), "../secret.png", "link.png"]) {
+    assert.match((await tool.run({ image, op: "rotate", degrees: 90 }, ctx(ws))).output, /No picture/, image);
+  }
+  assert.equal(saved.length, 0);
+});

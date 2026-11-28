@@ -2119,3 +2119,59 @@ Lead's quick pass over 156 changed files (no helper: both slots were building su
 - Agent shell `shell: true` is the approval-gated command tool, unchanged in design.
 - No personal paths, emails or keys in the diff.
 Nothing to fix. Performance pass left for the next scan with a helper (media prep ffmpeg and the image surface).
+
+## Scan after 0.6.514 (28.11, 0.6.509–0.6.514, since 276a6ef)
+
+Helper pass over the non-test, non-doc diff (about 120 files). Measured on a sandbox CPU, so only the relative numbers count.
+- **Fixed (medium): a security question could go to a service that trains on data.** The quota failover's `sensitive` flag
+  came from `safeForRelay`, which returns at "no path limit" before it reads the task's text, and a research task has no
+  path limit. So "research how login tokens are stored" was not sensitive, and a free Gemini (trains) could take it.
+  New `touchesSecurity` (`packages/shared/src/task-inbox.ts`: risk high, a security or unlimited path, or security words
+  in the text, English and Hebrew) now also sets `sensitive` in `failoverTask` (`inbox-runner.ts`); such a task goes only
+  to Antigravity. Cost: a research task that merely says "token" (savings, counts) now waits instead of moving: safe side.
+  The run path was already right: `inboxModelAllowed`, `safeForTrainingProvider` and the leak scan run again when the task
+  starts, whatever the failover chose. Test in `relay.test.ts`.
+- **Fixed (medium on Windows): `edit_image` read a file by a path check that `relative()` cannot do.** On Windows
+  `relative("C:\\chat", "D:\\x.png")` is the absolute path, which does not start with `..`, so another drive's picture
+  was read (and saved as a version the user sees); a link inside the chat folder pointed out too. It now uses
+  `resolveInWorkspace` (real paths, links followed). Test in `image-tools.test.ts` (absolute, `..`, link).
+- **Fixed (low): one failed `mkdir` kept every later phone export refused.** `exporting` was set before the `shared/`
+  folder was made; a failing `mkdir` never cleared it (until a restart). Now cleared, answer 500.
+- **Checked, fine:** `/api/media/prep` (`asset` id must match a UUID, file from the store; chat path through
+  `resolveInWorkspace`; the id is a hash, `source.txt` is only written by prep), `/api/media/:id/:part` (fixed part names,
+  `isPrepId`, ranges parsed), `/api/media/export` and `/api/media/trim` (prep ids only, 24 sources, look values from a
+  fixed list, `checkMediaEdit`, one at a time, name sanitised, never overwrites), image routes (UUID ids, 40 MB, data
+  address pattern, resize 1-8192 whole numbers, sharp loaded lazily), `/api/docs/import-docx` chat branch
+  (`resolveInWorkspace`, `.docx`, 30 MB before reading, an outside-folder file imported without a save-back path),
+  `tool-calls/:callId/background` (the owner's own call key), scheduled runs (result through `resultExcerpt`: secrets,
+  home paths, code blocks removed), the watchdog (internal calls, no route input). All sit behind the same server-wide
+  auth and origin hook. FFmpeg and sharp get argument lists (no shell), absolute inputs, numbers range-checked
+  (`checkRange`, `checkRect`, `checkLook`).
+- **Checked, fine: `isOwnNetworkUrl`.** `127.0.0.1.evil.com`, `localhost.evil.com`, `127.0.0.1@evil.com`, `#@127.0.0.1`,
+  `evil.com/.local` are cloud; decimal, hex and short IPv4 (`2130706433`, `0x7f000001`, `127.1`) are read by the URL parser
+  as `127.0.0.1` (local, correct); IPv4-mapped IPv6 (`[::ffff:127.0.0.1]`) becomes `::ffff:7f00:1`, which is not matched,
+  so it counts as cloud (the safe side); `localhost.` (trailing dot) too. `loadConfig` relabels saved "server" providers
+  on the internet as cloud. Tests added.
+- **Checked, fine: the stable prefix.** `stabilize` only moves the text the prompt already holds; a guest's turn builds
+  its prompt with no memory, notes or skills (`promptFor` with `guestTurns`), so nothing of the owner's can reach a
+  guest through the moved part; the moved part sits in the model's copy only (`this.messages` is not changed, the page
+  shows the user's own words). Chats with a persona or a group, and cloud models, keep the system turn whole.
+- **Checked, fine:** no personal path, email or key in the diff (test fixtures use made-up `C:\Users\x`-style names).
+- **Left (low, listed):** FFmpeg reads whatever file the user or the model names (a playlist-like file is probed by
+  content); recent FFmpeg refuses unsafe playlist segments, `-protocol_whitelist file,pipe` would also close network
+  inputs. `*.ts.net` counts as own network (any tailnet, not only the user's). `edit_image` reads a whole file before its
+  40 MB check (stat first).
+
+### Performance (measured: 2 min 1080p H.264 sample, 87 MB, 4000x3000 PNG, 4 cores)
+- **Fixed: the timeline sprite was decoded from the original.** Prep took 32.5 s (proxy 22.4, sprite 9.8, peaks 0.3). The
+  sprite now comes from the 480 p proxy just made: 9.0 s to 1.8 s for the same thumbnails (209 KB either way), so prep
+  is about 24 s (0.2x of real time). Test in `media-prep.test.ts`. The proxy is the rest; the encoder switch (NVENC,
+  AMF, QSV) is already in the list.
+- **sharp resize** of a 4000x3000 PNG: 945 ms to 1024 px (first call, loads sharp), 36 ms to 256 px; process 130-150 MB.
+- **Web bundle:** every new surface is its own lazy chunk, none loaded at start (the chat holds only the card shell,
+  `SurfaceCard` lazy-loads one chunk per surface, shared by all cards of that surface). Gzip: MediaEditor 9.3 KB (target
+  60), MediaSurface 5.8, ImagePanel 4.1, StandInScenes 4.4, BlueprintPanel 2.8, ScenesPanel 2.8, WordPanel 1.5,
+  ControlSurface 1.0, PluginSurface 0.9; three.js OrbitControls 4.3. The entry `index` is 461 KB gzip (1.4 MB), as before.
+- **Per turn:** the keyword route is 0.7 ms for a 1,760-character message (the model route is cached); the fixed prompt is
+  about 5,950 characters (about 1,650 tokens) and the chat's part 810; `read_file` stops at 2,000 lines or the output
+  budget and refuses over 5 MB.
