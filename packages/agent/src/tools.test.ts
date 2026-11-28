@@ -178,3 +178,22 @@ describe("read_file on a large file read whole", () => {
     }
   });
 });
+
+describe("big files", () => {
+  it("read_file tells the model not to ask for a whole big file, and list_files marks big files with their size", async () => {
+    const { mkdtemp, writeFile: wf } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: j } = await import("node:path");
+    const { CODE_TOOLS } = await import("./tools.js");
+    const read = CODE_TOOLS.find((t) => t.spec.name === "read_file")!;
+    assert.match(read.spec.description, /do NOT ask for all of it/);
+    assert.match(read.spec.description, /offset and limit/);
+    const dir = await mkdtemp(j(tmpdir(), "kesher-big-"));
+    await wf(j(dir, "big.log"), "x".repeat(200 * 1024));
+    await wf(j(dir, "small.txt"), "hi");
+    const list = CODE_TOOLS.find((t) => t.spec.name === "list_files")!;
+    const out = await list.run({}, { workspace: dir } as unknown as Parameters<typeof list.run>[1]);
+    assert.match(out.output, /big\.log {2}\(200 KB: big, search it or read it with offset and limit\)/);
+    assert.ok(out.output.split("\n").includes("small.txt"), "a small file is listed as before");
+  });
+});

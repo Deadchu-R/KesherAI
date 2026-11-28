@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, needsSayFirst, silentToolStart, stripCode } from "./turn-shape.js";
+import { SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, asksManySteps, asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, needsSayFirst, silentToolStart, stripCode } from "./turn-shape.js";
 
 const lines = (n: number, s = "line of text") => Array.from({ length: n }, () => s).join("\n");
 
@@ -89,4 +89,26 @@ test("says-first: a bare first tool call is asked again; words, no tools, or a l
   assert.equal(needsSayFirst("I'll read it.", ["read_file"]), false);
   assert.equal(needsSayFirst("", []), false);
   assert.equal(needsSayFirst("", ["ask_user"]), false);
+});
+
+test("asksManySteps: the todo-steps scenario message, numbered lists and Hebrew sequences are jobs with 3+ steps", () => {
+  const scenario = 'Create three files: a.txt containing "one", b.txt containing "two", c.txt containing "three". Then write summary.md that lists the three files and what each contains.';
+  assert.equal(asksManySteps(scenario), true);
+  assert.equal(asksManySteps("1. read the logs\n2. fix the bug\n3. run the tests"), true);
+  assert.equal(asksManySteps("צור את a.txt, b.txt ו-c.txt ואז כתוב סיכום"), true);
+  assert.equal(asksManySteps("קודם תבנה את הדף, אחר כך תוסיף בדיקות ובסוף תעדכן את ה-README"), true);
+  assert.equal(asksManySteps("Read the file, then fix it, then run the tests."), true);
+});
+
+test("asksManySteps: a single action or a question is not a job in steps", () => {
+  assert.equal(asksManySteps("Read notes.txt and tell me its first line."), false);
+  assert.equal(asksManySteps("Rewrite the whole project."), false);
+  assert.equal(asksManySteps("What is the error code in big.log? Then again, maybe it is E1."), false);
+  assert.equal(asksManySteps("תכין לי דף נחיתה"), false);
+  assert.equal(asksManySteps("```\nthen then then\n```\nfix it"), false, "code is not prose");
+});
+
+test("the steps lines ask for the todo list first", () => {
+  assert.match(STEPS_NOTE, /first tool call is todo/);
+  assert.match(SAY_FIRST_STEPS_NUDGE, /^\[KesherAI\] Start again: .*sentence.*first call is todo/);
 });

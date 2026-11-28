@@ -21,7 +21,7 @@ import { applyTodo, latestTodo, takeSteers, todoOpenLine, todoProgress, todoRepl
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { SAY_FIRST_NUDGE, TURN_SHAPE_PROMPT, finishFollowUp, needsSayFirst, shapeFollowUp, silentToolStart } from "./turn-shape.js";
+import { SAY_FIRST_NUDGE, SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, TURN_SHAPE_PROMPT, asksManySteps, finishFollowUp, needsSayFirst, shapeFollowUp, silentToolStart } from "./turn-shape.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
@@ -348,6 +348,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private hidden = new Set<string>();
   /** The message waiting for the router (set by send, routed at the start of the run). */
   private routeText?: string;
+  /** The message asks for a job in several steps and the chat has todo: the task list comes first (turn-shape.ts). */
+  private manySteps = false;
   /** How many times each changing action ran for the current message (the loop guard). */
   private readonly repeats = new Map<string, number>();
   /** Tools the model loaded with find_tools in this conversation. */
@@ -593,6 +595,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.rankSince = this.rankTick;
     this.loadToolsFor(text);
     this.routeText = text;
+    // A job in several steps starts with the task list, like Claude's: a local model is told so with the message
+    // (the end of the user's turn, so the prompt's start and its cache stay as they are).
+    this.manySteps = !!this.shortAnswers?.() && asksManySteps(text) && offersTodo(this.specs().map((t) => t.name), false);
+    if (this.manySteps) this.messages[this.messages.length - 1]!.content += `\n\n${STEPS_NOTE}`;
     this.push({ type: "user", text });
     // Steps done for the message before the model starts (the search the globe button asked for), shown like its own.
     for (const st of steps) this.push(st);
@@ -1535,7 +1541,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         // asked once more, before the call runs. Only the first step, only when "Keep answers short like Claude" applies.
         if (!firstOutputSeen && !sayNudged && step === 0 && !quick && !lastStep && !abort.signal.aborted && this.shortAnswers?.() && needsSayFirst(result.text, result.toolCalls.map((c) => c.name))) {
           sayNudged = true;
-          this.messages.push({ role: "user", content: SAY_FIRST_NUDGE });
+          this.messages.push({ role: "user", content: this.manySteps ? SAY_FIRST_STEPS_NUDGE : SAY_FIRST_NUDGE });
           continue;
         }
         if (!firstOutputSeen) {

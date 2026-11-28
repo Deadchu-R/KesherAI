@@ -161,6 +161,36 @@ export function finishFollowUp(o: { answer: string; userText: string; todo?: rea
 /** The line a local model gets when its first step was a bare tool call (asked once per message, see {@link needsSayFirst}). */
 export const SAY_FIRST_NUDGE = "[KesherAI] Start again: write one short sentence saying what you are about to do (in the user's language), then make the tool call.";
 
+/** The same re-ask for a job with several steps: the first call is the task list (see {@link asksManySteps}). */
+export const SAY_FIRST_STEPS_NUDGE = `${SAY_FIRST_NUDGE.slice(0, -1)}. For this job with several steps, the first call is todo with the whole list.`;
+
+/** The line added to a message that asks for a job in several steps, when the chat has the todo tool. */
+export const STEPS_NOTE = "[KesherAI] This job has several steps: write one short sentence, then your first tool call is todo with the whole list (one short title per step). Then do the steps and mark each one done.";
+
+/** Words that join steps: "then", "after that", "finally", Hebrew "ואז / אחר כך / לאחר מכן / ולבסוף". */
+const STEP_WORDS = /\b(?:then|after that|afterwards|next|finally|and lastly)\b|(?<![א-ת])ו?(?:אז|אחר כך|לאחר מכן|לבסוף|בסוף)(?![א-ת])/gi;
+/** A file name in the message ("a.txt", "summary.md"). */
+const FILE_NAME = /(?<![\w/])[\w-]+\.[A-Za-z0-9]{1,5}\b/g;
+/** "three files", "4 pages", "שלושה קבצים", "5 דפים": a count of 3 to 9 things to make. */
+const COUNTED = /\b(?:three|four|five|six|seven|eight|nine|[3-9])\s+(?:new\s+)?(?:files?|pages?|screens?|components?|tests?|sections?|steps?|tasks?|folders?)\b|(?:שלושה|ארבעה|חמישה|שישה|שבעה|[3-9])\s+(?:קבצים|דפים|מסכים|רכיבים|בדיקות|חלקים|שלבים|משימות|תיקיות)/i;
+
+/**
+ * Whether a message clearly asks for a job in several steps (at least three): a numbered list, a count of things to
+ * make with a "then", several file names joined by "then", or two or more "then / ואז" joints. Such a job starts with
+ * the task list, like Claude's. A guess from words only: a wrong "yes" costs one list, so it errs on the clear cases.
+ *
+ * @param text - What the user wrote.
+ * @returns True when the job has three or more steps.
+ */
+export function asksManySteps(text: string): boolean {
+  const t = stripCode(text);
+  if ((t.match(/(?:^|\n)\s*\d+[.)]\s+\S/g) ?? []).length >= 3) return true;
+  const joints = (t.match(STEP_WORDS) ?? []).length;
+  if (joints >= 2) return true;
+  const files = new Set(t.match(FILE_NAME) ?? []).size;
+  return joints >= 1 && (files >= 3 || COUNTED.test(t));
+}
+
 /**
  * Whether a first model step should be asked again: it started tools and wrote no words, and at least one call is real
  * work (a lone question to the user needs no opening sentence). No text is ever made up for the model.

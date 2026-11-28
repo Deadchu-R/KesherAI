@@ -199,7 +199,7 @@ export class ChatChecks {
   /** Runs one scenario in its own chat and judges it. */
   private async one(s: Scenario, model: string, server: FixtureServer | undefined): Promise<Pick<ChatCheckResult, "state" | "check" | "reason">> {
     const h = this.host;
-    const chat = await h.createChat({ title: `[Chat check] ${s.en}`, model, incognito: !s.pastChat });
+    const chat = await h.createChat({ title: `[Chat check] ${s.en}`, model, incognito: !s.pastChat && !s.normalChat });
     let seeded: string | undefined;
     let unwatch: (() => void) | undefined;
     try {

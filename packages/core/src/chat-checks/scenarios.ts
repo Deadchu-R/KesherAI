@@ -46,6 +46,8 @@ export interface Scenario {
   commands?: readonly RegExp[];
   /** A past chat seeded for the search (runs this scenario in a normal chat: incognito chats cannot search). */
   pastChat?: { title: string; messages: Array<{ role: "user" | "assistant"; text: string }> };
+  /** Runs in a normal chat, not an incognito one: incognito chats have no timer or schedule tools. The chat is deleted after. */
+  normalChat?: boolean;
   /** The turn ends as soon as the model asks a question (the check is that it asked). */
   stopOnQuestion?: boolean;
   /** Skipped unless the chat's tool has this input option (e.g. `run_command.background`, not built yet). */
@@ -110,6 +112,7 @@ export const SCENARIOS: readonly Scenario[] = [
     id: "schedule-daily",
     he: "תזכורת יומית ב-9",
     en: "Daily reminder at 9",
+    normalChat: true,
     message: () => "Every morning at 9 remind me to drink a glass of water.",
     checks: [usesTool("schedule_task", { key: "when", match: /^daily 0?9:00$/i })],
   },

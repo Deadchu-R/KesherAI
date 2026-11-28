@@ -225,12 +225,20 @@ async function* walk(root: string, dir: string): AsyncGenerator<string> {
   }
 }
 
+/** A file this big is marked in list_files so the model does not ask for all of it (about 600+ lines of a log). */
+export const BIG_FILE_BYTES = 64 * 1024;
+
+/** A size for people and models: 12 KB, 1.4 MB. */
+function humanBytes(n: number): string {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
+
 const listFiles: AgentTool = {
   risk: "read",
   spec: {
     name: "list_files",
     description:
-      "List files in the project folder, recursively. Use a glob to narrow it (e.g. \"src/**/*.ts\"). Skips .git, node_modules and build folders.",
+      "List files in the project folder, recursively. Use a glob to narrow it (e.g. \"src/**/*.ts\"). Skips .git, node_modules and build folders. Big files are marked with their size: do not read those whole.",
     inputSchema: {
       type: "object",
       properties: {
@@ -244,6 +252,8 @@ const listFiles: AgentTool = {
     const dir = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path", false) || ".");
     const re = str(input, "glob", false) ? globToRegExp(str(input, "glob")) : undefined;
     const files: string[] = [];
+    /** The same files, absolute, to size the big ones. */
+    const full: string[] = [];
     // A granted folder outside the project (request_access, a project added to a plain chat): its files are
     // matched relative to that folder and shown in full, so the glob works and read_file can take them
     // (found on the PC: relative to the project they all began with "..", nothing matched, "No files found").
@@ -253,7 +263,7 @@ const listFiles: AgentTool = {
     const inside = !rd.startsWith("..") && !isAbsolute(rd);
     for await (const f of walk(root, dir)) {
       const rel = inside ? displayPath(root, f) : relative(dir, f).split(sep).join("/");
-      if (!re || re.test(rel)) files.push(inside ? rel : f);
+      if (!re || re.test(rel)) { files.push(inside ? rel : f); full.push(f); }
       if (files.length >= 1000) break;
     }
     // A plain chat's own folder is often empty while its project was granted (+ → Tasks from the board): say
@@ -261,7 +271,10 @@ const listFiles: AgentTool = {
     const grants = (ctx.extraRoots ?? []).filter((g) => g !== dir);
     if (files.length === 0 && inside && grants.length) return { output: `No files in your own folder. You can also use: ${grants.join(", ")}. Pass one of them as path (in full), and use full paths inside it with the other tools.` };
     if (files.length === 0) return { output: "No files found." };
-    return { output: files.join("\n") + (files.length >= 1000 ? "\n… (stopped at 1000 files; use a glob to narrow)" : "") };
+    // A big file says so (like `ls -l`): the model then searches or reads it in parts instead of asking for all of it.
+    const sizes = await Promise.all(full.map((f) => stat(f).then((st) => st.size, () => 0)));
+    const lines = files.map((f, i) => (sizes[i]! >= BIG_FILE_BYTES ? `${f}  (${humanBytes(sizes[i]!)}: big, search it or read it with offset and limit)` : f));
+    return { output: lines.join("\n") + (files.length >= 1000 ? "\n… (stopped at 1000 files; use a glob to narrow)" : "") };
   },
 };
 
@@ -269,7 +282,7 @@ const readFileTool: AgentTool = {
   risk: "read",
   spec: {
     name: "read_file",
-    description: `Read a text file from the project. Returns numbered lines. A file of more than ${LARGE_FILE_LINES} lines is not returned whole: you get its first ${LARGE_FILE_HEAD} lines and the total line count, so read the part you need with offset and limit, or find it first with search (a log, a big data file: search for the word, then read around that line).`,
+    description: `Read a text file from the project. Returns numbered lines. For a file that may be big (a log, a data file, a bundle; list_files marks big ones) do NOT ask for all of it: search for the word first, then read about 100 lines around the hit with offset and limit. A file of more than ${LARGE_FILE_LINES} lines is not returned whole: you get its first ${LARGE_FILE_HEAD} lines and the total line count, so read the part you need with offset and limit, or find it first with search (a log, a big data file: search for the word, then read around that line).`,
     inputSchema: {
       type: "object",
       properties: {

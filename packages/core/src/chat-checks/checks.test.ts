@@ -157,3 +157,13 @@ test("scenarios: unique ids, both languages, checks, and pickScenarios", () => {
   assert.equal(pickScenarios().length, SCENARIOS.length);
   assert.throws(() => pickScenarios(["nope"]), /Unknown chat check: nope/);
 });
+
+test("schedule-daily runs in a normal chat (incognito chats have no schedule tools) and its message routes to schedule_task", async () => {
+  const { SCENARIOS } = await import("./scenarios.js");
+  const { ToolRouter, scheduleNote } = await import("../tool-router.js");
+  const s = SCENARIOS.find((x) => x.id === "schedule-daily")!;
+  assert.equal(s.normalChat, true);
+  const r = await new ToolRouter().route(s.message({} as never), ["schedule_task", "set_timer", "write_file"], [], false);
+  assert.ok(r.tools.includes("schedule_task"));
+  assert.match(scheduleNote(r.recurring, r.tools)!, /call schedule_task now/);
+});
