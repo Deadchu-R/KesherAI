@@ -948,7 +948,10 @@ export class ConversationManager {
       team: () => this.teamOf(id),
       toolSearch,
       // A local engine keeps its prompt cache across chats when every request starts the same (session.ts stabilize).
+      // Not for a chat with a persona or a group: their instructions are who the model is, so they stay in the system turn.
       stablePrefix: () => {
+        if (this.deps.library.summary(id)?.personaId ?? conversation.personaId) return false;
+        if ((this.groupCache.get(id) ?? []).length) return false;
         try {
           return this.deps.registry.resolve(this.deps.library.summary(id)?.modelId ?? conversation.modelId).provider.location !== "cloud";
         } catch {

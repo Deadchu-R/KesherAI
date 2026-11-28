@@ -18,7 +18,7 @@ const factory: ProviderFactory = {
     capabilities: { chat: true, tools: true },
     checkHealth: async () => true,
     listModels: async () => [{ id: `${config.id}/m`, providerId: config.id, providerModelId: "m", name: "m", category: "chat", location: "local" }],
-    chatWithTools: async (req) => ({ text: `<think>hmm</think>${(req.messages as AgentMessage[]).at(-1)!.content.toUpperCase()}`, toolCalls: [] }),
+    chatWithTools: async (req) => ({ text: `<think>hmm</think>${(req.messages as AgentMessage[]).at(-1)!.content.replace(/^\[Instructions and context for this chat\][\s\S]*?\[End of the instructions and context\]\n\n/, "").toUpperCase()}`, toolCalls: [] }),
   }),
 };
 

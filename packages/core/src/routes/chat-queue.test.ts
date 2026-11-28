@@ -27,7 +27,8 @@ const slowFactory: ProviderFactory = {
     chatWithTools: async (req, signal) => {
       const last = req.messages.at(-1) as AgentMessage;
       if (last.role === "user" && last.content.startsWith("You keep a memory about the user")) return { text: '{"add":[],"forget":[]}', toolCalls: [] };
-      if (last.role === "user") heard.push(last.content);
+      // A local chat puts its own part before the first message (session.ts stabilize): hear only what the user typed.
+      if (last.role === "user") heard.push(last.content.replace(/^\[Instructions and context for this chat\][\s\S]*?\[End of the instructions and context\]\n\n/, ""));
       await new Promise<void>((done, fail) => {
         release = done;
         signal?.addEventListener("abort", () => fail(new Error("aborted")), { once: true });
