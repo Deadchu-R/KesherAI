@@ -79,6 +79,12 @@ A scheduled task on Roee's Claude account ("KesherAI daily feature review vs com
 - Fewer agents: group related steps into one agent task; do small edits (a few lines, docs) as the lead. Model per agent by the job: big or risky code = Opus; small UI/doc/test fixes, boards, research, reviews = Sonnet; lookups and mechanical loops = Haiku.
 - His PC: use it only when a feature needs it (setup, real checks); keep KesherAI on the newest release there and things tidy; close what was opened.
 
+## Every page also lives inside the chat (Roee, 2026-11-28 11:43)
+
+From now on every page, new or changed, also works inside the chat as a surface (`apps/web/src/surfaces.ts`): a card in
+the message, the side panel, full screen, and its phone behaviour (edit / view+ask / open on the PC). A page task is not
+done until its surface is registered and its design board shows the in-chat view. Helper prompts for page work say so.
+
 ## Read as little as possible (Roee, 2026-11-28 10:35)
 
 Reading files is where tokens go. The lead and every helper: search first, read only ~40 lines around the hit, never a

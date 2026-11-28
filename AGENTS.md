@@ -23,6 +23,7 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 - Before a release also `pnpm -s lint` (CI fails on lint).
 - The interface works on the computer and on the phone (390 px wide). Hebrew and English: short components use `L(he, en)` with `getLocale()`; shared words go in `apps/web/src/i18n.ts`.
 - Every public function gets a TSDoc comment (what it does, its parameters).
+- Every page (new or changed) also works inside the chat (Roee, 28.11): register it as a chat surface (card in the message, side panel, full screen; phone behaviour) following the "How to add a surface" notes at the top of `apps/web/src/surfaces.ts`, and its design board shows the in-chat view too.
 - Do not run prettier. Do not add dependencies without asking.
 
 ## Commits
