@@ -99,19 +99,28 @@ test("media prep routes: path guard, cache hit, Range, and the phone needs its k
     assert.match(ex.path ?? "", /^shared\/clip-edit\.mp4$/);
 
     // Sound trim: one range of one prepared file, ids only; the result is a new .m4a in shared/.
-    const trim = (body: object) => app.inject({ method: "POST", url: "/api/media/trim", payload: { conversation: id, ...body } });
-    assert.equal((await trim({ source: first.id, start: "1", end: 2 })).statusCode, 400);
-    assert.equal((await trim({ source: first.id, start: 2, end: 1 })).statusCode, 400);
-    assert.equal((await trim({ source: join(folder, "clip.mp4"), start: 0, end: 1 })).statusCode, 400);
-    const cut = await trim({ source: first.id, start: 0.5, end: 1.25 });
-    assert.equal(cut.statusCode, 200);
-    let tr = { state: "running" } as { state: string; path?: string };
-    for (let i = 0; i < 100 && tr.state === "running"; i++) {
-      await new Promise((r) => setTimeout(r, 20));
-      tr = (await app.inject({ url: `/api/media/export/${(cut.json() as { job: string }).job}` })).json();
-    }
-    assert.equal(tr.state, "done");
-    assert.match(tr.path ?? "", /^shared\/clip-edit\.m4a$/);
+          const trim = (body: object) => app.inject({ method: "POST", url: "/api/media/trim", payload: { conversation: id, ...body } });
+          assert.equal((await trim({ source: first.id, start: "1", end: 2 })).statusCode, 400);
+          assert.equal((await trim({ source: first.id, start: 2, end: 1 })).statusCode, 400);
+          assert.equal((await trim({ source: join(folder, "clip.mp4"), start: 0, end: 1 })).statusCode, 400);
+          const cut = await trim({ source: first.id, start: 0.5, end: 1.25 });
+          assert.equal(cut.statusCode, 200);
+          let tr = { state: "running" } as { state: string; path?: string };
+          for (let i = 0; i < 100 && tr.state === "running"; i++) {
+            await new Promise((r) => setTimeout(r, 20));
+            tr = (await app.inject({ url: `/api/media/export/${(cut.json() as { job: string }).job}` })).json();
+          }
+          assert.equal(tr.state, "done");
+          assert.match(tr.path ?? "", /^shared\/clip-edit\.m4a$/);
+
+          // Sound ops on a range: fade/gain accepted through the same route, bad ops refused.
+          assert.equal((await trim({ source: first.id, start: 0, end: 1, ops: [] })).statusCode, 400);
+          assert.equal((await trim({ source: first.id, start: 0, end: 1, ops: [{ op: "fade", a: 0, b: 0.5, dir: "sideways" }] })).statusCode, 400);
+          assert.equal((await trim({ source: first.id, start: 0, end: 1, ops: [{ op: "gain", a: 0, b: 1, db: 30 }] })).statusCode, 400);
+          const fade = await trim({ source: first.id, start: 0, end: 1, ops: [{ op: "fade", a: 0, b: 0.5, dir: "in" }, { op: "fade", a: 0.5, b: 1, dir: "out" }] });
+          assert.equal(fade.statusCode, 200);
+          const gain = await trim({ source: first.id, start: 0, end: 1, ops: [{ op: "gain", a: 0, b: 1, db: -6 }] });
+          assert.equal(gain.statusCode, 200);
 
     // Ids and parts are never paths.
     assert.equal((await app.inject({ url: "/api/media/..%2F..%2Fsecret/proxy" })).statusCode, 400);

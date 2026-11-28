@@ -163,16 +163,29 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
   app.post<{ Body: ExportBody }>("/api/media/export", (req, reply) => startExport(req.body, reply));
 
   /**
-   * `POST /api/media/trim` `{ conversation, source: prepId, start, end }`: the sound panel's "Trim to range". Builds a
-   * one-lane `SoundOp` edit (`trim` a..b) and renders it through the same export (ids only, one at a time); the result
-   * is a new file in `shared/` (`GET /api/media/export/:job` follows it), the original is never touched.
-   */
-  app.post<{ Body: { conversation?: string; source?: unknown; start?: unknown; end?: unknown } }>("/api/media/trim", (req, reply) => {
-    const { start, end } = req.body ?? {};
-    if (typeof start !== "number" || typeof end !== "number") return reply.code(400).send({ error: "Send the start and the end of the range in seconds." });
-    const edit = { v: 1, video: [], lanes: [{ src: 0, start: 0, ops: [{ op: "trim", a: start, b: end }] }] };
-    return startExport({ conversation: req.body?.conversation, sources: [req.body?.source], edit }, reply);
-  });
+       * `POST /api/media/trim` `{ conversation, source: prepId, start, end, ops? }`: the sound panel's range edits. With no
+       * `ops` it trims to the range; with `ops` it runs that `SoundOp` list on the range (fade, gain, …). The list is
+       * validated by {@link checkMediaEdit} (ids only, never paths) and rendered through the same export job; the result
+       * is a new file in `shared/` (`GET /api/media/export/:job` follows it), the original is never touched.
+       */
+      app.post<{ Body: { conversation?: string; source?: unknown; start?: unknown; end?: unknown; ops?: unknown } }>("/api/media/trim", (req, reply) => {
+        const { start, end, ops } = req.body ?? {};
+        if (typeof start !== "number" || typeof end !== "number") return reply.code(400).send({ error: "Send the start and the end of the range in seconds." });
+        let laneOps: import("@kesher/shared").SoundOp[];
+        if (ops === undefined) {
+          laneOps = [{ op: "trim", a: start, b: end }];
+        } else {
+          try {
+            const checked = checkMediaEdit({ v: 1, video: [], lanes: [{ src: 0, start: 0, ops }] }, 1);
+            laneOps = checked.lanes[0]!.ops;
+            if (!laneOps.length) return reply.code(400).send({ error: "Send at least one sound operation." });
+          } catch (err) {
+            return reply.code(400).send({ error: (err as Error).message });
+          }
+        }
+        const edit = { v: 1, video: [], lanes: [{ src: 0, start: 0, ops: laneOps }] };
+        return startExport({ conversation: req.body?.conversation, sources: [req.body?.source], edit }, reply);
+      });
 
   app.get<{ Params: { job: string } }>("/api/media/export/:job", async (req, reply) => exports.get(req.params.job) ?? reply.code(404).send({ error: "No such export" }));
 }

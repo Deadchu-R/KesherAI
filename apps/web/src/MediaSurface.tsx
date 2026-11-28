@@ -365,28 +365,61 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
     }
   };
   /** Sound: the PC renders the marked range of the prepared file as a new version (ids only; `POST /api/media/trim`). */
-  const trimSound = async () => {
-    if (!marks || !item.convId || !info) return;
-    setBusy("trim");
-    try {
-      const { job } = await api<{ job: string }>("/api/media/trim", { method: "POST", body: { conversation: item.convId, source: info.id, start: marks.start, end: marks.end } });
-      for (let st = { state: "running" } as { state: string; path?: string; error?: string }; ; await new Promise((r) => setTimeout(r, 700))) {
-        st = await api<typeof st>(`/api/media/export/${job}`);
-        if (st.state === "error") throw new Error(st.error || "Trim failed");
-        if (st.state === "done" && st.path) {
-          setRenders((v) => [...v, st.path!]);
-          setPath(st.path);
-          setMarks(undefined);
-          toast(L("נשמרה גרסה חדשה.", "Saved a new version."));
-          break;
+      const trimSound = async () => {
+        if (!marks || !item.convId || !info) return;
+        setBusy("trim");
+        try {
+          const { job } = await api<{ job: string }>("/api/media/trim", { method: "POST", body: { conversation: item.convId, source: info.id, start: marks.start, end: marks.end } });
+          for (let st = { state: "running" } as { state: string; path?: string; error?: string }; ; await new Promise((r) => setTimeout(r, 700))) {
+            st = await api<typeof st>(`/api/media/export/${job}`);
+            if (st.state === "error") throw new Error(st.error || "Trim failed");
+            if (st.state === "done" && st.path) {
+              setRenders((v) => [...v, st.path!]);
+              setPath(st.path);
+              setMarks(undefined);
+              toast(L("נשמרה גרסה חדשה.", "Saved a new version."));
+              break;
+            }
+          }
+        } catch (e) {
+          toast((e as Error).message);
+        } finally {
+          setBusy("");
         }
-      }
-    } catch (e) {
-      toast((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  };
+      };
+      /** Sound: apply a list of ops on the marked range (fade, gain) through the same export route. */
+      const applySoundOps = async (ops: import("@kesher/shared").SoundOp[], busyTag: string) => {
+        if (!marks || !item.convId || !info) return;
+        setBusy(busyTag);
+        try {
+          const { job } = await api<{ job: string }>("/api/media/trim", { method: "POST", body: { conversation: item.convId, source: info.id, start: marks.start, end: marks.end, ops } });
+          for (let st = { state: "running" } as { state: string; path?: string; error?: string }; ; await new Promise((r) => setTimeout(r, 700))) {
+            st = await api<typeof st>(`/api/media/export/${job}`);
+            if (st.state === "error") throw new Error(st.error || "Edit failed");
+            if (st.state === "done" && st.path) {
+              setRenders((v) => [...v, st.path!]);
+              setPath(st.path);
+              setMarks(undefined);
+              toast(L("נשמרה גרסה חדשה.", "Saved a new version."));
+              break;
+            }
+          }
+        } catch (e) {
+          toast((e as Error).message);
+        } finally {
+          setBusy("");
+        }
+      };
+      const fadeInOut = () => {
+        if (!marks) return;
+        const d = Math.min(0.5, (marks.end - marks.start) / 2);
+        void applySoundOps([
+          { op: "fade", a: marks.start, b: marks.start + d, dir: "in" },
+          { op: "fade", a: marks.end - d, b: marks.end, dir: "out" },
+        ], "fade");
+      };
+      const [gainOpen, setGainOpen] = useState(false);
+      const [gainDb, setGainDb] = useState(0);
   const openEditor = async () => {
     if (!page) {
       if (await offerPart(editorId, L("העורך המלא", "The full editor"))) setEditor(true);
@@ -464,12 +497,28 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
               {!video && <span id="media-soon" className="muted small">{L("עריכת סאונד בקרוב בטלפון", "sound editing is coming soon on the phone")}</span>}
             </div>
           ) : (
-            <div className="media-actions">
-              <button type="button" onClick={() => void (video ? trim() : trimSound())} disabled={!marks || !item.convId || !!busy || (!video && !info)}>{busy === "trim" ? L("חותך…", "Cutting…") : `✂ ${L("חיתוך לקטע", "Trim to range")}`}</button>
-              {video && <button type="button" onClick={() => info && setEditing({ info })} disabled={!info?.ready.proxy}>✎ {L("עריכה", "Edit")}</button>}
-              <button type="button" onClick={() => void openEditor()} disabled={!!busy}>{page ? L("עורך מלא", "Full editor") : `📦 ${L("עורך מלא (התקנה)", "Full editor (install)")}`}</button>
-            </div>
-          )}
+                        <>
+                          <div className="media-actions">
+                            <button type="button" onClick={() => void (video ? trim() : trimSound())} disabled={!marks || !item.convId || !!busy || (!video && !info)}>{busy === "trim" ? L("חותך…", "Cutting…") : `✂ ${L("חיתוך לקטע", "Trim to range")}`}</button>
+                            {!video && (
+                              <>
+                                <button type="button" onClick={fadeInOut} disabled={!marks || !item.convId || !!busy || !info}>{busy === "fade" ? L("מדהה…", "Fading…") : L("דהייה פנימה/החוצה", "Fade in/out")}</button>
+                                <button type="button" onClick={() => { setGainDb(0); setGainOpen(true); }} disabled={!marks || !item.convId || !!busy || !info}>{busy === "gain" ? L("משנה עוצמה…", "Changing gain…") : L("עוצמה", "Gain")}</button>
+                              </>
+                            )}
+                            {video && <button type="button" onClick={() => info && setEditing({ info })} disabled={!info?.ready.proxy}>✎ {L("עריכה", "Edit")}</button>}
+                            <button type="button" onClick={() => void openEditor()} disabled={!!busy}>{page ? L("עורך מלא", "Full editor") : `📦 ${L("עורך מלא (התקנה)", "Full editor (install)")}`}</button>
+                          </div>
+                          {!video && gainOpen && marks && (
+                            <form className="media-ask" onSubmit={(e) => { e.preventDefault(); setGainOpen(false); void applySoundOps([{ op: "gain", a: marks.start, b: marks.end, db: gainDb }], "gain"); }}>
+                              <label className="muted small" dir="auto">{L("עוצמה בקטע (dB)", "Range gain (dB)")}: {gainDb > 0 ? `+${gainDb}` : gainDb}</label>
+                              <input type="range" min={-12} max={12} step={1} value={gainDb} onChange={(e) => setGainDb(Number(e.target.value))} aria-label={L("עוצמה ב-dB", "Gain in dB")} />
+                              <button type="submit" disabled={!!busy}>{L("אישור", "Apply")}</button>
+                              <button type="button" className="ghost" onClick={() => setGainOpen(false)}>{L("ביטול", "Cancel")}</button>
+                            </form>
+                          )}
+                        </>
+                      )}
           {versions.length > 1 && (
             <ul className="media-versions" aria-label={L("גרסאות", "Versions")}>
               {versions.map((v, i) => (

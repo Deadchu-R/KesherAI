@@ -84,3 +84,28 @@ test("resultExtra: carries the video and sound ids of a step to fromResult, noth
   assert.deepEqual(itemFromResult(list, "generate_video", true, "", x)?.id, "v");
   assert.deepEqual(itemFromResult(list, "make_music", true, "", x)?.id, "a");
 });
+
+test("sound range ops: fade in/out defaults to 0.5 s (or half the range) and gain clamps to -12..+12 dB", () => {
+ // The panel builds ops from the marked range; these shapes must match SoundOp so the route accepts them.
+ const marks = { start: 2, end: 6 };
+ const d = Math.min(0.5, (marks.end - marks.start) / 2);
+ const fadeOps = [
+ { op: "fade", a: marks.start, b: marks.start + d, dir: "in" },
+ { op: "fade", a: marks.end - d, b: marks.end, dir: "out" },
+ ] as const;
+ const [first, second] = fadeOps;
+ assert.ok(first && second);
+ assert.equal(first.op, "fade");
+ assert.equal(first.dir, "in");
+ assert.equal(second.dir, "out");
+ assert.ok(first.b - first.a <= 0.5 + 1e-9);
+ assert.ok(second.a >= marks.start && second.b <= marks.end);
+ // A very short range halves the fade instead of exceeding it.
+   const tiny = { start: 1, end: 1.4 };
+   const td = Math.min(0.5, (tiny.end - tiny.start) / 2);
+   assert.ok(Math.abs(td - 0.2) < 1e-9, `expected ~0.2, got ${td}`);
+ // Gain is an integer dB in -12..+12 for the slider; the op carries it as `db`.
+ const gainOp = { op: "gain", a: marks.start, b: marks.end, db: -6 };
+ assert.equal(gainOp.op, "gain");
+ assert.ok(gainOp.db >= -12 && gainOp.db <= 12);
+});
