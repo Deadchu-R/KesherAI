@@ -12,6 +12,7 @@ export * from "./sampling-presets.js";
 export * from "./prompt-fields.js";
 export * from "./chat.js";
 export * from "./media.js";
+export * from "./media-edit.js";
 export * from "./branding.config.js";
 export * from "./features.config.js";
 export * from "./agent.js";

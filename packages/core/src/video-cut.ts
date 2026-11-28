@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { MEDIA_TRANSITIONS } from "@kesher/shared";
 import { dirname } from "node:path";
 
 /** A kept stretch of the source video, in seconds. */
@@ -94,7 +95,7 @@ export interface ExportLook {
   quality?: "high" | "normal" | "small";
 }
 /** The transitions between clips one may choose (FFmpeg's xfade; CapCut's most used ones). */
-export const TRANSITIONS = ["fade", "fadeblack", "fadewhite", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "circleopen", "circleclose", "dissolve", "pixelize", "zoomin"];
+export const TRANSITIONS = MEDIA_TRANSITIONS;
 /** A transition between every two clips (CapCut's "Apply all"): which, and how long (0.1–1.5 s). */
 export interface Transition {
   kind: string;

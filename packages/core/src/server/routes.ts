@@ -125,6 +125,7 @@ import { resumeRoutes } from "../routes/resume.js";
 import { taskInboxRoutes } from "../routes/task-inbox.js";
 import { tasksSyncRoutes } from "../routes/tasks-sync.js";
 import { fileRoutes } from "../routes/files.js";
+import { mediaPrepRoutes } from "../routes/media-prep.js";
 import { terminalRoutes } from "../routes/terminal.js";
 import websocket from "@fastify/websocket";
 import { googleRoutes } from "../routes/google.js";
@@ -237,6 +238,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   if (services.taskInbox) await taskInboxRoutes(app, services, services.taskInbox);
   if (services.tasksSync) await tasksSyncRoutes(app, services, services.tasksSync);
   await fileRoutes(app, services);
+  await mediaPrepRoutes(app, services);
   await bankRoutes(app, services);
   await roomRoutes(app, (services.sceneRooms ??= new SceneRooms()));
   await googleRoutes(app, services);
