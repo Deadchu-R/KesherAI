@@ -6,6 +6,17 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## Task dispatcher on the CPU (Roee 28.11 10:32)
+KesherAI itself orders the task queue and starts tasks, picking the agent AND the model per task, with a dedicated chat
+on the Tasks page (desktop and phone) — run by a SMALL model on the CPU so it never loads the PC (paused while a game
+runs). Builds on: the hub task chat (8a5f061, CPU chat role, Apply/Cancel proposals), quota failover (inbox-runner
+`quotaFailover`, being widened 28.11 to hand-picked executors), the self-work watchdog (989d3a4).
+- 🔨 Research first: inbox r-20261128-06 (routers: RouteLLM, Not Diamond, OpenRouter Auto, Martian; agent assignment in
+  Devin/Factory/Cursor/Copilot; can a 1-4B CPU model do it; what data to score with; language and weight).
+- ⬜ Then: design boards (dispatcher card on the Tasks page, its chat on desktop + phone, settings), the dispatcher
+  service (rules as hard limits — privacy, quota, Claude never automatic — the small model for order, picks and the
+  one-line reason), per executor/model success data, the chat on the desktop Tasks page reusing the hub task chat.
+
 ## Monday 23.11 ✅/⬜
 - ✅ Unreal 4.27: plugin mounted + connected in ForMigration; "open" flag fixed (slashes/case), converted copies never "updated" to the UE5 plugin
 - ✅ OpenCode Go: per-model 429 cooldown and fallback; per-model requests/month + "blocked until" in the card; Jules removed
