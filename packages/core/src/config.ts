@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile, chmod } from "node:fs/promises"
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { isOwnNetworkUrl } from "@kesher/providers";
 import { branding } from "@kesher/shared";
 
 /** One provider as stored in the config file. Mirrors `ProviderConfig`. */
@@ -943,7 +944,7 @@ export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
   // read the location, and a saved "server" let Gemini in (28.11: Auto still routed web questions to Gemini).
   let relabeled = false;
   for (const p of config.providers as Array<{ baseUrl?: string; location?: string }>) {
-    if (p.location === "server" && p.baseUrl && !isOwnNetworkUrl(p.baseUrl)) {
+    if ((p.location === "server" || p.location === undefined) && p.baseUrl && /^https?:/i.test(p.baseUrl) && !isOwnNetworkUrl(p.baseUrl)) {
       p.location = "cloud";
       relabeled = true;
     }
@@ -989,26 +990,3 @@ export function saveConfig(paths: DataPaths, config: KesherConfig): Promise<void
   return run;
 }
 let configWrites: Promise<unknown> = Promise.resolve();
-
-/**
- * Whether a provider address is on this computer or the user's own network (localhost, private IPv4 ranges, Tailscale's
- * 100.64/10, .local / .lan / .ts.net names, IPv6 loopback and private), as opposed to a service on the internet.
- *
- * @param url - The provider's base URL.
- * @returns True for the user's own machines; false for the internet or a bad URL.
- */
-export function isOwnNetworkUrl(url: string): boolean {
-  let host: string;
-  try {
-    host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  } catch {
-    return false;
-  }
-  if (host === "localhost" || host === "::1" || /\.(local|lan|home|internal|ts\.net)$/.test(host) || !host.includes(".") && !host.includes(":")) return true;
-  const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
-  if (m) {
-    const a = Number(m[1]), b = Number(m[2]);
-    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254);
-  }
-  return /^f[cd][0-9a-f]{2}:/.test(host) || host.startsWith("fe80:");
-}

@@ -14,7 +14,7 @@ export * from "./provider.js";
 export * from "./registry.js";
 export * from "./presets.js";
 export * from "./sse.js";
-export { OpenAICompatibleProvider, openAICompatibleFactory, toOpenAIMessages, llamaCppFields, readUsage, type UsageReport } from "./openai-compatible.js";
+export { OpenAICompatibleProvider, openAICompatibleFactory, toOpenAIMessages, llamaCppFields, readUsage, isOwnNetworkUrl, type UsageReport } from "./openai-compatible.js";
 export { AnthropicProvider, anthropicFactory, toAnthropicMessages } from "./anthropic.js";
 export { parseToolArguments } from "./tool-args.js";
 export { GROUNDING_MODELS, groundingBody, groundingError, parseGrounding, type GroundedHit } from "./gemini-grounding.js";

@@ -61,7 +61,8 @@ export class OpenAICompatibleProvider implements Provider {
     if (!config.baseUrl) throw new Error(`Provider "${config.id}" needs a baseUrl`);
     this.id = config.id;
     this.name = config.name ?? config.id;
-    this.location = config.location ?? "server";
+    // No saved location: an address on the internet is the cloud (Auto and privacy rules read this), else a server of the user's.
+    this.location = config.location ?? (isOwnNetworkUrl(config.baseUrl ?? "") ? "server" : "cloud");
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.waitMs = Number(config.options?.waitForServerMs ?? 0) || 0;
     const llama = config.options?.llamaCpp;
@@ -541,4 +542,28 @@ export function conversationKey(messages: ReadonlyArray<{ role?: unknown; conten
     h2 = Math.imul(h2 ^ (c + i), 0x01000193) >>> 0;
   }
   return `kesher-${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * Whether a provider address is on this computer or the user's own network (localhost, private IPv4 ranges, Tailscale's
+ * 100.64/10, .local / .lan / .ts.net names, IPv6 loopback and private), as opposed to a service on the internet.
+ *
+ * @param url - The provider's base URL.
+ * @returns True for the user's own machines; false for the internet or a bad URL.
+ */
+export function isOwnNetworkUrl(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || host === "::1" || /\.(local|lan|home|internal|ts\.net)$/.test(host) || (!host.includes(".") && !host.includes(":"))) return true;
+  const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254);
+  }
+  return /^f[cd][0-9a-f]{2}:/.test(host) || host.startsWith("fe80:");
 }
