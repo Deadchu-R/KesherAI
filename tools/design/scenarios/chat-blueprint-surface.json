@@ -1,0 +1,597 @@
+{
+ "group": "צ'אט · Chat",
+ "boards": [
+  {
+   "id": "ChatBlueprintSurface",
+   "title": "כלים בצ'אט: סקריפט חזותי. כרטיס (+3 נודים, 2 קישורים), פאנל גרף, שינויים, שאלה על נוד והצעה לאישור",
+   "titleEn": "Tools in chat: visual script. Card (+3 nodes, 2 links), graph panel, diff view, ask about a node, proposal accept/reject",
+   "route": "#/c/c12",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 860,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c12",
+     "json": {
+      "id": "c12",
+      "projectId": null,
+      "title": "דלת ב-Blueprint",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 8,
+      "session": {
+       "id": "c12",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תפתח את הדלת כשהמשחק מתחיל ותדפיס הודעה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "tool_call",
+        "callId": "g1",
+        "name": "unreal_change_graph",
+        "input": {
+         "path": "/Game/Blueprints/BP_Door.BP_Door",
+         "request": "on BeginPlay open the door and print a message"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_result",
+        "callId": "g1",
+        "name": "unreal_change_graph",
+        "ok": true,
+        "output": "Opens the door on start.\nApplied 6/6 operations. Compiled with no errors.\n[graph-change] {\"path\": \"/Game/Blueprints/BP_Door.BP_Door\", \"graph\": \"EventGraph\", \"kind\": \"unreal\", \"nodes\": 5, \"added\": [{\"id\": \"n2\", \"title\": \"Open Door\", \"class\": \"K2Node_CallFunction\"}, {\"id\": \"n3\", \"title\": \"Print String\", \"class\": \"K2Node_CallFunction\"}, {\"id\": \"n1\", \"title\": \"Branch\", \"class\": \"K2Node_IfThenElse\"}], \"removed\": [{\"id\": \"old\", \"title\": \"Delay\", \"class\": \"K2Node_CallFunction\"}], \"changed\": [{\"id\": \"ev\", \"title\": \"Event BeginPlay\", \"class\": \"K2Node_Event\"}], \"links\": 2, \"unlinked\": 1}"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "פתחתי את הדלת כשהמשחק מתחיל והוספתי הדפסה."
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "user",
+        "text": "ותסגור אותה שוב אחרי ההודעה, אבל תציע לי קודם"
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "tool_call",
+        "callId": "g2",
+        "name": "unreal_change_graph",
+        "input": {
+         "path": "/Game/Blueprints/BP_Door.BP_Door",
+         "propose": true,
+         "request": "close it again after the message"
+        }
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "16m"
+        },
+        "type": "tool_result",
+        "callId": "g2",
+        "name": "unreal_change_graph",
+        "ok": true,
+        "output": "Close the door again after the message.\nProposed 3 change(s); nothing is applied.\n[graph-proposal] {\"path\": \"/Game/Blueprints/BP_Door.BP_Door\", \"graph\": \"EventGraph\", \"kind\": \"unreal\", \"note\": \"Close the door again after the message.\", \"items\": [{\"op\": {\"op\": \"add\", \"ref\": \"$s\", \"type\": \"call\", \"function\": \"KismetSystemLibrary:PrintString\"}, \"label\": \"+ Print String\", \"needs\": []}, {\"op\": {\"op\": \"connect\", \"from\": {\"node\": \"n3\", \"pin\": \"then\"}, \"to\": {\"node\": \"$s\", \"pin\": \"execute\"}}, \"label\": \"Print String.then \\u2192 Print String.execute\", \"needs\": [0]}, {\"op\": {\"op\": \"set\", \"node\": \"n3\", \"pin\": \"InString\", \"value\": \"Closing\"}, \"label\": \"Print String.InString = Closing\", \"needs\": []}]}"
+       },
+       {
+        "seq": 8,
+        "at": {
+         "$ago": "15m"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "שינוי אחד בוצע, והצעה נוספת מחכה לאישור שלך בפאנל."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c12/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/conversations/c12/helpers",
+     "json": {
+      "runs": [],
+      "plans": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c12/quick-actions",
+     "json": {
+      "names": []
+     }
+    },
+    {
+     "url": "**/api/unreal/graph*",
+     "json": {
+      "graph": {
+       "path": "/Game/Blueprints/BP_Door.BP_Door",
+       "name": "BP_Door",
+       "parent": "Actor",
+       "variables": [],
+       "graphs": [
+        {
+         "name": "EventGraph",
+         "kind": "event",
+         "nodes": [
+          {
+           "id": "ev",
+           "title": "Event BeginPlay",
+           "class": "K2Node_Event",
+           "x": 0,
+           "y": 0,
+           "pins": [
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n1"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "n1",
+           "title": "Branch",
+           "class": "K2Node_IfThenElse",
+           "x": 320,
+           "y": 0,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "Condition",
+             "dir": "in",
+             "type": "bool",
+             "default": "true"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n2"
+             ]
+            },
+            {
+             "name": "else",
+             "dir": "out",
+             "type": "exec"
+            }
+           ]
+          },
+          {
+           "id": "n2",
+           "title": "Open Door",
+           "class": "K2Node_CallFunction",
+           "x": 680,
+           "y": -40,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n3"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "n3",
+           "title": "Print String",
+           "class": "K2Node_CallFunction",
+           "x": 1040,
+           "y": -40,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "InString",
+             "dir": "in",
+             "type": "string",
+             "default": "Door opened"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec"
+            }
+           ]
+          },
+          {
+           "id": "cm",
+           "title": "Comment",
+           "class": "EdGraphNode_Comment",
+           "x": -20,
+           "y": -120,
+           "width": 1300,
+           "height": 330,
+           "color": "3355FF33",
+           "comment": "Open the door on start",
+           "pins": []
+          }
+         ]
+        }
+       ]
+      },
+      "offline": false
+     }
+    },
+    {
+     "url": "**/api/unreal",
+     "json": {
+      "connected": true
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".blueprint-card"
+    },
+    {
+     "click": ".blueprint-card >> nth=0"
+    },
+    {
+     "wait": ".bp-sf-canvas svg"
+    },
+    {
+     "click": "[data-node='n3'] >> nth=0"
+    },
+    {
+     "wait": ".bp-sf-ask"
+    }
+   ]
+  },
+  {
+   "id": "ChatBlueprintSurfaceReview",
+   "title": "כלים בצ'אט: סקריפט חזותי. הצעה לאישור שינוי-שינוי: סימון וביטול, שליחה לאישור דרך כלי הכתיבה",
+   "titleEn": "Tools in chat: visual script. A proposal accepted change by change, sent through the write tool's approval",
+   "route": "#/c/c12",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 860,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c12",
+     "json": {
+      "id": "c12",
+      "projectId": null,
+      "title": "דלת ב-Blueprint",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 8,
+      "session": {
+       "id": "c12",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תפתח את הדלת כשהמשחק מתחיל ותדפיס הודעה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "tool_call",
+        "callId": "g1",
+        "name": "unreal_change_graph",
+        "input": {
+         "path": "/Game/Blueprints/BP_Door.BP_Door",
+         "request": "on BeginPlay open the door and print a message"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_result",
+        "callId": "g1",
+        "name": "unreal_change_graph",
+        "ok": true,
+        "output": "Opens the door on start.\nApplied 6/6 operations. Compiled with no errors.\n[graph-change] {\"path\": \"/Game/Blueprints/BP_Door.BP_Door\", \"graph\": \"EventGraph\", \"kind\": \"unreal\", \"nodes\": 5, \"added\": [{\"id\": \"n2\", \"title\": \"Open Door\", \"class\": \"K2Node_CallFunction\"}, {\"id\": \"n3\", \"title\": \"Print String\", \"class\": \"K2Node_CallFunction\"}, {\"id\": \"n1\", \"title\": \"Branch\", \"class\": \"K2Node_IfThenElse\"}], \"removed\": [{\"id\": \"old\", \"title\": \"Delay\", \"class\": \"K2Node_CallFunction\"}], \"changed\": [{\"id\": \"ev\", \"title\": \"Event BeginPlay\", \"class\": \"K2Node_Event\"}], \"links\": 2, \"unlinked\": 1}"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "פתחתי את הדלת כשהמשחק מתחיל והוספתי הדפסה."
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "user",
+        "text": "ותסגור אותה שוב אחרי ההודעה, אבל תציע לי קודם"
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "tool_call",
+        "callId": "g2",
+        "name": "unreal_change_graph",
+        "input": {
+         "path": "/Game/Blueprints/BP_Door.BP_Door",
+         "propose": true,
+         "request": "close it again after the message"
+        }
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "16m"
+        },
+        "type": "tool_result",
+        "callId": "g2",
+        "name": "unreal_change_graph",
+        "ok": true,
+        "output": "Close the door again after the message.\nProposed 3 change(s); nothing is applied.\n[graph-proposal] {\"path\": \"/Game/Blueprints/BP_Door.BP_Door\", \"graph\": \"EventGraph\", \"kind\": \"unreal\", \"note\": \"Close the door again after the message.\", \"items\": [{\"op\": {\"op\": \"add\", \"ref\": \"$s\", \"type\": \"call\", \"function\": \"KismetSystemLibrary:PrintString\"}, \"label\": \"+ Print String\", \"needs\": []}, {\"op\": {\"op\": \"connect\", \"from\": {\"node\": \"n3\", \"pin\": \"then\"}, \"to\": {\"node\": \"$s\", \"pin\": \"execute\"}}, \"label\": \"Print String.then \\u2192 Print String.execute\", \"needs\": [0]}, {\"op\": {\"op\": \"set\", \"node\": \"n3\", \"pin\": \"InString\", \"value\": \"Closing\"}, \"label\": \"Print String.InString = Closing\", \"needs\": []}]}"
+       },
+       {
+        "seq": 8,
+        "at": {
+         "$ago": "15m"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "שינוי אחד בוצע, והצעה נוספת מחכה לאישור שלך בפאנל."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c12/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/conversations/c12/helpers",
+     "json": {
+      "runs": [],
+      "plans": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c12/quick-actions",
+     "json": {
+      "names": []
+     }
+    },
+    {
+     "url": "**/api/unreal/graph*",
+     "json": {
+      "graph": {
+       "path": "/Game/Blueprints/BP_Door.BP_Door",
+       "name": "BP_Door",
+       "parent": "Actor",
+       "variables": [],
+       "graphs": [
+        {
+         "name": "EventGraph",
+         "kind": "event",
+         "nodes": [
+          {
+           "id": "ev",
+           "title": "Event BeginPlay",
+           "class": "K2Node_Event",
+           "x": 0,
+           "y": 0,
+           "pins": [
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n1"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "n1",
+           "title": "Branch",
+           "class": "K2Node_IfThenElse",
+           "x": 320,
+           "y": 0,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "Condition",
+             "dir": "in",
+             "type": "bool",
+             "default": "true"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n2"
+             ]
+            },
+            {
+             "name": "else",
+             "dir": "out",
+             "type": "exec"
+            }
+           ]
+          },
+          {
+           "id": "n2",
+           "title": "Open Door",
+           "class": "K2Node_CallFunction",
+           "x": 680,
+           "y": -40,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "n3"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "n3",
+           "title": "Print String",
+           "class": "K2Node_CallFunction",
+           "x": 1040,
+           "y": -40,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "InString",
+             "dir": "in",
+             "type": "string",
+             "default": "Door opened"
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec"
+            }
+           ]
+          },
+          {
+           "id": "cm",
+           "title": "Comment",
+           "class": "EdGraphNode_Comment",
+           "x": -20,
+           "y": -120,
+           "width": 1300,
+           "height": 330,
+           "color": "3355FF33",
+           "comment": "Open the door on start",
+           "pins": []
+          }
+         ]
+        }
+       ]
+      },
+      "offline": false
+     }
+    },
+    {
+     "url": "**/api/unreal",
+     "json": {
+      "connected": true
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".blueprint-card"
+    },
+    {
+     "click": ".blueprint-card >> nth=1"
+    },
+    {
+     "wait": ".bp-sf-change"
+    }
+   ]
+  }
+ ]
+}

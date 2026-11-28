@@ -28,6 +28,7 @@ import type { ComponentType } from "react";
 import { ITEM_KINDS, itemFromResult as docFromResult, selectionMessage, type ItemKind } from "./doc-items";
 import { CODE_FILES, askMessage, codeFileFromResult } from "./code-surface";
 import { EDITOR_FILES, EDITOR_NAMES, type EditorId } from "./editor-handoff";
+import { BLUEPRINT_TOOLS, blueprintFromResult } from "./blueprint-surface";
 import { IMAGE_FILES, imageFromResult, parseRegionSelection, regionMessage } from "./image-surface";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
@@ -45,6 +46,8 @@ export interface SurfaceItem {
   path?: string;
   /** The version a tool step made, for the card's "v3". */
   ver?: number;
+  /** A surface's own payload from the step (the graph surface keeps the tool's result here for its card). */
+  data?: string;
   /** The unified diff a file-writing step made (the code surface's card counts it, its panel opens on it). */
   diff?: string;
 }
@@ -174,6 +177,25 @@ const IMAGE_SURFACE: ChatSurface = {
   versions: "server",
 };
 
+/**
+ * Visual scripts: what `unreal_change_graph` / `unity_change_graph` change or propose (BlueprintPanel.tsx: the graph
+ * with pan and zoom, the diff view, "Ask about this node", and a proposal reviewed change by change). The accepted
+ * changes go back through the same write tool with its approval; the panel writes nothing. No file type: Blueprints
+ * and Script Graphs are assets read through the editor bridge, not chat files.
+ */
+const BLUEPRINT_SURFACE: ChatSurface = {
+  id: "blueprint",
+  title: { he: "סקריפט חזותי", en: "Visual script" },
+  kinds: ["blueprint"],
+  fromResult: (tool, ok, output) => blueprintFromResult(tool, ok, output),
+  card: () => import("./BlueprintPanel").then((m) => ({ default: m.BlueprintCard })),
+  panel: () => import("./BlueprintPanel").then((m) => ({ default: m.BlueprintPanel })),
+  panelClass: "blueprint-panel",
+  tools: BLUEPRINT_TOOLS,
+  phone: "view+ask",
+  versions: "none",
+};
+
 /** The item kind and agent tools of each editor. */
 const EDITOR_SURFACE: Record<EditorId, { kind: string; tools: readonly string[]; phone: SurfacePhone }> = {
   "image-editor": { kind: "image", tools: ["make_ui_sprite"], phone: "edit" },
@@ -207,6 +229,7 @@ export const BUILT_IN: readonly ChatSurface[] = [
   docSurface("deck", { he: "מצגת", en: "Slides" }),
   CODE_SURFACE,
   IMAGE_SURFACE,
+  BLUEPRINT_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 

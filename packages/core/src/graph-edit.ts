@@ -2,7 +2,7 @@ import type { ProviderRegistry } from "@kesher/providers";
 import type { AgentTool } from "@kesher/agent";
 import { modelTurnFor } from "./model-turn.js";
 import { blueprintPrompt, parseOps, unityPrompt, type BlueprintJson, type UnrealBridge } from "./unreal-bridge.js";
-import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
+import { blueprintToCode, changeLine, codeText, proposalItems, summarizeChange, type BpDoc, type CodeNode, type GraphChange, type Proposal } from "@kesher/shared";
 import type { UnityCli } from "./unity-cli.js";
 import { describeRun, runBlueprintTest } from "./blueprint-test.js";
 
@@ -16,6 +16,10 @@ export interface GraphEdit {
   queued?: string;
   result?: { results: Array<{ ok: boolean; error?: string }>; failed: number };
   compile?: { ok: boolean; messages: Array<{ severity: string; text: string }> };
+  /** What the change did to the graph (nodes added, removed, changed; links), when the graph could be read after it. */
+  change?: GraphChange;
+  /** Set when only a proposal was asked for: the changes, not applied. */
+  proposal?: Proposal;
 }
 
 /**
@@ -30,14 +34,17 @@ export async function editGraph(
   b: Bridge,
   registry: ProviderRegistry,
   modelId: string,
-  opts: { path: string; graph?: string; request: string; signal: AbortSignal },
+  opts: { path: string; graph?: string; request: string; signal: AbortSignal; /** The exact operations (the user accepted them in the chat's graph panel): no model writes them. */ ops?: unknown[]; /** Only write the changes down for review; apply nothing. */ propose?: boolean },
 ): Promise<GraphEdit> {
   const { graph: g } = await b.graph(opts.path);
   const graphName = opts.graph || g.graphs[0]?.name || "EventGraph";
-  const turn = modelTurnFor(registry, modelId);
-  const text = (await turn({ messages: kind === "unreal" ? blueprintPrompt(g, graphName, opts.request) : unityPrompt(g, opts.request), tools: [] }, AbortSignal.any([opts.signal, AbortSignal.timeout(300_000)]), () => undefined)).text;
+  // Operations given by the caller go through the same check as a model's (parseOps drops what is not an operation).
+  const text = opts.ops
+    ? JSON.stringify({ ops: opts.ops.slice(0, 500), note: "Applied the accepted changes." })
+    : (await modelTurnFor(registry, modelId)({ messages: kind === "unreal" ? blueprintPrompt(g, graphName, opts.request) : unityPrompt(g, opts.request), tools: [] }, AbortSignal.any([opts.signal, AbortSignal.timeout(300_000)]), () => undefined)).text;
   const { ops, note } = parseOps(text);
   if (!ops.length) return { ops, note: note || "Nothing to change.", applied: false };
+  if (opts.propose) return { ops, note, applied: false, proposal: { path: opts.path, graph: graphName, kind, note, items: proposalItems(g as unknown as BpDoc, graphName, ops) } };
   if (kind === "unreal" && !b.connected && (b as UnrealBridge).available) {
     // Unreal is closed: one headless editor start applies, compiles (and saves) the change and reads the graph back.
     const u = b as UnrealBridge;
@@ -47,7 +54,8 @@ export async function editGraph(
       const [applied, compiled, read] = answers;
       if (!applied?.ok) throw new Error(applied?.error ?? "Unreal could not apply the change.");
       if (read?.ok) await u.remember(opts.path, read.result as BlueprintJson);
-      return { ops, note, applied: true, result: applied.result as { results: Array<{ ok: boolean; error?: string }>; failed: number }, ...(compiled?.ok ? { compile: compiled.result as { ok: boolean; messages: Array<{ severity: string; text: string }> } } : {}) };
+      const change = read?.ok ? changeOf(kind, g, read.result as BlueprintJson, graphName) : undefined;
+      return { ops, note, applied: true, ...(change ? { change } : {}), result: applied.result as { results: Array<{ ok: boolean; error?: string }>; failed: number }, ...(compiled?.ok ? { compile: compiled.result as { ok: boolean; messages: Array<{ severity: string; text: string }> } } : {}) };
     }
   }
   if (kind === "unreal" && !b.connected) {
@@ -57,7 +65,18 @@ export async function editGraph(
   }
   const result = await b.request<{ results: Array<{ ok: boolean; error?: string }>; failed: number }>("apply", { path: opts.path, graph: graphName, ops: kind === "unity" ? JSON.stringify(ops) : ops }, kind === "unity" ? 120_000 : 30_000);
   const compile = await b.request<{ ok: boolean; messages: Array<{ severity: string; text: string }> }>("compile", { path: opts.path }).catch(() => undefined);
-  return { ops, note, applied: true, result, ...(compile ? { compile } : {}) };
+  const after = await b.graph(opts.path).then((r) => r.graph, () => undefined);
+  const change = after ? changeOf(kind, g, after, graphName) : undefined;
+  return { ops, note, applied: true, ...(change ? { change } : {}), result, ...(compile ? { compile } : {}) };
+}
+
+/** What a change did, from the graph before and after (undefined when the graphs cannot be compared). */
+function changeOf(kind: "unreal" | "unity", before: BlueprintJson, after: BlueprintJson, graph: string): GraphChange | undefined {
+  try {
+    return summarizeChange(before as unknown as BpDoc, after as unknown as BpDoc, graph, kind);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -104,17 +123,18 @@ export function graphTools(kind: "unreal" | "unity", b: Bridge, registry: Provid
       spec: {
         name: `${pre}_change_graph`,
         description: `Change one ${what} as the user asked, in words (e.g. "on BeginPlay print Hello, and if Open is true call OpenDoor"). It is applied in the open editor as one undo step and compiled${kind === "unreal" ? "; with Unreal closed it waits and applies when the project opens" : ""}. Report the note and any compile errors.`,
-        inputSchema: { type: "object", properties: { path: { type: "string" }, graph: { type: "string", description: "Which graph inside it (default: the first)." }, request: { type: "string" } }, required: ["path", "request"] },
+        inputSchema: { type: "object", properties: { path: { type: "string" }, graph: { type: "string", description: "Which graph inside it (default: the first)." }, request: { type: "string" }, propose: { type: "boolean", description: "Only list the changes for the user to accept or reject one by one in the chat; nothing is applied." }, ops: { type: "array", items: { type: "object" }, description: "The exact operations to apply (the ones the user accepted); then no model writes them." } }, required: ["path"] },
       },
-      preview: async (input) => `Change ${String(input.path ?? "")}${input.graph ? ` · ${String(input.graph)}` : ""}:\n${String(input.request ?? "")}`,
+      preview: async (input) => Array.isArray(input.ops) ? `Apply ${input.ops.length} accepted change(s) to ${String(input.path ?? "")}${input.graph ? ` · ${String(input.graph)}` : ""}` : `${input.propose === true ? "Propose changes to" : "Change"} ${String(input.path ?? "")}${input.graph ? ` · ${String(input.graph)}` : ""}:\n${String(input.request ?? "")}`,
       run: async (input, ctx) => {
         const model = modelId();
         if (!model) return { output: "No chat model is chosen to write the change." };
-        const r = await editGraph(kind, b, registry, model, { path: String(input.path ?? ""), ...(input.graph ? { graph: String(input.graph) } : {}), request: String(input.request ?? "").slice(0, 2000), signal: ctx.signal });
+        const r = await editGraph(kind, b, registry, model, { path: String(input.path ?? ""), ...(input.graph ? { graph: String(input.graph) } : {}), request: String(input.request ?? "").slice(0, 2000), signal: ctx.signal, ...(Array.isArray(input.ops) ? { ops: input.ops } : {}), ...(input.propose === true ? { propose: true } : {}) });
+        if (r.proposal) return { output: `${r.note}\nProposed ${r.ops.length} change(s); nothing is applied. The user reviews them in the chat and the accepted ones come back as an unreal_change_graph / unity_change_graph call with "ops".\n[graph-proposal] ${JSON.stringify(r.proposal)}`.slice(0, 40_000) };
         if (!r.applied) return { output: r.queued ? `Saved the change to apply when the project opens in Unreal (${r.ops.length} operations). ${r.note}` : r.note };
         const failed = r.result?.failed ?? 0;
         const errors = (r.compile?.messages ?? []).filter((m) => /error/i.test(m.severity)).map((m) => m.text);
-        return { output: `${r.note}\nApplied ${r.ops.length - failed}/${r.ops.length} operations.${failed ? ` Failed: ${(r.result?.results ?? []).filter((x) => !x.ok).map((x) => x.error).join("; ")}` : ""}${r.compile ? (r.compile.ok ? " Compiled with no errors." : ` Compile errors: ${errors.join("; ") || "see the editor"}`) : ""}` };
+        return { output: `${r.note}\nApplied ${r.ops.length - failed}/${r.ops.length} operations.${failed ? ` Failed: ${(r.result?.results ?? []).filter((x) => !x.ok).map((x) => x.error).join("; ")}` : ""}${r.compile ? (r.compile.ok ? " Compiled with no errors." : ` Compile errors: ${errors.join("; ") || "see the editor"}`) : ""}${r.change ? `\n${changeLine(r.change)}` : ""}` };
       },
     },
   ];

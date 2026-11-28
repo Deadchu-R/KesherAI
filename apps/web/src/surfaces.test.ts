@@ -7,11 +7,11 @@ const ids = (l: ReadonlyArray<{ id: string }>) => l.map((s) => s.id);
 const nothing = { parts: [], pluginPages: [] };
 
 test("the registry is built from what is installed: an off part or an unloaded plugin is not registered", () => {
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code", "image"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code", "image", "blueprint"]);
   const on = buildSurfaces(BUILT_IN, { parts: [{ id: "image-editor", on: true }, { id: "model-editor", on: false }], pluginPages: [{ pluginId: "image-editor" }, { pluginId: "model-editor" }] });
-  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image", "image-editor"]);
+  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image", "blueprint", "image-editor"]);
   // A part the server does not list counts as on (as partOn does), but its plugin page must be loaded.
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "image", "sound-editor"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "image", "blueprint", "sound-editor"]);
 });
 
 test("the surface contract: every surface has an id, kinds, a lazy panel, tools, phone and versions", () => {
@@ -87,4 +87,19 @@ test("image surface: generate_image / edit_image results make a card, a picture 
   const msg = (he: boolean) => img.selection!({ item, title: "fox", selection: "10,20,100,50/400×200", instruction: "what is it?", change: false, he });
   assert.match(msg(false), /about this area: x=10, y=20, width=100, height=50 \(of 400×200/);
   assert.match(msg(true), /על האזור הזה/);
+});
+
+test("blueprint surface: graph write results make a card, no file type opens it, it is view+ask on the phone", () => {
+  const list = buildSurfaces(BUILT_IN, { parts: [], pluginPages: [] });
+  assert.ok(list.some((s) => s.id === "blueprint"));
+  const out = `Done.\n[graph-change] ${JSON.stringify({ path: "/Game/BP_A.BP_A", graph: "EventGraph", kind: "unreal", nodes: 3, added: [], removed: [], changed: [], links: 0, unlinked: 0 })}`;
+  const it = itemFromResult(list, "unreal_change_graph", true, out);
+  assert.equal(it?.surface, "blueprint");
+  assert.equal(it?.id, "/Game/BP_A.BP_A");
+  assert.equal(it?.data, out);
+  assert.equal(itemFromResult(list, "unreal_change_graph", true, "Applied 1/1 operations."), undefined);
+  const bp = BUILT_IN.find((s) => s.id === "blueprint")!;
+  assert.equal(bp.phone, "view+ask");
+  assert.deepEqual([...bp.tools], ["unreal_change_graph", "unity_change_graph"]);
+  assert.equal(bp.fileTypes, undefined);
 });
