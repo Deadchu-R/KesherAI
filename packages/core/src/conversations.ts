@@ -15,7 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, isSearchQuery, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, isSearchQuery, searchQueryFor, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { detectHardwareCached } from "@kesher/downloads";
 import { branding, editQueued, moveQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate, type StopAfter } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
@@ -193,8 +193,15 @@ export class ConversationManager {
    *
    * @param id - The chat.
    */
-  private freeOpts(id: string): { noCloud: () => boolean; fallback: () => ModelTurn | undefined; unattended: () => boolean } {
+  private freeOpts(id: string): { noCloud: () => boolean; fallback: () => ModelTurn | undefined; unattended: () => boolean; gone: (failed: string) => Promise<ModelTurn | undefined> } {
     return {
+      // A model the provider retired (404 "no longer available"): one retry on the best other ready model, and a note.
+      gone: async (failed) => {
+        const alt = await this.auto.alternativeTo(failed, !!this.deps.library.summary(id)?.incognito).catch(() => undefined);
+        if (!alt) return undefined;
+        this.sessions.get(id)?.note(`The model ${failed} is no longer available; this answer uses ${alt}.`);
+        return modelTurnFor(this.deps.registry, alt, undefined, "other", { thinking: () => this.deps.library.summary(id)?.thinking, noCloud: () => !!this.deps.library.summary(id)?.incognito });
+      },
       noCloud: () => !!this.deps.library.summary(id)?.incognito,
       // The privacy guard: an unattended run skips to a model that does not train when a file it read holds a secret.
       unattended: () => this.sessions.get(id)?.isUnattended === true,
@@ -1454,26 +1461,35 @@ export class ConversationManager {
     // test on the PC). The model still has web_search and writes its own short query when it needs one.
     const preSearch = opts.web && !aboutProject && !asksToBrowse(typed) && isSearchQuery(typed.slice(0, 200));
     if (preSearch) {
-      const query = typed.slice(0, 200);
+      // The key words, not the whole sentence (28.11: the sentence found pages about another town and the model searched
+      // again): rules first, the small model beside the main one when it answers within 1.5 s.
+      const beside = this.deps.besideAsk?.();
+      const sq = await searchQueryFor(typed.slice(0, 200), beside ? (sys, user, sig) => beside(sys, user, { type: "object", properties: { query: { type: "string" } }, required: ["query"] }, sig).then((r) => { try { return String((JSON.parse(r) as { query?: unknown }).query ?? ""); } catch { return r; } }) : undefined, 1500);
+      const query = sq.query;
+      const t0 = Date.now();
       const prefs = conversation.web;
       const ctx = { signal: AbortSignal.timeout(60_000), recordChange: () => undefined, ...(prefs ? { web: prefs } : {}) };
       try {
         // The search shows as a step (and its pages under the answer's Sources), like the model's own searches.
         const callId = `web-${Date.now().toString(36)}`;
         const r = await webSearchTool.run({ query }, ctx);
+        const searchMs = Date.now() - t0;
         steps.push({ type: "tool_call", callId, name: "web_search", input: { query } }, { type: "tool_result", callId, name: "web_search", ok: true, output: r.output });
         // Deep: KesherAI reads the first pages itself, so even a model without tools answers from them.
         const pages: string[] = [];
         if (prefs?.depth === "deep") {
           const urls = parseFirstUrls(r.output, 3);
+          // The pages open side by side (not one after another); their steps are shown in the result order.
+          const got = await Promise.all(urls.map((url) => webFetchTool.run({ url }, ctx).catch((err: Error) => ({ output: `(${err.message})`, failed: true }))));
           for (const [i, url] of urls.entries()) {
+            const page = got[i]!;
             const id2 = `${callId}-${i}`;
-            const page = await webFetchTool.run({ url }, ctx).catch((err: Error) => ({ output: `(${err.message})`, failed: true }));
             const ok = !("failed" in page);
             steps.push({ type: "tool_call", callId: id2, name: "web_fetch", input: { url } }, { type: "tool_result", callId: id2, name: "web_fetch", ok, output: ok ? page.output.slice(0, 2000) : page.output });
             if (ok) pages.push(page.output.slice(0, 6000));
           }
         }
+        if (process.env.KESHER_DEBUG) console.debug(`[kesher] pre-search (${sq.by}) "${query}": search ${searchMs} ms, ${pages.length ? `fetch ${Date.now() - t0 - searchMs} ms for ${pages.length} pages` : "no pages read"}`);
         context = `${context ? `${context}\n\n` : ""}Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}${pages.length ? `\n\nThe first pages, read just now:\n\n${pages.join("\n\n---\n\n")}` : ""}`;
       } catch (err) {
         context = `${context ? `${context}\n\n` : ""}(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;

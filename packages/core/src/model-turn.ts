@@ -3,6 +3,7 @@
  * the tools when the provider can call tools, and reports the measured writing speed. Moved out of
  * conversations.ts (t7); conversations.ts re-exports what it exported before.
  */
+import { isModelGone, markModelGone } from "./model-gone.js";
 import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
 import { OTHER_SCRIPTS_BIAS, isReasoningModel, samplingFor, thinkingLevels, type ModelLoadSettings, type ThinkingLevel } from "@kesher/shared";
@@ -54,9 +55,11 @@ export function onModelSettings(fn: typeof settingsOf): void {
  * @param opts.thinking - The chat's thinking level, read at each call (it can change mid-chat; thinking.ts). Unset
  *   means a helper job: thinking is turned off for models that can (a short direct answer).
  * @param opts.unattended - No one watches the run (task inbox, self-work): read by the privacy guard at each call.
+ * @param opts.gone - Another model's turn to retry once on when this model is retired (404 "no longer available"); the
+ *   model is remembered as gone either way (model-gone.ts).
  * @returns The turn function.
  */
-export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined; noCloud?: () => boolean; fallback?: () => ModelTurn | undefined; unattended?: () => boolean } = {}): ModelTurn {
+export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined; noCloud?: () => boolean; fallback?: () => ModelTurn | undefined; unattended?: () => boolean; gone?: (modelId: string) => Promise<ModelTurn | undefined> | ModelTurn | undefined } = {}): ModelTurn {
   // Only the chat's own model passes a thinking level (the user's choice). Every other caller (router, inline code,
   // translator, titles, summaries, reports) wants a short direct answer, so a reasoning model gets thinking off.
   const inner = rawTurnFor(registry, modelId, params, slotKind, opts.thinking ?? (() => "off"));
@@ -79,6 +82,13 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string, params
       r = await once();
     } catch (err) {
       const msg = (err as Error).message ?? "";
+      // A retired model: never end the turn with it. Remember it, and retry once on the next model of the route.
+      if (isModelGone(msg) && !signal?.aborted && chars === 0) {
+        markModelGone(modelId);
+        const alt = await opts.gone?.(modelId);
+        console.warn(`[kesher] model ${modelId} is gone (${msg.slice(0, 120)}); ${alt ? "retrying on another model" : "no other model to retry on"}`);
+        if (alt) return alt(req, signal, onText);
+      }
       // Nothing listens there at all (LM Studio or Ollama not running): say so, not "the conversation is too long"
       // (found on the PC: a night routine on an LM Studio model, with LM Studio closed).
       const code = (err as { cause?: { code?: string } }).cause?.code;

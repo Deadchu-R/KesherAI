@@ -396,7 +396,11 @@ export const KesherConfigSchema = z.object({
     .object({
       defaultAuto: z.boolean().default(false),
       strengths: z.record(z.string().max(300), z.array(z.enum(["tools", "hebrew", "code", "research", "vision", "fast"])).max(6)).default({}),
-      cloudKinds: z.array(z.enum(["tools", "hebrew", "code", "research", "vision", "fast"])).max(6).default(["research"]),
+            // Off by default (Roee, 28.11): Auto picks only local models until the user turns a kind on (Settings → Models → Auto).
+      // The old default was ["research"], which sent web questions to Gemini (a retired model ended the turn with a 404).
+      cloudKinds: z.array(z.enum(["tools", "hebrew", "code", "research", "vision", "fast"])).max(6).default([]),
+      /** The old default ["research"] was reset to none once (see loadConfig). */
+      cloudKindsReset: z.boolean().default(false),
     })
     .prefault({}),
   /**
@@ -928,6 +932,13 @@ export async function loadConfig(paths: DataPaths): Promise<KesherConfig> {
   }
   const raw = await readFile(paths.config, "utf8").catch(() => "{}");
   const config = KesherConfigSchema.parse(withSecrets(JSON.parse(raw) as Record<string, unknown>, "unseal"));
+  // Once: a saved cloudKinds equal to the old default ["research"] was never a choice, so Auto goes back to local only.
+  if (!config.autoRoute.cloudKindsReset) {
+    const k = config.autoRoute.cloudKinds;
+    if (k.length === 1 && k[0] === "research") config.autoRoute.cloudKinds = [];
+    config.autoRoute.cloudKindsReset = true;
+    await saveConfig(paths, config);
+  }
   if (!config.remote.token || !config.browserKey) {
     config.remote.token ||= randomBytes(24).toString("base64url");
     config.browserKey ||= randomBytes(12).toString("base64url");

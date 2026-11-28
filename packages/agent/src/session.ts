@@ -1024,6 +1024,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const cached = result.usage?.cachedTokens;
     const cacheWrite = result.usage?.cacheWriteTokens;
     // What the token budget left out of this call (main model only; teammates get their own short prompts).
+    // For comparing before and after a speed change (debug only): each model step's input, cached tokens and time.
+    this.debugOf?.(`step ${this.id} ${role} ${modelId}: input ${input}, cached ${cached ?? "?"}, output ${output}${timing ? `, wait ${timing.waitMs} ms, write ${timing.writeMs} ms` : ""}`);
     const pruned = role === "main" ? Math.round((this.lastPrunedChars + this.lastCappedChars) / this.charsPerToken) : 0;
     this.savedTokens += pruned;
     this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(typeof cacheWrite === "number" && cacheWrite > 0 ? { cacheWrite: Math.min(cacheWrite, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });

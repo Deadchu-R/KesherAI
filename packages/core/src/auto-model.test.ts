@@ -80,7 +80,7 @@ test("Settings › Models › Auto: saved, checked, and a family's defaults put 
   try {
     const put = (payload: unknown) => server.app.inject({ method: "PUT", url: "/api/model-router", payload: payload as Record<string, unknown> });
     const got = (await server.app.inject({ method: "GET", url: "/api/model-router" })).json() as { defaultAuto: boolean; cloudKinds: string[] };
-    assert.deepEqual([got.defaultAuto, got.cloudKinds], [false, ["research"]]);
+    assert.deepEqual([got.defaultAuto, got.cloudKinds], [false, []]);
     assert.equal((await put({ defaultAuto: true, cloudKinds: ["research", "vision"] })).statusCode, 200);
     assert.equal((await put({ strengths: { modelId: "llamacpp/X", list: ["hebrew"] } })).json().strengths["llamacpp/X"][0], "hebrew");
     assert.equal((await put({ strengths: { modelId: "llamacpp/X", list: null } })).json().strengths["llamacpp/X"], undefined);

@@ -75,6 +75,11 @@ test("decideModel: research goes to the cloud only when allowed, never in privac
   assert.equal(decideModel(base({ current: GEMINI.id, noCloud: true })).modelId, QWEN.id);
 });
 
+test("decideModel: with cloud-in-Auto off (the default), web research stays on a local model", () => {
+  for (const strong of [false, true]) assert.equal(decideModel(base({ need: "research", strong, cloudKinds: [] })).modelId, QWEN.id);
+  assert.equal(decideModel(base({ need: "research", strong: true, cloudKinds: [], current: GEMINI.id })).modelId, QWEN.id, "even from a cloud chat model");
+});
+
 test("decideModel: a cloud-only user keeps the cloud for everything (not in privacy)", () => {
   const cloud = { candidates: [GEMINI], current: GEMINI.id };
   assert.equal(decideModel(base({ ...cloud, need: "code" })).modelId, GEMINI.id);

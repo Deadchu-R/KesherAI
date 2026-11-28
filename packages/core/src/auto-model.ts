@@ -3,6 +3,7 @@
  * classifier what a message needs, picks the model, shows the reason line, swaps the big local model when the pick
  * needs it, and keeps each chat's choice for the next turns of the same task.
  */
+import { isMarkedGone } from "./model-gone.js";
 import type { ModelInfo } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { HelperEngine } from "./chat-helpers.js";
@@ -55,6 +56,20 @@ const NOT_A_CHAT_FILE = /mmproj|embed|rerank|translat|whisper|tts/i;
 /** Files this small are routers or helpers (GiB): never swapped in as the chat's model. */
 const MIN_CHAT_GIB = 2;
 
+/**
+ * The best other model for a gone one: most shared strengths, then a ready one, then the same provider.
+ *
+ * @param rows - The models Auto may pick (the gone one and marked ones already left out).
+ * @param failed - The gone model's id.
+ * @param wanted - Its strengths.
+ * @returns The id, or undefined when there is no row.
+ */
+export function pickAlternative(rows: readonly AutoModelRow[], failed: string, wanted: readonly string[]): string | undefined {
+  const provider = failed.split("/")[0];
+  const score = (r: AutoModelRow) => r.strengths.filter((s) => wanted.includes(s)).length * 4 + (r.loaded ? 2 : 0) + (r.id.split("/")[0] === provider ? 1 : 0);
+  return [...rows].sort((a, b) => score(b) - score(a))[0]?.id;
+}
+
 /** Auto for every chat of one conversation manager. */
 export class AutoModel {
   private readonly classifier = new NeedClassifier();
@@ -83,7 +98,7 @@ export class AutoModel {
       return { id, name, where, strengths: own ?? defaultStrengths(id, name), custom: !!own, loaded: true, ...extra };
     };
     const rows: AutoModelRow[] = this.listing.models
-      .filter((m) => (m.category ?? "chat") === "chat" && !m.id.startsWith("agent/") && !m.providerId.startsWith("device-") && m.providerId !== SIDE_PROVIDER && !NOT_CHAT.test(m.id) && !/embed/i.test(m.name))
+      .filter((m) => (m.category ?? "chat") === "chat" && !isMarkedGone(m.id) && !m.id.startsWith("agent/") && !m.providerId.startsWith("device-") && m.providerId !== SIDE_PROVIDER && !NOT_CHAT.test(m.id) && !/embed/i.test(m.name))
       .map((m) => row(m.id, shortModelName(m.name || m.id), m.location === "cloud" ? "cloud" : m.location === "server" ? "server" : "local"));
     const loaded = this.deps.engine()?.loaded();
     const files = (await this.deps.engine()?.localModels().catch(() => [])) ?? [];
@@ -99,6 +114,20 @@ export class AutoModel {
     for (const r of rows) if (r.path && !(loaded?.running && loaded.path === r.path)) Object.assign(r, { loaded: false, loadSec: this.measured.get(r.path) ?? r.loadSec ?? 20 });
     const order = { local: 0, server: 1, cloud: 2 };
     return rows.sort((a, b) => order[a.where] - order[b.where]);
+  }
+
+  /**
+   * The model to retry on when a model is gone: the listed model that shares most of its strengths (a cloud one only
+   * when allowed), a ready one first, never a model marked gone.
+   *
+   * @param failed - The gone model's id.
+   * @param noCloud - Privacy: never a cloud model.
+   * @returns Its id, or undefined when nothing else fits.
+   */
+  async alternativeTo(failed: string, noCloud: boolean): Promise<string | undefined> {
+    this.listing = undefined;
+    const rows = (await this.models()).filter((r) => r.id !== failed && !isMarkedGone(r.id) && r.loaded && (!noCloud || r.where !== "cloud"));
+    return pickAlternative(rows, failed, this.deps.settings().strengths[failed] ?? defaultStrengths(failed));
   }
 
   /**

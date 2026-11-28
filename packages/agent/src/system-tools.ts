@@ -130,6 +130,28 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/** The most characters of one page web_fetch returns (about 2,500 tokens): the answer is rarely further down. */
+export const PAGE_CHARS = 9000;
+
+/**
+ * The text of a fetched page: for HTML only its main part (`<main>` or `<article>` when there is one with enough text,
+ * without side bars and forms), then capped at {@link PAGE_CHARS} with a note when cut.
+ *
+ * @param body - The response body.
+ * @param type - Its content type.
+ * @param cap - The most characters to keep.
+ * @returns The text for the model.
+ */
+export function pageText(body: string, type: string, cap = PAGE_CHARS): string {
+  let text: string;
+  if (/html/i.test(type)) {
+    const core = /<(main|article)\b[^>]*>([\s\S]*?)<\/\1>/i.exec(body)?.[2];
+    const main = core ? htmlToText(core.replace(/<(aside|form|button|select)[\s\S]*?<\/\1>/gi, " ")) : "";
+    text = main.length >= 400 ? main : htmlToText(body.replace(/<(aside|form|button|select)[\s\S]*?<\/\1>/gi, " "));
+  } else text = body;
+  return text.length > cap ? `${text.slice(0, cap)}\n(Cut here: the page goes on. Open another page or search again if this is not enough.)` : text;
+}
+
 function checkUrl(raw: string): URL {
   const url = new URL(raw);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Only http and https links can be opened.");
@@ -143,7 +165,7 @@ export const webFetchTool: AgentTool = {
   risk: "read",
   spec: {
     name: "web_fetch",
-    description: "Open a public web page and read its text (documentation, articles, README files, API references). Returns plain text without menus and scripts.",
+    description: "Open a public web page and read its text (documentation, articles, README files, API references). Returns the page's main text without menus and scripts, cut at about 2,500 tokens. Read a page only when the search snippets do not hold the answer.",
     inputSchema: { type: "object", properties: { url: { type: "string", description: "The https:// address." } }, required: ["url"] },
   },
   async run(input, ctx) {
@@ -179,8 +201,8 @@ export const webFetchTool: AgentTool = {
     if (res?.ok) {
       const type = res.headers.get("content-type") ?? "";
       const body = await res.text();
-      const text = /html/i.test(type) ? htmlToText(body) : body;
-      return { output: `${res.url || finalUrl}\n\n${text.slice(0, MAX_OUTPUT)}` };
+      const text = pageText(body, type);
+      return { output: `${res.url || finalUrl}\n\n${text}` };
     }
     // Blocked here (a DNS or network block, "unavailable for legal reasons", forbidden): once more through Tor.
     if (ctx.viaTor && (!res || [403, 451].includes(res.status))) {
@@ -189,8 +211,8 @@ export const webFetchTool: AgentTool = {
         throw new Error(`${why} Through Tor it did not open either: ${err.message}`);
       });
       if (p.status < 200 || p.status >= 300) throw new Error(`${why} Through Tor the page answered ${p.status}.`);
-      const text = /html/i.test(p.type) ? htmlToText(p.body) : p.body;
-      return { output: `${p.url}\n(Opened through Tor: it did not open directly from this computer. Tell the user you used Tor for this page.)\n\n${text.slice(0, MAX_OUTPUT)}` };
+      const text = pageText(p.body, p.type);
+      return { output: `${p.url}\n(Opened through Tor: it did not open directly from this computer. Tell the user you used Tor for this page.)\n\n${text}` };
     }
     throw new Error(why);
   },

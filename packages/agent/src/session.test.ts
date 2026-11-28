@@ -1204,7 +1204,7 @@ async function parallelRun(names: string[], opts: { limit?: number; extra?: Agen
   const calls = names.map((name, n) => ({ name, arguments: { n } }));
   const { model } = scripted([{ calls }, { text: "done" }]);
   const tools = [...new Set(names)].map((n) => opts.extra?.find((t) => t.spec.name === n) ?? napTool(n, state));
-  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", tools, systemPrompt: "sys", ...(opts.limit ? { parallelReads: () => opts.limit! } : {}), debug: (l) => lines.push(l) });
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", tools, systemPrompt: "sys", ...(opts.limit ? { parallelReads: () => opts.limit! } : {}), debug: (l) => { if (l.startsWith("turn ")) lines.push(l); } });
   session.send("go");
   await waitFor(session, (e) => e.type === "status" && e.status === "idle" && session.events.some((x) => x.type === "assistant"));
   return { session, state, lines };
