@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { createReadStream } from "node:fs";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -108,11 +108,12 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
    * list on the ORIGINAL files into the chat's `shared/` folder. Sources are prep ids (hashes), never paths.
    * Answers `{ job }`; `GET /api/media/export/:job` follows it and ends with the file's path in the chat.
    */
-  app.post<{ Body: { conversation?: string; sources?: unknown; edit?: unknown; height?: number; fps?: number; quality?: string } }>("/api/media/export", async (req, reply) => {
-    const c = await s.library.getConversation(String(req.body?.conversation ?? ""));
+  type ExportBody = { conversation?: string; sources?: unknown; edit?: unknown; height?: number; fps?: number; quality?: string };
+  const startExport = async (body: ExportBody, reply: FastifyReply) => {
+    const c = await s.library.getConversation(String(body?.conversation ?? ""));
     const folder = c ? s.conversations.workspaceOf(c) : undefined;
     if (!folder) return reply.code(404).send({ error: "Conversation not found" });
-    const ids = req.body?.sources;
+    const ids = body?.sources;
     if (!Array.isArray(ids) || !ids.length || ids.length > 24 || !ids.every((x) => typeof x === "string" && isPrepId(x))) return reply.code(400).send({ error: "Send the prepared files' ids as sources." });
     const files: MediaSource[] = [];
     let first = "";
@@ -126,7 +127,7 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
     }
     let graph;
     try {
-      graph = mediaEditToFfmpeg(checkMediaEdit(req.body?.edit, files.length), files);
+      graph = mediaEditToFfmpeg(checkMediaEdit(body?.edit, files.length), files);
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -146,7 +147,7 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
     void (async () => {
       try {
         const r = media.runner ?? ffmpegRunner(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }));
-        await r.stream(exportArgs(graph, out, checkLook(req.body)), (chunk) => {
+        await r.stream(exportArgs(graph, out, checkLook(body)), (chunk) => {
           const p = progressOf(Buffer.from(chunk).toString("utf8"), total);
           if (p !== undefined) exports.set(job, { state: "running", progress: p });
         });
@@ -158,6 +159,19 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
       }
     })();
     return { job };
+  };
+  app.post<{ Body: ExportBody }>("/api/media/export", (req, reply) => startExport(req.body, reply));
+
+  /**
+   * `POST /api/media/trim` `{ conversation, source: prepId, start, end }`: the sound panel's "Trim to range". Builds a
+   * one-lane `SoundOp` edit (`trim` a..b) and renders it through the same export (ids only, one at a time); the result
+   * is a new file in `shared/` (`GET /api/media/export/:job` follows it), the original is never touched.
+   */
+  app.post<{ Body: { conversation?: string; source?: unknown; start?: unknown; end?: unknown } }>("/api/media/trim", (req, reply) => {
+    const { start, end } = req.body ?? {};
+    if (typeof start !== "number" || typeof end !== "number") return reply.code(400).send({ error: "Send the start and the end of the range in seconds." });
+    const edit = { v: 1, video: [], lanes: [{ src: 0, start: 0, ops: [{ op: "trim", a: start, b: end }] }] };
+    return startExport({ conversation: req.body?.conversation, sources: [req.body?.source], edit }, reply);
   });
 
   app.get<{ Params: { job: string } }>("/api/media/export/:job", async (req, reply) => exports.get(req.params.job) ?? reply.code(404).send({ error: "No such export" }));

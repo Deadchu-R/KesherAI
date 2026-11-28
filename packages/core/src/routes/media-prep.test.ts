@@ -98,6 +98,21 @@ test("media prep routes: path guard, cache hit, Range, and the phone needs its k
     assert.equal(ex.state, "done");
     assert.match(ex.path ?? "", /^shared\/clip-edit\.mp4$/);
 
+    // Sound trim: one range of one prepared file, ids only; the result is a new .m4a in shared/.
+    const trim = (body: object) => app.inject({ method: "POST", url: "/api/media/trim", payload: { conversation: id, ...body } });
+    assert.equal((await trim({ source: first.id, start: "1", end: 2 })).statusCode, 400);
+    assert.equal((await trim({ source: first.id, start: 2, end: 1 })).statusCode, 400);
+    assert.equal((await trim({ source: join(folder, "clip.mp4"), start: 0, end: 1 })).statusCode, 400);
+    const cut = await trim({ source: first.id, start: 0.5, end: 1.25 });
+    assert.equal(cut.statusCode, 200);
+    let tr = { state: "running" } as { state: string; path?: string };
+    for (let i = 0; i < 100 && tr.state === "running"; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      tr = (await app.inject({ url: `/api/media/export/${(cut.json() as { job: string }).job}` })).json();
+    }
+    assert.equal(tr.state, "done");
+    assert.match(tr.path ?? "", /^shared\/clip-edit\.m4a$/);
+
     // Ids and parts are never paths.
     assert.equal((await app.inject({ url: "/api/media/..%2F..%2Fsecret/proxy" })).statusCode, 400);
     assert.equal((await app.inject({ url: `/api/media/${first.id}/secret` })).statusCode, 400);

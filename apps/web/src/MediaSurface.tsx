@@ -364,6 +364,29 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
       setBusy("");
     }
   };
+  /** Sound: the PC renders the marked range of the prepared file as a new version (ids only; `POST /api/media/trim`). */
+  const trimSound = async () => {
+    if (!marks || !item.convId || !info) return;
+    setBusy("trim");
+    try {
+      const { job } = await api<{ job: string }>("/api/media/trim", { method: "POST", body: { conversation: item.convId, source: info.id, start: marks.start, end: marks.end } });
+      for (let st = { state: "running" } as { state: string; path?: string; error?: string }; ; await new Promise((r) => setTimeout(r, 700))) {
+        st = await api<typeof st>(`/api/media/export/${job}`);
+        if (st.state === "error") throw new Error(st.error || "Trim failed");
+        if (st.state === "done" && st.path) {
+          setRenders((v) => [...v, st.path!]);
+          setPath(st.path);
+          setMarks(undefined);
+          toast(L("נשמרה גרסה חדשה.", "Saved a new version."));
+          break;
+        }
+      }
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
   const openEditor = async () => {
     if (!page) {
       if (await offerPart(editorId, L("העורך המלא", "The full editor"))) setEditor(true);
@@ -442,7 +465,7 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
             </div>
           ) : (
             <div className="media-actions">
-              {video && <button type="button" onClick={() => void trim()} disabled={!marks || !item.convId || !!busy}>{busy === "trim" ? L("חותך…", "Cutting…") : `✂ ${L("חיתוך לקטע", "Trim to range")}`}</button>}
+              <button type="button" onClick={() => void (video ? trim() : trimSound())} disabled={!marks || !item.convId || !!busy || (!video && !info)}>{busy === "trim" ? L("חותך…", "Cutting…") : `✂ ${L("חיתוך לקטע", "Trim to range")}`}</button>
               {video && <button type="button" onClick={() => info && setEditing({ info })} disabled={!info?.ready.proxy}>✎ {L("עריכה", "Edit")}</button>}
               <button type="button" onClick={() => void openEditor()} disabled={!!busy}>{page ? L("עורך מלא", "Full editor") : `📦 ${L("עורך מלא (התקנה)", "Full editor (install)")}`}</button>
             </div>
