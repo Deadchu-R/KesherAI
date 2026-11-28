@@ -4923,3 +4923,86 @@ Values the vendors give for local use. Applied in `packages/shared/src/sampling-
 - Decision: agent turns (a request with tools) always use the coding values, even with thinking off. The non-thinking Qwen value of presence penalty 1.5 punishes repeated quotes and brackets, which tool-call JSON needs (the log's gap 2 says "hot sampling breaks JSON, greedy loops"). Plain chat follows the card's thinking or non-thinking row. Not verified on a real model.
 - The earlier [secondary summary](https://glukhov.org/llm-performance/benchmarks/agentic-inference-parameters-reference/) was checked against the cards: Qwen3.5 does use presence 1.5 on general thinking; Qwen3.6 does not.
 - To confirm later: Llama 3.x `generation_config.json` (0.6 / 0.9 expected), Qwen3 (2507) and Gemma 3 cards. Next measure: chat-checks on Qwen 27B, default vs preset sampling.
+
+## 2026-11-28 — every tool inside the chat (artifacts for all components) (Claude helper, with the code in view; official docs fetched 28.11)
+
+**Bottom line.** Roee's rule (28.11 02:17): any installed tool opens, edits and creates inside the chat. KesherAI has the hard half for doc, sheet and deck (card, panel, versions, selection to ask, agent tool, phone sheet). Everything else is a one-off: pictures use `CanvasPanel`, 3D a viewer in an attachment, scenes a diff card, and the four editors open as **pages**, so the user leaves the chat. The fix is one registry: a **chat surface** contract that an installed part registers, with doc/sheet/deck moved onto it first.
+
+### 1. How the others do it
+| Product | Inline or panel | Edit by hand / by asking | Versions, selection, phone | Source |
+|---|---|---|---|---|
+| Claude artifacts and typed artifacts (Docs, Slides, Design, Sheets beta, Whiteboard beta, Data, Motion beta) | Own window beside the chat; typed ones open in their own editor | Ask; by hand in typed ones | Select text, "Edit with Claude" edits only that part; exports Word, PDF, PowerPoint, MP4; phone: Artifacts tab, can edit; made when content is over ~15 lines and reusable | [Claude help](https://support.claude.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them) |
+| Claude Code artifacts | A private page, updated in place | By asking | Each publish is a version; one HTML/Markdown file, 16 MiB, strict CSP | [Claude Code docs](https://code.claude.com/docs/en/artifacts) |
+| ChatGPT Canvas | Opens by itself or on "use canvas" | Edit by hand, or ask | Highlight a part for targeted edits; shortcuts (length, review code, fix bugs, port); back button restores versions | [OpenAI](https://openai.com/index/introducing-canvas/) (2024 launch page; the help-centre article did not load) |
+| Gemini Canvas | Right-hand panel with Code, Create, Share and export | Edit text directly, or the Code view; auto-save; ask in the prompt box | Select & ask; Previous/Next Version; console on apps; shared links open only on the web, not in the phone app | [Gemini help](https://support.google.com/gemini/answer/16047321) |
+| Cursor | Live diff beside the agent | Stop and redirect, or revert; "Find issues" review | Revert is the undo | [Cursor review](https://cursor.com/docs/agent/review) |
+| Lovable | Chat plus live preview; preview toolbar | Inline text edit by hand; select elements or draw an annotation and describe | Selected elements attach to the chat; 100 free inline edits a day, selecting costs credits | [Lovable docs](https://docs.lovable.dev/features/visual-edit) |
+| Figma Make | Chat plus interactive preview | Edit preview and code directly; properties panel | Annotations tie an instruction to one part; mobile still being improved | [Figma help](https://help.figma.com/hc/en-us/articles/31304485164695-Create-a-Figma-Make-file) |
+| Manus | Result in the task; slides exported | By prompt, or download and edit elsewhere | No versions or in-task hand edit named | [Manus slides](https://manus.im/docs/features/slides) |
+
+Not verified: Windsurf (no page read) and Claude's inline card (the help page says only "beside the conversation").
+
+**What they agree on.** (1) A small card in chat, the work in a panel. (2) A selection becomes "ask about this" or "change only this". (3) Typed outputs get their own editor. (4) Hand and ask edits both end as a new version. (5) The phone is view-and-ask first. **Where KesherAI can win:** local files open in an installed editor with no upload or plan limit.
+
+### 2. KesherAI today (grep, 28.11)
+Today's pieces: `doc-items.ts` (`ITEM_KINDS`, `itemFromResult`, `selectionMessage`), `ArtifactPanel.tsx` (`openItem`, `openCanvas`, lazy `ItemPanel`, `CanvasPanel`, `DesignBoard`, `SpanEdit`), `chat/canvas-items.ts` (image, pbr, diff). Components are **parts** (`installables.ts` lists the four editors; `editor-handoff.ts` offers the missing one) and plugins (`kesher-plugin.json` with `ui.pages`, `ui.panels`, `uses`) run in a sandboxed `PluginFrame` with a `postMessage` bridge, installed from the store or `/api/plugins/install`.
+
+| Tool | Inline card in chat | Side panel | Agent tool creates/edits | Phone | State |
+|---|---|---|---|---|---|
+| Doc, sheet, deck | `ItemCard` | `ItemPanel` (hand edit, versions, export, selection) | `document`, `sheet`, `slides` | sheet under 1100 px | **in chat** |
+| HTML artifact, design board | code fence | `ArtifactPanel` (preview/code, versions, selection) | model writes a fence | same | **in chat** |
+| Code | `CodeView` (coloured, read-only, plain over 60k chars) | html fences only; IDE pane in code sessions (Monaco, git) | `write_file`, `edit_file` | IDE button, `TouchEditor` | **partial** (no "open this file" panel) |
+| Picture | image in message | `CanvasPanel` (zoom, compare, history) | `generate_image`, `make_ui_sprite` | yes | **partial**: edit leaves for the editor page; `MaskEditor` only on Images |
+| PBR set, diff | result actions | `CanvasPanel` kinds pbr, diff | `make_pbr_texture` | yes | in chat, view only |
+| Video | `MediaView` | none | `generate_video` | player | **partial**: editor is a page |
+| Music, sound | `MediaView` | none | `make_music`, `make_sound`, `speak_text` | player | **partial**: same |
+| 3D model | `ModelViewer` (lazy three.js) in attachment | none | no tool makes a model | yes | **partial**: editor is a page |
+| Blueprint | `BlueprintChatPanel` above the composer | not an item | `unreal_read_graph`, `unreal_change_graph` | yes | partial |
+| Scenes (Unity, Unreal, Godot) | `SceneDiffCard` in a tool card | `StandInScenes` only on the engine pages | `unity_*`, `godot_*`, `unreal_*` | engine pages | **partial** |
+| Computer control | `ControlTaskCard`, approvals | `ControlLive` only on Inbox, "screen" tab | control task | yes | **missing in chat** |
+| Browser | pane `BrowserPanel` beside the chat | yes, full screen on phone | `browser_*` | yes | in chat |
+| MCP apps | `McpAppView` inline frame | none | MCP tools | yes | in chat |
+| Study pages (`Study*`, slides, sheet, video) | none | own page | study tools | yes | **missing in chat** |
+| Canvas, plugin panels | header buttons | own page / `plugin-panel` | `canvas` | yes | not tied to items |
+
+### 3. Proposal: one chat surface contract
+Rule: a **surface** is how one installed component shows an item in the chat. The chat knows only the registry; it never imports a component.
+```
+ChatSurface {
+  id, kinds[]            // item kinds it opens ("doc","image","model","video","scene"...)
+  fileTypes?[]           // extensions it opens (reuses EDITOR_FILES), so any file chip gets "Open"
+  fromResult(tool, out)  // replaces itemFromResult: which tool step made which item
+  card?()                // lazy small preview, no heavy deps (thumbnail, first lines)
+  panel()                // lazy entry: React module (built-in) or a plugin file in the sandboxed frame
+  tools[]                // agent tools that create/edit it (names only; the part registers them)
+  phone: "edit" | "view+ask" | "open-on-pc"
+  selection?: toMessage  // the "ask about this / change only this" text (selectionMessage generalised)
+  versions: server list/restore | "none"   // a hand edit and an ask-edit both save a new version
+}
+```
+- **Built-in** surfaces are entries `{ id, load: () => import(...) }` in one `surfaces.ts`. **Plugin** surfaces are a new manifest block `ui.surfaces: [{ kind, file, card?, fileTypes, phone }]` shown in the existing `PluginFrame`; the host sends `open {kind,id,ref}`, the plugin answers `selection`, `saved {version}`, `ask`. No new sandbox, no cross-plugin imports.
+- **Only when installed.** The chat reads `/api/parts` and `/api/plugins/ui` (a few hundred bytes) and registers the enabled ones. A disabled editor adds zero bytes; its files show the existing `InstallOffer`, then continue.
+- **Generalising the panels.** `ArtifactPanel` keeps the shell (width drag, full screen, phone sheet, close, history chips). `PanelItem` becomes `{ surface, kind, id, ref, convId }`; `openItem` finds the surface; `DocPanel`'s save, versions and `selectionMessage` move into the shared shell, so doc, sheet and deck become three registrations. `openCanvas` kinds become surfaces too.
+- **One generic tool.** `open_in_chat {path|id}` opens any file in the surface for its type; creating stays with the existing tools (`generate_*`, `make_*`, `document`), whose results `fromResult` recognises.
+- **Versions and undo.** Append-only version list per item on the server (docs have it); asset kinds save a new file; a hand edit is a new version, restore is another new version; "v3" chips as `ItemCard` shows today.
+- **Remote and phone.** The same React app runs on the phone; panels already become a full-screen sheet under 1100 px and asset links carry the app key. Each surface declares `phone`: doc, sheet, deck, code, image, 3D `edit`; video, music, computer control `view+ask` plus "Open on the PC". Each passes a 390 px and Hebrew/RTL check.
+- **Leave out:** an embedded Office suite (OnlyOffice, Collabora: heavy; licence unverified), video timeline editing on the phone, web share links (local-first), edit credits.
+
+### 4. Language and weight
+| Part | Best runtime | Expected gain | Cost | Measure first |
+|---|---|---|---|---|
+| Registry, shell, cards, messages | TypeScript | none to gain elsewhere; the cost is bundle size, kept near zero by `import()` per surface | agents write it well | cold JS bytes of the chat with all parts off vs on (target: registry under 5 KB) |
+| Code surface (Rider-like) | TypeScript with Monaco (already used) | full editor only on "edit" | Monaco's worker is the weight | first paint of a 2,000-line card; Monaco memory on a phone; Rust tree-sitter outline only if TS stalls |
+| Image | TypeScript canvas; filters in WebGL/WebGPU shaders; server resize in libvips (`sharp`) if wanted | smooth masks on every GPU; faster thumbnails | new dependency needs Roee's OK; check prebuilds per OS | brush latency on a 4K layer: NVIDIA, AMD, Apple, CPU-only, phone |
+| 3D | three.js (already lazy); Draco/meshopt decoders in WebAssembly | smaller files | software GL on CPU-only is slow | fps of a 1M-triangle model per GPU class; CPU-only gets a poster image |
+| Video | `<video>`/WebCodecs (hardware decode); export by an ffmpeg sidecar (C) with NVENC, AMF, VideoToolbox, VAAPI behind a per-platform switch | export several times faster than CPU (expectation, measure) | flags per platform | export time of a 1-minute 1080p cut per encoder; scrub latency |
+| Music, sound | Web Audio; peaks in a worker; Rust/WASM only for time-stretch | low | keep TS | peaks time for a 1-hour file |
+| Word .docx | server TypeScript (export exists; import needs a converter library) | none from native | dependency question | round-trip fidelity on 10 real files |
+| Blueprint, scenes | TypeScript; Canvas2D, WebGL above ~2,000 nodes; layout in a worker | smooth pan | none | frame time at 1,000 nodes |
+| Computer control and browser view | Electron capture; JPEG deltas over the existing socket; Rust/Go encoder sidecar only if CPU is high | lower latency | a binary per platform | CPU % and latency at 720p over remote |
+Heavy paths get a per-platform "live / static preview" switch, so a weak machine never loads three.js or WebCodecs unasked.
+
+### 5. Plan
+1. Contract and doc/sheet/deck migration. 2. Code surface (any written file opens, diff, hand edit, selection to ask). 3. Image (`CanvasPanel`, `MaskEditor`, image-editor in the panel). 4. 3D. 5. Scenes and Blueprint. 6. Video and music. 7. `.docx` round trip. 8. Computer control, Study pages. Each: Hebrew/English, 390 px, remote check. Tasks are in WORK_LIST "Tools inside the chat".
+- Stopped at: inventory by grep and official docs read (Claude, Claude Code, Gemini, Lovable, Figma Make, Cursor, Manus slides, OpenAI launch page); nothing built; Windsurf and the ChatGPT help centre not read. Next: step 1.
+- Sources: the eight links in the table above.

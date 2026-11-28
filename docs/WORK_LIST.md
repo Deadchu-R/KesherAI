@@ -616,3 +616,20 @@ Ordered by user impact (RESEARCH_LOG "2026-11-28 night — chats like Claude, ga
 - ⬜ S: audit the 20.11 gap-list rows C9 (media view), C11 (download chip under made files), C12 ("remembered" chip with undo): mark built ones done, list the rest.
 - ⬜ S: tools return what changed (hash or diff) for `write_file` and command exit codes, so a claim of success can be checked; ⬜ S: background-command stop on low memory (Windows `os.freemem` polling).
 - ⬜ S: default-model advice: prefer dense 27B over 35B-A3B MoE for agent chats in the model picker note (measure with the chat-checks runner first).
+
+## Tools inside the chat (Roee 28.11 02:17)
+Every installed tool opens, edits and creates inside the chat, like Claude's artifacts. Research: RESEARCH_LOG "2026-11-28 — every tool inside the chat". In rollout order by user value; each ships checked in remote (390 px phone, Hebrew/RTL), with a "live / static preview" switch per platform for the heavy ones.
+- ⬜ M: the chat-surface contract (`apps/web/src/surfaces.ts`: id, kinds, fileTypes, `fromResult`, lazy `card`/`panel`, tools, `phone`, selection text, versions) built from `/api/parts` and `/api/plugins/ui`; `PanelItem` gets `surface`; `ArtifactPanel` keeps the shell; migrate doc, sheet and deck onto it with no visible change (tests: `fromResult`, selection message, phone sheet, nothing loaded when a part is off). First task.
+- ⬜ S: `open_in_chat` agent tool and an "Open" chip on every file chip, picked by file type (reuses `EDITOR_FILES`); shows the install offer when the part is off.
+- ⬜ M: plugin manifest block `ui.surfaces` (kind, file, card, fileTypes, phone) in `plugin-sdk` and `PluginFrame` messages `open`, `selection`, `saved`, `ask`; update `plugins/example-notes` as the sample.
+- ⬜ M: code surface (like Rider): any file the agent writes opens in the panel, coloured (`CodeView`), diff against its last version, tabs, outline, edit by hand with Monaco loaded only on "Edit", selection to "ask / change only this"; measure first paint of a 2,000-line file and Monaco memory on the phone.
+- ⬜ M: image surface: `CanvasPanel` and `MaskEditor` become a surface; the image-editor plugin opens in the panel and saves back as a new version; "ask about this area" from a selection.
+- ⬜ M: 3D surface: `ModelViewer` in the panel (turntable, materials), the model-editor opens in it; static poster on CPU-only machines; measure fps per GPU class.
+- ⬜ M: scenes surface: `StandInScenes` and `SceneDiffCard` in the panel for Unity, Unreal and Godot, with "ask about this object".
+- ⬜ M: Blueprint surface: `BlueprintChatPanel` and `BlueprintCanvas` as an item in the panel (view and ask on the phone).
+- ⬜ L: video surface: player with trim in the chat, the video editor in the panel; export encoder per platform (NVENC, AMF, VideoToolbox, VAAPI, CPU) behind a switch; phone is view and ask plus "Open on the PC".
+- ⬜ M: music and sound surface: waveform card and the sound editor in the panel; peaks computed in a worker.
+- ⬜ L: Word `.docx`: import and round trip into the doc surface (decide the converter library with Roee first; no new dependency without asking), fidelity test on 10 real files.
+- ⬜ M: computer-control surface: `ControlLive` in the panel from a control task card (view and ask on the phone); measure CPU and latency at 720p over remote.
+- ⬜ S: Study pages (slides, sheet, video) open from a chat card in the panel; ⬜ S: Canvas whiteboard and plugin panels registered as surfaces.
+- ⬜ S: measure first, before step 2: cold JS bytes of the chat with all parts off vs on (registry under 5 KB) and time to open each surface on the PC, a weak laptop and the phone over remote.
