@@ -50,10 +50,16 @@
 .log-extra { flex-basis: 100%; }
 .log-extra summary { cursor: pointer; color: var(--muted); }
 .log-extra pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }
-@media (max-width: 760px) {
+  .log-file-link { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .log-file-link:hover { text-decoration: none; }
+  .logs-source-tag { display: inline-block; padding: 2px 6px; border-radius: calc(4px * var(--r-scale, 1)); background: var(--raised); font-size: 11px; margin-inline-end: 6px; }
+  .logs-merge-toggle { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 13px; }
+  @media (max-width: 760px) {
   .logs-body { grid-template-columns: minmax(0, 1fr); }
   .logs-sources { display: none; }
-  .logs-source-select { display: block; width: 100%; }
+  .logs-source-row { display: flex; align-items: center; gap: 8px; }
+  .logs-source-select { display: block; flex: 1 1 auto; min-width: 0; }
+  .logs-merge-toggle { flex: 0 0 auto; white-space: nowrap; }
   .logs-page .logs-head h1 { flex-basis: 100%; }
   .logs-page .logs-head button { flex: 1 1 auto; }
   .log-when { display: none; }

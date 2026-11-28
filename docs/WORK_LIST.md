@@ -30,7 +30,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ⬜ Logs l-01: include/exclude a pattern in the lines view with one tap (Grafana), and saved filters as chips (Seq signals)
 - ⬜ Logs l-02: an ignored pattern that rises (3× its usual rate) comes back flagged; a phone note for a new error pattern in KesherAI's own log (opt-in)
 - ⬜ Logs l-03: file:line links in a line (compiler/C# errors) open in the code editor on the PC
-- ⬜ Logs l-04: merge several sources into one time-ordered view (lnav)
+- ✅ Logs l-04: merge several sources into one time-ordered view (lnav)
 - ⬜ Logs l-05: use the agent-watch helper's CPU runner for Explain when it lands (now: the model beside, else the main one)
 
 ## Tuesday 24.11 ✅/⬜

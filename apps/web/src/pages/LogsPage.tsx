@@ -33,12 +33,48 @@ const he = () => getLocale() === "he";
 const nameOf = (s: Source) => (he() ? s.nameHe : s.name);
 const timeText = (t?: number) => (t ? new Date(t).toLocaleString([], { dateStyle: "short", timeStyle: "medium" }) : "");
 
+/** Matches file:line references in log messages (e.g. src/foo.ts:42, C:\bar.js:10:5). */
+const FILE_LINE_RE = /(?:^|[\s(])([A-Za-z]:\\[^\s:)]+|\/[^\s:)]+|[a-zA-Z0-9._/-]+\.[a-zA-Z0-9]+):(\d+)(?::\d+)?(?=[)\s.,;:]|$)/g;
+
+/** Splits a message on file:line matches and renders them as clickable links. */
+function MsgWithLinks({ text }: { text: string }) {
+  const parts: Array<{ kind: "text" | "link"; value: string; file?: string; line?: number }> = [];
+  let last = 0;
+  for (const m of text.matchAll(FILE_LINE_RE)) {
+    if (m.index! > last) parts.push({ kind: "text", value: text.slice(last, m.index!) });
+    const file = m[1];
+    const line = Number(m[2]);
+    const full = m[0];
+    const leading = full.startsWith(" ") || full.startsWith("(") ? full[0] : "";
+    if (leading) {
+            const lastPart = parts.length ? parts[parts.length - 1] : undefined;
+            if (lastPart && lastPart.kind === "text") lastPart.value += leading;
+            else parts.push({ kind: "text", value: leading });
+          }
+    parts.push({ kind: "link", value: `${file}:${line}`, file, line });
+    last = m.index! + full.length;
+  }
+  if (last < text.length) parts.push({ kind: "text", value: text.slice(last) });
+  if (!parts.some((p) => p.kind === "link")) return <>{text}</>;
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.kind === "link" ? (
+          <a key={i} className="log-file-link" href={`vscode://file/${p.file}:${p.line}`} title={L(`פתח ב-VS Code`, `Open in VS Code`)}>{p.value ?? ""}</a>
+        ) : (
+          <span key={i}>{p.value}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 /** One entry: its level, time, category and message, and its stack trace folded. */
 function EntryLine({ e, dim }: { e: Entry; dim?: boolean }) {
   return (
     <div className={`log-line lvl-${e.level}${dim ? " dim" : ""}`}>
       <span className="log-meta" dir="ltr">{e.t ? new Date(e.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : `#${e.n}`}{e.cat ? ` ${e.cat}` : ""}</span>
-      <span className="log-msg" dir="auto">{e.msg}</span>
+      <span className="log-msg" dir="auto"><MsgWithLinks text={e.msg} /></span>
       {!!e.extra?.length && (
         <details className="log-extra">
           <summary>{L(`${e.extra.length} שורות נוספות`, `${e.extra.length} more lines`)}</summary>
@@ -82,11 +118,19 @@ export function LogsPage() {
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [addPath, setAddPath] = useState("");
+  /** Merge mode: when true, `source` holds comma-separated ids and lines are time-sorted across them. */
+  const [merge, setMerge] = useState(false);
+
+  /** Splits the current source value into the active ids (merge mode) or a single id. */
+  const activeIds = useMemo(() => (merge && source ? source.split(",").filter(Boolean) : source ? [source] : []), [merge, source]);
 
   const loadSources = () =>
     void api<{ sources: Source[] }>("/api/logs/sources").then((r) => {
       setSources(r.sources);
-      setSource((cur) => (cur && r.sources.some((s) => s.id === cur) ? cur : (linkedSource(location.hash, r.sources) ?? r.sources[0]?.id ?? "")));
+      setSource((cur) => {
+        if (merge) return cur && cur.split(",").every((id) => r.sources.some((s) => s.id === id)) ? cur : "";
+        return cur && r.sources.some((s) => s.id === cur) ? cur : (linkedSource(location.hash, r.sources) ?? r.sources[0]?.id ?? "");
+      });
     }, (e: Error) => toast(e.message));
   useEffect(loadSources, []);
 
@@ -97,15 +141,28 @@ export function LogsPage() {
   }, [typed]);
 
   const load = () => {
-    if (!source) return;
-    setBusy(true);
-    const done = () => setBusy(false);
-    if (tab === "patterns") {
-      void api<{ patterns: Pattern[]; total: number; readTruncated: boolean }>(`/api/logs/patterns?${logQuery(source, { levels: f.levels, range: f.range })}`).then(setPatterns, (e: Error) => toast(e.message)).finally(done);
-    } else {
-      void api<SearchResult>(`/api/logs/search?${logQuery(source, f, Date.now(), { context: 2, limit: 200 })}`).then(setFound, (e: Error) => toast(e.message)).finally(done);
-    }
-  };
+        if (!source) return;
+        setBusy(true);
+        const done = () => setBusy(false);
+        if (tab === "patterns") {
+          // Patterns view does not support merge mode yet; use first source only.
+          const patternSource = merge ? source.split(",")[0] : source;
+          if (!patternSource) { done(); return; }
+          void api<{ patterns: Pattern[]; total: number; readTruncated: boolean }>(`/api/logs/patterns?${logQuery(patternSource, { levels: f.levels, range: f.range })}`).then(setPatterns, (e: Error) => toast(e.message)).finally(done);
+        } else if (merge && source.includes(",")) {
+          // Merge mode: fetch each source separately and combine client-side.
+          const ids = source.split(",").filter(Boolean);
+          if (!ids.length) { done(); return; }
+          const queries = ids.map((id) => api<SearchResult>(`/api/logs/search?${logQuery(id, f, Date.now(), { context: 2, limit: 200 })}`));
+          void Promise.all(queries).then((results) => {
+            const mergedHits = results.flatMap((r) => r.hits).sort((a, b) => (b.entry.t ?? 0) - (a.entry.t ?? 0));
+             const readTruncated = results.some((r) => r.readTruncated);
+             setFound({ hits: mergedHits, readTruncated, matched: mergedHits.length, truncated: readTruncated, total: mergedHits.length, cats: [] });
+          }, (e: Error) => toast(e.message)).finally(done);
+        } else {
+          void api<SearchResult>(`/api/logs/search?${logQuery(source, f, Date.now(), { context: 2, limit: 200 })}`).then(setFound, (e: Error) => toast(e.message)).finally(done);
+        }
+      };
   useEffect(load, [source, tab, f]);
   useEffect(() => {
     setOpen({});
@@ -189,24 +246,40 @@ export function LogsPage() {
 
       <div className="logs-body">
         <aside className="logs-sources card" aria-label={L("מקורות", "Sources")}>
-          {GROUPS.map(([g, gHe, gEn]) => {
-            const list = (sources ?? []).filter((s) => s.group === g);
-            if (!list.length) return null;
-            return (
-              <div key={g} className="logs-group">
-                <div className="muted small logs-group-title">{L(gHe, gEn)}</div>
-                {list.map((s) => (
-                  <div key={s.id} className={`logs-source${s.id === source ? " on" : ""}`}>
-                    <button type="button" className="logs-source-pick" aria-pressed={s.id === source} onClick={() => setSource(s.id)}>
-                      <span className="grow" dir="auto">{nameOf(s)}</span>
-                      <span className="muted small" dir="ltr">{[sizeText(s.size), s.modified ? ago(s.modified, he()) : ""].filter(Boolean).join(" · ")}</span>
-                    </button>
-                    {s.removable && !isRemote() && <button type="button" className="chip" aria-label={L("הסר מהרשימה", "Remove from the list")} onClick={() => removeFile(s)}>✕</button>}
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+                    <label className="row logs-merge-toggle">
+                      <input type="checkbox" checked={merge} onChange={(e) => { setMerge(e.target.checked); if (!e.target.checked && source.includes(",")) setSource(source.split(",")[0] ?? ""); }} />
+                      <span>{L("איחוד יומנים", "Merge logs")}</span>
+                    </label>
+                    {GROUPS.map(([g, gHe, gEn]) => {
+                      const list = (sources ?? []).filter((s) => s.group === g);
+                      if (!list.length) return null;
+                      const selectedIds = merge ? source.split(",").filter(Boolean) : [];
+                      return (
+                        <div key={g} className="logs-group">
+                          <div className="muted small logs-group-title">{L(gHe, gEn)}</div>
+                          {list.map((s) => {
+                            const isSelected = merge ? selectedIds.includes(s.id) : s.id === source;
+                            return (
+                              <div key={s.id} className={`logs-source${isSelected ? " on" : ""}`}>
+                                <button type="button" className="logs-source-pick" aria-pressed={isSelected} onClick={() => {
+                                  if (merge) {
+                                    const ids = source.split(",").filter(Boolean);
+                                    const next = ids.includes(s.id) ? ids.filter((id) => id !== s.id) : [...ids, s.id];
+                                    setSource(next.join(","));
+                                  } else {
+                                    setSource(s.id);
+                                  }
+                                }}>
+                                  <span className="grow" dir="auto">{nameOf(s)}</span>
+                                  <span className="muted small" dir="ltr">{[sizeText(s.size), s.modified ? ago(s.modified, he()) : ""].filter(Boolean).join(" · ")}</span>
+                                </button>
+                                {s.removable && !isRemote() && <button type="button" className="chip" aria-label={L("הסר מהרשימה", "Remove from the list")} onClick={() => removeFile(s)}>✕</button>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
           {sources && !sources.length && <p className="muted small">{L("אין עדיין יומנים.", "No logs yet.")}</p>}
           {!isRemote() && (
             <div className="logs-add stack">
@@ -218,12 +291,15 @@ export function LogsPage() {
         </aside>
 
         <section className="logs-main stack">
-          <select className="logs-source-select" value={source} onChange={(e) => setSource(e.target.value)} aria-label={L("יומן", "Log")}>
-            {GROUPS.map(([g, gHe, gEn]) => {
-              const list = (sources ?? []).filter((s) => s.group === g);
-              return list.length ? <optgroup key={g} label={L(gHe, gEn)}>{list.map((s) => <option key={s.id} value={s.id}>{nameOf(s)}</option>)}</optgroup> : null;
-            })}
-          </select>
+                    <div className="row logs-source-row">
+                      <select className="logs-source-select grow" value={source} onChange={(e) => setSource(e.target.value)} aria-label={L("יומן", "Log")} disabled={merge}>
+                        {GROUPS.map(([g, gHe, gEn]) => {
+                          const list = (sources ?? []).filter((s) => s.group === g);
+                          return list.length ? <optgroup key={g} label={L(gHe, gEn)}>{list.map((s) => <option key={s.id} value={s.id}>{nameOf(s)}</option>)}</optgroup> : null;
+                        })}
+                      </select>
+                      <button type="button" className={`chip-text logs-merge-toggle${merge ? " on" : ""}`} aria-pressed={merge} title={L("איחוד יומנים", "Merge logs")} onClick={() => setMerge((m) => !m)}>{L("איחוד", "Merge")}</button>
+                    </div>
           <div className="row logs-tabs">
             <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
               <button type="button" role="tab" aria-selected={tab === "patterns"} className={tab === "patterns" ? "on" : ""} onClick={() => setTab("patterns")}>{L("תבניות", "Patterns")}</button>
