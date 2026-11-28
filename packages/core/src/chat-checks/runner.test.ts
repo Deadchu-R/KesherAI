@@ -17,9 +17,9 @@ function fakeHost(root: string) {
   const emit = (id: string, e: NewEvent) => {
     const seq = (seqs.get(id) ?? 0) + 1;
     seqs.set(id, seq);
-    // Like the real chat: live status events are not saved, so they carry no seq (28.11: the runner waited on a seq
+    // Like the real chat: live status events are not saved, so they carry seq 0 (28.11: the runner waited on a seq
     // that never came and every scenario timed out).
-    listeners.get(id)?.((e.type === "status" ? { ...e } : { ...e, seq, at: new Date().toISOString() }) as AgentEvent);
+    listeners.get(id)?.((e.type === "status" ? { ...e, seq: 0, at: new Date().toISOString() } : { ...e, seq, at: new Date().toISOString() }) as AgentEvent);
   };
   const end = (id: string) => emit(id, { type: "status", status: "idle" });
   const host: ChatCheckHost = {

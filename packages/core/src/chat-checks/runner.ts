@@ -232,8 +232,8 @@ export class ChatChecks {
           else h.answer(chat.id, e.questionId, NO_PREFERENCE);
         } else if (e.type === "status" && userSeq !== Infinity && e.status !== "idle" && e.status !== "error") {
           busy = true;
-        } else if (e.type === "status" && userSeq !== Infinity && (e.seq === undefined || e.seq > userSeq) && (e.status === "error" || (e.status === "idle" && (busy || events.some((x) => x.type === "assistant" && (x.seq === undefined || x.seq > userSeq)))))) {
-          // Live status events carry no seq (only saved events do): "after the user's message" is "after we saw it",
+        } else if (e.type === "status" && userSeq !== Infinity && (!e.seq || e.seq > userSeq) && (e.status === "error" || (e.status === "idle" && (busy || events.some((x) => x.type === "assistant" && (x.seq === undefined || x.seq > userSeq)))))) {
+          // Live status events carry seq 0 (only saved events get a real one): "after the user's message" is "after we saw it",
           // and idle counts once the turn was seen working or has answered.
           ended(e.status === "error" ? `the turn ended with an error${e.message ? `: ${e.message}` : ""}` : undefined);
         }
