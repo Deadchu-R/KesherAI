@@ -106,7 +106,7 @@ export function ScheduledButton({ convId }: { convId: string }) {
           {x.name} · {describeWhen(x.when)}
         </MenuItem>
       ))}
-      <MenuItem href="#/settings/scheduled" icon={<LineIcon name="calendar" size={14} />}>
+      <MenuItem href="#/scheduled" icon={<LineIcon name="calendar" size={14} />}>
         {L("כל המשימות המתוזמנות", "All scheduled tasks")}
       </MenuItem>
     </Menu>
@@ -148,5 +148,61 @@ export function ScheduledSection() {
         </div>
       ))}
     </section>
+  );
+}
+
+/** One past run of a scheduled task as the computer lists it. */
+interface ScheduledRunItem {
+  id: string;
+  taskId: string;
+  name: string;
+  convId: string;
+  convTitle: string;
+  at: number;
+  late?: boolean;
+  status: "running" | "ok" | "failed";
+  excerpt?: string;
+}
+
+/**
+ * Past runs: when, the task, how it went, a short excerpt of the answer and a link to the chat it ran in. Newest
+ * first; kept fresh like the upcoming list.
+ */
+export function ScheduledRuns() {
+  const [runs, setRuns] = useState<ScheduledRunItem[] | undefined>();
+  useEffect(() => {
+    const load = () => void api<{ runs: ScheduledRunItem[] }>("/api/scheduled/runs").then((r) => setRuns(r.runs), () => undefined);
+    const tick = () => !document.hidden && load();
+    load();
+    const t = window.setInterval(tick, 30_000);
+    addEventListener("focus", tick);
+    return () => (window.clearInterval(t), removeEventListener("focus", tick));
+  }, []);
+  return (
+    <section className="card scheduled-page">
+      <h3>{L("ריצות קודמות", "Past runs")}</h3>
+      {runs && !runs.length && <p className="muted">{L("עוד לא רצה אף משימה מתוזמנת.", "No scheduled task has run yet.")}</p>}
+      {runs?.map((r) => (
+        <div key={r.id} className="scheduled-run" data-failed={r.status === "failed" ? "1" : undefined}>
+          <div dir="auto">
+            <b>{r.name}</b>
+            <span className="muted small"> · {stamp(r.at)} · {r.status === "running" ? L("רץ עכשיו", "running") : r.status === "failed" ? L("נכשל", "failed") : r.late ? L("רץ באיחור", "ran late") : L("הצליח", "ran")}</span>
+          </div>
+          {r.excerpt && <div className="small scheduled-excerpt" dir="auto">{r.excerpt}</div>}
+          <a className="small" href={`#/c/${r.convId}`}>{r.convTitle || L("פתיחת הצ'אט", "Open the chat")}</a>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** The Scheduled page (#/scheduled): upcoming runs with Pause / Resume / Run now / Delete, then the past runs. */
+export function ScheduledPage() {
+  return (
+    <div className="page stack">
+      <h1>{L("משימות מתוזמנות", "Scheduled tasks")}</h1>
+      <ScheduledSection />
+      <ScheduledRuns />
+    </div>
   );
 }

@@ -20,6 +20,10 @@ export async function timerRoutes(app: FastifyInstance, timers: ChatTimers, titl
   app.get<{ Querystring: { conv?: string } }>("/api/scheduled", async (req) => ({
     scheduled: timers.scheduled(req.query.conv || undefined).map((t) => ({ ...t, convTitle: titleOf(t.convId) ?? "" })),
   }));
+  // Past runs (time, result excerpt, the chat), newest first.
+  app.get<{ Querystring: { conv?: string } }>("/api/scheduled/runs", async (req) => ({
+    runs: timers.runs(req.query.conv || undefined).map((r) => ({ ...r, convTitle: titleOf(r.convId) ?? "" })),
+  }));
   app.post<{ Params: { id: string; action: string } }>("/api/scheduled/:id/:action", async (req, reply) => {
     const { id, action } = req.params;
     if (action === "run") return (await timers.runNow(id)) ? { ok: true } : reply.code(404).send({ error: "This scheduled task is gone." });

@@ -1,0 +1,35 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Fastify from "fastify";
+import { ChatTimers } from "../chat-timers.js";
+import { timerRoutes } from "./timers.js";
+
+test("the Scheduled page's API: list, pause, resume, run now, past runs, delete", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-sched-api-"));
+  const sent: string[] = [];
+  const timers = new ChatTimers(join(dir, "timers.json"), { send: async (c, t) => void sent.push(`${c}:${t.split("\n")[0]}`), exists: async () => true });
+  const app = Fastify();
+  await timerRoutes(app, timers, (c) => (c === "c1" ? "My chat" : undefined));
+  const t = await timers.schedule("c1", { name: "News", prompt: "Summarise", when: "daily 08:30" });
+  assert.ok(typeof t !== "string");
+  const list = async () => (await app.inject({ url: "/api/scheduled" })).json() as { scheduled: Array<{ id: string; convTitle: string; paused?: boolean; due: number }> };
+  assert.deepEqual((await list()).scheduled.map((x) => [x.id, x.convTitle]), [[t.id, "My chat"]]);
+  assert.equal((await app.inject({ method: "POST", url: `/api/scheduled/${t.id}/pause` })).statusCode, 200);
+  assert.equal((await list()).scheduled[0]!.paused, true);
+  assert.equal((await app.inject({ method: "POST", url: `/api/scheduled/${t.id}/resume` })).statusCode, 200);
+  assert.equal((await list()).scheduled[0]!.paused, undefined);
+  assert.equal((await app.inject({ method: "POST", url: `/api/scheduled/${t.id}/run` })).statusCode, 200);
+  assert.deepEqual(sent, ["c1:[KesherAI] Scheduled: News"]);
+  timers.finishRun("c1", "Done: 3 items");
+  const runs = (await app.inject({ url: "/api/scheduled/runs" })).json() as { runs: Array<{ name: string; status: string; excerpt: string; convTitle: string; convId: string }> };
+  assert.deepEqual(runs.runs.map((r) => [r.name, r.status, r.excerpt, r.convTitle, r.convId]), [["News", "ok", "Done: 3 items", "My chat", "c1"]]);
+  assert.equal((await app.inject({ method: "POST", url: "/api/scheduled/nope/run" })).statusCode, 404);
+  assert.equal((await app.inject({ method: "POST", url: `/api/scheduled/${t.id}/explode` })).statusCode, 400);
+  assert.equal((await app.inject({ method: "DELETE", url: `/api/scheduled/${t.id}` })).statusCode, 200);
+  assert.equal((await list()).scheduled.length, 0);
+  assert.equal((await app.inject({ method: "DELETE", url: `/api/scheduled/${t.id}` })).statusCode, 404);
+  await app.close();
+});

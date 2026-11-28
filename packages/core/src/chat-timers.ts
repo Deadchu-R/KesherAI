@@ -9,6 +9,7 @@
 import type { AgentTool } from "@kesher/agent";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { isScheduled, nextRun, parseSchedule, SCHEDULED_PER_CHAT, SCHEDULED_TOTAL, scheduleText, type ScheduledTask } from "./chat-schedule.js";
 
 /** One waiting timer. */
@@ -37,6 +38,27 @@ export interface ChatTimer {
   lastRun?: number;
   lastResult?: string;
 }
+
+/** One run of a scheduled task, kept for the Scheduled page's past runs. */
+export interface ScheduledRun {
+  id: string;
+  /** The scheduled task's id (it may be gone since). */
+  taskId: string;
+  name: string;
+  /** The chat the run went into (a fresh one for "new chat" tasks). */
+  convId: string;
+  /** When it started (ms). */
+  at: number;
+  /** It ran after the computer was off when it was due. */
+  late?: boolean;
+  /** "running" until its turn ends. */
+  status: "running" | "ok" | "failed";
+  /** A short redacted excerpt of the final answer, or the error. */
+  excerpt?: string;
+}
+
+/** The most past runs kept. */
+export const SCHEDULED_RUNS_KEPT = 100;
 
 /** At most this many waiting check-backs per chat. */
 export const CHECKBACKS_PER_CHAT = 5;
@@ -93,6 +115,8 @@ export interface TimerDeps {
   create?(fromConvId: string, title: string): Promise<string | undefined>;
   /** A check-back is about to go into a chat (its turn's end then notifies the phone, even when short). */
   onCheckBack?(convId: string): void;
+  /** A scheduled task is about to run in a chat (its turn's end notifies the phone with a short excerpt of the answer). */
+  onScheduled?(convId: string): void;
 }
 
 /** Keeps the waiting timers and fires them on time. */
@@ -103,6 +127,7 @@ export class ChatTimers {
   private loaded?: Promise<void>;
   private clock?: NodeJS.Timeout;
   private saving = Promise.resolve();
+  private runs_: ScheduledRun[] = [];
 
   /**
    * @param file - timers.json.
@@ -117,6 +142,10 @@ export class ChatTimers {
 
   /** Reads the timers and starts the clock (once). */
   start(): Promise<void> {
+    void readFile(join(dirname(this.file), "scheduled-runs.json"), "utf8").then((t) => {
+      const a = JSON.parse(t) as unknown;
+      if (Array.isArray(a)) this.runs_ = [...a.filter((r): r is ScheduledRun => !!r && typeof r.id === "string" && typeof r.at === "number"), ...this.runs_].slice(-SCHEDULED_RUNS_KEPT);
+    }, () => undefined);
     this.loaded ??= readFile(this.file, "utf8")
       .then((t) => void (this.list_ = (JSON.parse(t) as ChatTimer[]).filter((x) => x && typeof x.convId === "string" && typeof x.due === "number")), () => undefined)
       .then(() => {
@@ -176,6 +205,26 @@ export class ChatTimers {
     const n = this.list_.length;
     this.list_ = this.list_.filter((t) => t.convId !== convId);
     if (this.list_.length !== n) await this.save();
+  }
+
+  /** @returns The past runs of scheduled tasks (one chat's or all), newest first. */
+  runs(convId?: string): ScheduledRun[] {
+    return this.runs_.filter((r) => !convId || r.convId === convId).reverse();
+  }
+
+  /**
+   * A scheduled run's turn ended: records its answer's excerpt (or the error) on the run that went into that chat.
+   *
+   * @param convId - The chat the run went into.
+   * @param excerpt - A short redacted excerpt of the final answer.
+   * @param error - The error, when the turn failed.
+   */
+  finishRun(convId: string, excerpt: string, error?: string): void {
+    const r = this.runs_.findLast((x) => x.convId === convId && x.status === "running");
+    if (!r) return;
+    r.status = error ? "failed" : "ok";
+    r.excerpt = (error ? `${error}` : excerpt).slice(0, 200);
+    this.saveRuns();
   }
 
   /** @returns A chat's scheduled tasks (or all of them), soonest first. */
@@ -270,16 +319,28 @@ export class ChatTimers {
   /** One run of a scheduled task: a message into its chat (or a fresh one); the phone is told when the turn ends. */
   private async fire(t: ScheduledTask, late: boolean, note = ""): Promise<void> {
     t.lastRun = this.now();
+    const run: ScheduledRun = { id: randomUUID().slice(0, 8), taskId: t.id, name: t.name, convId: t.convId, at: t.lastRun, ...(late ? { late: true } : {}), status: "running" };
+    this.runs_.push(run);
+    if (this.runs_.length > SCHEDULED_RUNS_KEPT) this.runs_.splice(0, this.runs_.length - SCHEDULED_RUNS_KEPT);
     try {
       let target: string | undefined = t.convId;
       if (t.newChat) target = (await this.deps.create?.(t.convId, t.name)) ?? undefined;
       if (!target) throw new Error("no chat");
-      this.deps.onCheckBack?.(target);
+      run.convId = target;
+      (this.deps.onScheduled ?? this.deps.onCheckBack)?.(target);
       await this.deps.send(target, `[KesherAI] Scheduled: ${t.name}${note}\n\n${t.prompt}`);
       t.lastResult = late ? "late" : "ok";
     } catch (e) {
       t.lastResult = `failed: ${(e as Error).message}`.slice(0, 120);
+      run.status = "failed";
+      run.excerpt = t.lastResult;
     }
+    this.saveRuns();
+  }
+
+  private saveRuns(): void {
+    const data = JSON.stringify(this.runs_);
+    this.saving = this.saving.then(() => writeFile(join(dirname(this.file), "scheduled-runs.json"), data, "utf8")).catch(() => undefined);
   }
 
   private save(): Promise<void> {

@@ -171,3 +171,83 @@ test("weekdays follow the local work week: Sunday to Thursday in Israel, Monday 
   assert.equal(new Date(nextRun({ t: "weekdays", h: 9, m: 0 }, thu, [5, 6])).getDay(), 0);
   assert.equal(new Date(nextRun({ t: "weekdays", h: 9, m: 0 }, thu, [0, 6])).getDay(), 5);
 });
+
+/** A real agent session whose model calls schedule_task once, then answers; the tools are the chat's. */
+async function sessionCalling(timers: ChatTimers, mode: "ask" | "auto" = "ask", plan = false) {
+  const { AgentSession } = await import("@kesher/agent");
+  let i = 0;
+  const model = (async (_req: unknown, _s: unknown, onText: (t: string) => void) => {
+    const turn = i++;
+    if (turn === 0) return { text: "", toolCalls: [{ id: "t1", name: "schedule_task", arguments: { name: "News", prompt: "Summarise the news", when: "daily 08:30" } }] };
+    onText("ok");
+    return { text: "ok", toolCalls: [] };
+  }) as never;
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-sched-ws-"));
+  const session = new AgentSession({ id: "c1", modelId: "m", model, mode, workspace, tools: scheduleTools(timers, "c1", () => T0), systemPrompt: "sys" });
+  if (plan) session.setMode("plan");
+  return session;
+}
+const waitEv = (session: Awaited<ReturnType<typeof sessionCalling>>, pred: (e: { type: string }) => boolean) =>
+  new Promise<{ type: string; [k: string]: unknown }>((resolve) => {
+    const found = session.events.find(pred);
+    if (found) return resolve(found as never);
+    const on = (e: { type: string }) => pred(e) && (session.off("event", on), resolve(e as never));
+    session.on("event", on);
+  });
+
+test("schedule_task asks first, even in auto mode; Cancel saves nothing, Save saves", async () => {
+  for (const mode of ["ask", "auto"] as const) {
+    const { timers } = await setup();
+    const session = await sessionCalling(timers, mode);
+    session.send("every morning at 8:30 summarise the news");
+    const req = await waitEv(session, (e) => e.type === "approval_request");
+    assert.equal(req.name, "schedule_task");
+    assert.equal(req.noAlways, true);
+    assert.match(String(req.preview), /^schedule\nname: News\nwhen: daily 08:30\nnext: \d+\nnewChat: false\n---\nSummarise the news$/);
+    assert.equal(timers.scheduled().length, 0, "nothing is saved while the card is open");
+    session.approve(String(req.requestId), "deny", "The user cancelled it.");
+    await waitEv(session, (e) => e.type === "assistant");
+    assert.equal(timers.scheduled().length, 0, "Cancel saves nothing");
+  }
+  const { timers } = await setup();
+  const session = await sessionCalling(timers);
+  session.send("every morning at 8:30 summarise the news");
+  const req = await waitEv(session, (e) => e.type === "approval_request");
+  session.approve(String(req.requestId), "always");
+  await waitEv(session, (e) => e.type === "assistant");
+  assert.deepEqual(timers.scheduled().map((t) => [t.name, t.when]), [["News", "daily 08:30"]]);
+});
+
+test("the confirm card's preview and gate refuse a bad schedule and plan mode before anything is shown", async () => {
+  const { timers } = await setup();
+  const { schedulePreview } = await import("./chat-schedule.js");
+  assert.match(String((schedulePreview({ name: "x", prompt: "y", when: "hourly" }, T0) as { error: string }).error), /Give "when"/);
+  assert.match(String((schedulePreview({ name: "", prompt: "y", when: "daily 09:00" }, T0) as { error: string }).error), /name/);
+  const tool = scheduleTools(timers, "c1", () => T0)[0]!;
+  const g = (input: Record<string, unknown>, plan = false) => tool.gate!(input, {} as never, { always: false, asked: [], plan, sessionId: "c1" });
+  assert.equal((await g({ name: "x", prompt: "y", when: "daily 09:00" })).action, "ask");
+  assert.equal((await g({ name: "x", prompt: "y", when: "daily 09:00" }, true)).action, "deny");
+  assert.equal((await g({ name: "x", prompt: "y", when: "nonsense" })).action, "deny");
+  assert.equal(timers.scheduled().length, 0);
+});
+
+test("past runs are kept with a redacted excerpt, newest first, and survive a restart", async () => {
+  const { timers, state } = await setup({ create: true });
+  const a = await sched(timers, "c1", "daily 11:00", { newChat: true });
+  assert.ok(typeof a !== "string");
+  await timers.runNow(a.id);
+  assert.deepEqual(timers.runs().map((r) => [r.name, r.convId, r.status]), [["News", "new1", "running"]]);
+  timers.finishRun("new1", "All good, 12 items.");
+  state.now += 1000;
+  await timers.runNow(a.id);
+  timers.finishRun("new2", "", "boom");
+  assert.deepEqual(timers.runs().map((r) => [r.convId, r.status, r.excerpt]), [["new2", "failed", "boom"], ["new1", "ok", "All good, 12 items."]]);
+  assert.deepEqual(timers.runs("new1").length, 1);
+  timers.finishRun("nope", "x");
+  await new Promise((r) => setTimeout(r, 50));
+  const again = new ChatTimers((timers as unknown as { file: string }).file, { send: async () => undefined, exists: async () => true });
+  await again.start();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(again.runs().length, 2);
+  again.stop();
+});

@@ -68,3 +68,16 @@ test("detach: the button hands the process over at once; Stop still kills; a ref
   refused!();
   assert.match((await t).status, /timeout/);
 });
+
+test("a command's status always ends with its exit code, and says when it was killed", { skip: process.platform === "win32" }, async () => {
+  const ok = await runShell("echo hi", process.cwd(), 30_000, new AbortController().signal);
+  assert.equal(ok.status, "Exit code 0.");
+  const bad = await runShell("exit 3", process.cwd(), 30_000, new AbortController().signal);
+  assert.equal(bad.status, "Exit code 3.");
+  const slow = await runShell("sleep 20", process.cwd(), 300, new AbortController().signal);
+  assert.match(slow.status, /^Killed by timeout after 0\.3 s\. Exit code unknown\.$/);
+  const ctl = new AbortController();
+  setTimeout(() => ctl.abort(), 200);
+  const stopped = await runShell("sleep 20", process.cwd(), 30_000, ctl.signal);
+  assert.match(stopped.status, /^Killed by stop\. Exit code /);
+});

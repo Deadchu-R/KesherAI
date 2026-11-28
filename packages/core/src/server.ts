@@ -529,6 +529,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
     // A check-back's turn tells the phone when it ends, however short (like a message written on the phone).
     onCheckBack: (convId) => notifier.messageFromPhone(convId),
+    onScheduled: (convId) => notifier.scheduledRun(convId),
     // A scheduled task that runs in a fresh chat: same model, mode and project as the chat that scheduled it.
     create: async (fromId, title) => {
       const from = library.summary(fromId);
@@ -536,6 +537,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return (await services.conversations.create({ kind: from.kind, projectId: from.projectId, modelId: from.modelId, mode: from.mode, title: `⏱ ${title}`, source: "routine" })).id;
     },
   });
+  notifier.onScheduledEnd = (convId, excerpt, error) => chatTimers.finishRun(convId, excerpt, error);
   void chatTimers.start();
   // Background commands of the chat (run_command with background:true): their end wakes the chat like a check-back.
   const background = new BackgroundCommands({

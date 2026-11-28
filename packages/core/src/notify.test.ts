@@ -229,3 +229,28 @@ test("an inbox agent run is not announced as Done (the inbox sends its own end n
   assert.equal(isInboxRunTitle("◈ OpenCode Go · Muse-parity asset pipelines"), true);
   assert.equal(isInboxRunTitle("Fix the login page"), false);
 });
+
+test("a scheduled run's end tells the phone with a short redacted excerpt, however short the run, and records it", async () => {
+  const delivered: Array<{ title: string; body: string }> = [];
+  const ended: Array<[string, string, string | undefined]> = [];
+  const n = new Notifier(() => ({ ...settings, minSeconds: 600, includeText: true }), {
+    app: { deliver: async (m) => (delivered.push({ title: m.title, body: m.body }), true), hasReceivers: () => true },
+  });
+  n.onScheduledEnd = (c, excerpt, error) => ended.push([c, excerpt, error]);
+  n.scheduledRun("c1");
+  n.onConversationEvent("c1", () => "Morning news", ev({ type: "status", status: "running" }), () => undefined);
+  const answer = `Top story: ${"a very long headline ".repeat(20)} saved to C:\\Users\\roee\\news.md with key sk-abcdef1234567890`;
+  n.onConversationEvent("c1", () => "Morning news", ev({ type: "status", status: "idle" }), () => answer);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(delivered.length, 1);
+  assert.ok(delivered[0]!.body.length <= 120 && delivered[0]!.body.startsWith("Top story:") && delivered[0]!.body.endsWith("…"), delivered[0]!.body);
+  assert.doesNotMatch(delivered[0]!.body, /sk-abc|roee/);
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0]![0], "c1");
+  assert.ok(ended[0]![1].length <= 200 && !ended[0]![2]);
+  // The next, ordinary short run is not a scheduled one.
+  n.onConversationEvent("c1", () => "Morning news", ev({ type: "status", status: "running" }), () => undefined);
+  n.onConversationEvent("c1", () => "Morning news", ev({ type: "status", status: "idle" }), () => "x");
+  assert.equal(ended.length, 1);
+  n.close();
+});

@@ -82,7 +82,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
     setMenu(false);
   }, [hash]);
 
-  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/downloads" ? t("downloads") : hash === "#/connections" || hash === "#/parts" ? t("customizeNav") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : hash === "#/plugins" ? t("customizeNav") : hash === "#/community" ? t("communityNav") : "";
+  const pageTitle = hash === "#/images" ? t("images") : hash === "#/models" ? t("models") : hash === "#/downloads" ? t("downloads") : hash === "#/connections" || hash === "#/parts" ? t("customizeNav") : hash.startsWith("#/settings") ? t("settings") : hash === "#/usage" ? t("usageNav") : hash === "#/scheduled" ? t("scheduledNav") : hash === "#/plugins" ? t("customizeNav") : hash === "#/community" ? t("communityNav") : "";
   const inCode = hash === "#/code" || (hash.startsWith("#/c/") && document.querySelector("[data-conv-kind='code']") !== null);
   const status = online === null ? t("barChecking") : online ? t("computerOn", { name: host || location.hostname }) : t("serverOffline");
 

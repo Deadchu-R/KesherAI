@@ -614,9 +614,9 @@ Ordered by user impact (RESEARCH_LOG "2026-11-28 night — chats like Claude, ga
 - ✅ M: parallel dispatch of read-only tool calls from one model step (`Promise.all`, order of results kept, limit 3 on CPU-only machines); measure steps and seconds per task.
 - ⬜ S: static prefill budget test: fails when the system prompt plus core tool specs grow past a byte limit; log `prompt_n` vs cached tokens per turn and compare before/after `capTools` re-ranking.
 - ⬜ S: grammar-constrained retry (GBNF from the tool schema) only after an invalid-JSON tool call, per-build flag.
-- ⬜ S: phone push text carries a short result excerpt; ⬜ M: Scheduled page (upcoming and past runs, pause / resume / run now) and a confirm card (name, schedule, instructions) before `schedule_task` saves.
+- ✅ S: phone push text carries a short result excerpt (about 120 characters, secrets and paths removed: `result-excerpt.ts`); ✅ M: Scheduled page (`#/scheduled`, in the sidebar: upcoming runs with pause / resume / run now / delete, and past runs with an excerpt and a link to the chat) and a confirm card (name, schedule in words, next run, instructions; Save / Edit / Cancel) before `schedule_task` saves.
 - ⬜ S: audit the 20.11 gap-list rows C9 (media view), C11 (download chip under made files), C12 ("remembered" chip with undo): mark built ones done, list the rest.
-- ⬜ S: tools return what changed (hash or diff) for `write_file` and command exit codes, so a claim of success can be checked; ⬜ S: background-command stop on low memory (Windows `os.freemem` polling).
+- ✅ S: tools return what changed (new size, short hash and "+N −M lines") for `write_file` / `edit_file`, and `run_command` always ends with "Exit code N." (or "Killed by timeout / stop"), so a claim of success can be checked; ⬜ S: background-command stop on low memory (Windows `os.freemem` polling).
 - ⬜ S: default-model advice: prefer dense 27B over 35B-A3B MoE for agent chats in the model picker note (measure with the chat-checks runner first).
 
 ## Tools inside the chat (Roee 28.11 02:17)

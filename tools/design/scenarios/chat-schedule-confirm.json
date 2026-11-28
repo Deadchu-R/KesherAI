@@ -1,0 +1,331 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-27T16:00:00Z",
+ "boards": [
+  {
+   "id": "ChatScheduleConfirm",
+   "title": "צ'אט: לפני ש-schedule_task שומר, כרטיס אישור — שם, מתי במילים והריצה הבאה לפי שעון המחשב, וההוראות — שמירה / עריכה / ביטול (גם בטלפון)",
+   "titleEn": "Chat: before schedule_task saves, a confirm card (name, schedule in words, next run, instructions) with Save / Edit / Cancel; phone too",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "סיכום חדשות בוקר",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "waiting",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "user",
+        "text": "כל בוקר ב-8:30 סכם לי את החדשות בטכנולוגיה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "אני מתזמן את זה. תאשר או תערוך את הכרטיס למטה לפני שזה נשמר."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "30s"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "t1",
+        "name": "schedule_task",
+        "input": {
+         "name": "חדשות בוקר",
+         "when": "daily 08:30",
+         "prompt": "Summarise today's technology news in 5 bullets. Put the most important first and keep each under 20 words."
+        },
+        "preview": "schedule\nname: חדשות בוקר\nwhen: daily 08:30\nnext: 1796113800000\nnewChat: false\n---\nSummarise today's technology news in 5 bullets. Put the most important first and keep each under 20 words.",
+        "reason": "Save this scheduled task?",
+        "noAlways": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/scheduled*",
+     "json": {
+      "scheduled": [
+       {
+        "id": "s1",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "חדשות בוקר",
+        "prompt": "Summarise today's tech news in 5 bullets",
+        "when": "daily 08:30",
+        "due": {
+         "$inMs": "16h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "8h"
+        },
+        "lastResult": "ok"
+       },
+       {
+        "id": "s2",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "בדיקת בנייה",
+        "prompt": "Check the build and report",
+        "when": "weekly mon 09:00",
+        "due": {
+         "$inMs": "72h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "newChat": true
+       },
+       {
+        "id": "s3",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "גיבוי שבועי",
+        "prompt": "Back up the notes",
+        "when": "every 6 hours",
+        "due": {
+         "$inMs": "3h"
+        },
+        "setAt": {
+         "$agoMs": "2d"
+        },
+        "kind": "scheduled",
+        "paused": true,
+        "lastRun": {
+         "$agoMs": "1d"
+        },
+        "lastResult": "late"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/timers*",
+     "json": {
+      "timers": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".schedule-confirm"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".schedule-confirm"
+    }
+   ]
+  },
+  {
+   "id": "ScheduledPage",
+   "title": "עמוד \"משימות מתוזמנות\" (#/scheduled): ריצות הבאות (השהיה, הרץ עכשיו, מחיקה באישור) וריצות קודמות עם תקציר תוצאה; גם בטלפון",
+   "titleEn": "Scheduled page (#/scheduled): upcoming runs (pause, run now, delete with confirm) and past runs with a result excerpt; phone too",
+   "route": "#/scheduled",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/scheduled/runs*",
+     "json": {
+      "runs": [
+       {
+        "id": "r1",
+        "taskId": "s1",
+        "name": "חדשות בוקר",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "at": {
+         "$agoMs": "8h"
+        },
+        "status": "ok",
+        "excerpt": "1. מודל חדש בגודל 27B רץ על כרטיס מסך אחד. 2. גרסת הדפדפן מוסיפה תרגום מקומי. 3. עדכון אבטחה לווינדוס…"
+       },
+       {
+        "id": "r2",
+        "taskId": "s3",
+        "name": "גיבוי שבועי",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "at": {
+         "$agoMs": "1d"
+        },
+        "status": "ok",
+        "late": true,
+        "excerpt": "הגיבוי הסתיים: 142 קבצים הועתקו, אין שגיאות."
+       },
+       {
+        "id": "r3",
+        "taskId": "s2",
+        "name": "בדיקת בנייה",
+        "convId": "c1",
+        "convTitle": "בדיקת בנייה",
+        "at": {
+         "$agoMs": "3d"
+        },
+        "status": "failed",
+        "excerpt": "failed: no chat"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/scheduled*",
+     "json": {
+      "scheduled": [
+       {
+        "id": "s1",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "חדשות בוקר",
+        "prompt": "Summarise today's tech news in 5 bullets",
+        "when": "daily 08:30",
+        "due": {
+         "$inMs": "16h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "8h"
+        },
+        "lastResult": "ok"
+       },
+       {
+        "id": "s2",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "בדיקת בנייה",
+        "prompt": "Check the build and report",
+        "when": "weekly mon 09:00",
+        "due": {
+         "$inMs": "72h"
+        },
+        "setAt": {
+         "$agoMs": "1m"
+        },
+        "kind": "scheduled",
+        "newChat": true
+       },
+       {
+        "id": "s3",
+        "convId": "c1",
+        "convTitle": "סיכום חדשות בוקר",
+        "name": "גיבוי שבועי",
+        "prompt": "Back up the notes",
+        "when": "every 6 hours",
+        "due": {
+         "$inMs": "3h"
+        },
+        "setAt": {
+         "$agoMs": "2d"
+        },
+        "kind": "scheduled",
+        "paused": true,
+        "lastRun": {
+         "$agoMs": "1d"
+        },
+        "lastResult": "late"
+       },
+       {
+        "id": "s4",
+        "convId": "c2",
+        "convTitle": "מחקר מתחרים",
+        "name": "סקירת מתחרים",
+        "prompt": "Review competitors",
+        "when": "weekdays 10:00",
+        "due": {
+         "$inMs": "20h"
+        },
+        "setAt": {
+         "$agoMs": "3d"
+        },
+        "kind": "scheduled",
+        "lastRun": {
+         "$agoMs": "4h"
+        },
+        "lastResult": "failed: no chat"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".scheduled-run"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".scheduled-run"
+    }
+   ]
+  }
+ ]
+}

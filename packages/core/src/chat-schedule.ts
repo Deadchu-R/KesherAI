@@ -134,6 +134,25 @@ export function isScheduled(t: ChatTimer): t is ScheduledTask {
   return t.kind === "scheduled" && typeof t.name === "string" && typeof t.when === "string";
 }
 
+/**
+ * The text of the confirm card for a `schedule_task` call (the approval card's preview): one `key: value` line each
+ * for the name, the schedule (stored form), the next run (ms), whether each run is a fresh chat, then the instructions
+ * after a `---` line. The interface (apps/web/src/schedule-confirm.ts) reads it back and words it in the user's language.
+ *
+ * @param input - The tool's input.
+ * @param now - The time now (ms).
+ * @returns The preview, or an error message for the model when the schedule cannot be read.
+ */
+export function schedulePreview(input: Record<string, unknown>, now: number): { preview: string } | { error: string } {
+  const sc = parseSchedule(input.when, now);
+  if (typeof sc === "string") return { error: sc };
+  const name = String(input.name ?? "").trim().slice(0, 80);
+  if (!name) return { error: "Give the task a short name." };
+  const prompt = String(input.prompt ?? "").trim().slice(0, 2000);
+  if (!prompt) return { error: "Say what to do each time (prompt)." };
+  return { preview: `schedule\nname: ${name.replace(/\s+/g, " ")}\nwhen: ${scheduleText(sc)}\nnext: ${nextRun(sc, now)}\nnewChat: ${input.new_chat === true}\n---\n${prompt}` };
+}
+
 /** A short "in 3 h" / "tomorrow 08:30" for the model. */
 function whenShort(due: number): string {
   return new Date(due).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -146,14 +165,25 @@ function whenShort(due: number): string {
  * @param convId - The chat.
  * @returns The tools.
  */
-export function scheduleTools(timers: ChatTimers, convId: string): AgentTool[] {
+export function scheduleTools(timers: ChatTimers, convId: string, now: () => number = Date.now): AgentTool[] {
   return [
     {
       risk: "read",
+      // Nothing is saved before the user agrees: a confirm card (name, schedule and next run, the instructions) with
+      // Save / Edit / Cancel, in every mode, and never "always" (a schedule keeps running when no one is looking).
+      async gate(input, _ctx, info) {
+        if (info.plan) return { action: "deny", reason: "Plan mode is on: nothing is scheduled. Put the schedule in the plan instead." };
+        const p = schedulePreview(input, now());
+        return "error" in p ? { action: "deny", reason: p.error } : { action: "ask", reason: "Save this scheduled task?", noAlways: true };
+      },
+      async preview(input) {
+        const p = schedulePreview(input, now());
+        return "error" in p ? p.error : p.preview;
+      },
       spec: {
         name: "schedule_task",
         description:
-          'Run a prompt again and again on a schedule, like Claude\'s scheduled tasks (e.g. "every morning summarise the news", "every Monday check the build"). Each time it is due, `prompt` arrives in this chat as a message "[KesherAI] Scheduled: <name>" and you answer it (or in a fresh chat with new_chat). `when` is one of: "daily 08:30", "weekdays 09:00", "weekly mon 18:00", "every 6 hours" (1 hour or more), or one time "2026-12-01T09:00"; this computer\'s time. If the computer was off, it runs once when KesherAI starts, marked late. Up to 10 per chat. Write `prompt` so it makes sense on its own; the user sees and can pause or delete scheduled tasks. After scheduling, confirm it in one sentence (what and when).',
+          'Run a prompt again and again on a schedule, like Claude\'s scheduled tasks (e.g. "every morning summarise the news", "every Monday check the build"). Each time it is due, `prompt` arrives in this chat as a message "[KesherAI] Scheduled: <name>" and you answer it (or in a fresh chat with new_chat). `when` is one of: "daily 08:30", "weekdays 09:00", "weekly mon 18:00", "every 6 hours" (1 hour or more), or one time "2026-12-01T09:00"; this computer\'s time. If the computer was off, it runs once when KesherAI starts, marked late. Up to 10 per chat. Write `prompt` so it makes sense on its own; the user sees and can pause or delete scheduled tasks. The user first sees a card with the name, schedule and instructions and saves, edits or cancels it: if they cancel or ask for a change, do not save it another way; if they ask for a change, call schedule_task again with it. After scheduling, confirm it in one sentence (what and when).',
         inputSchema: {
           type: "object",
           properties: {

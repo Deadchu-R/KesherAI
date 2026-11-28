@@ -1,7 +1,8 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { realpathSync } from "node:fs";
-import { applyPatch, createTwoFilesPatch, reversePatch, structuredPatch } from "diff";
+import { applyPatch, createTwoFilesPatch, diffLines, reversePatch, structuredPatch } from "diff";
+import { createHash } from "node:crypto";
 import type { McpAppRef, ToolRisk, ToolSpec } from "@kesher/shared";
 import { countPlaceholders } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
@@ -420,9 +421,29 @@ const writeFileTool: AgentTool = {
     ctx.recordChange(path, before);
     await writeFile(path, content, "utf8");
     const rel = displayPath(root, path);
-    return { output: `${before === null ? "Created" : "Wrote"} ${rel} (${content.split("\n").length} lines).`, diff: makeDiff(rel, before, content) };
+    return { output: `${before === null ? "Created" : "Wrote"} ${rel} (${content.split("\n").length} lines).\nNow ${changeSummary(before, content)}.`, diff: makeDiff(rel, before, content) };
   },
 };
+
+/**
+ * What a file write says about its result, so a claim of success can be checked: the new size and a short content
+ * hash, and "+N −M lines" against the old content when the file existed.
+ *
+ * @param before - The old content (null when the file was new).
+ * @param after - The new content.
+ * @returns For example "12.3 KB, sha256 1a2b3c4d, +5 −2 lines".
+ */
+export function changeSummary(before: string | null, after: string): string {
+  const bytes = Buffer.byteLength(after, "utf8");
+  const size = bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+  const hash = createHash("sha256").update(after).digest("hex").slice(0, 8);
+  const head = `${size}, sha256 ${hash}`;
+  if (before === null) return head;
+  const parts = diffLines(before, after);
+  const added = parts.filter((p) => p.added).reduce((n, p) => n + (p.count ?? 0), 0);
+  const removed = parts.filter((p) => p.removed).reduce((n, p) => n + (p.count ?? 0), 0);
+  return `${head}, +${added} −${removed} lines`;
+}
 
 /** read_file's line prefix (`  123  `). */
 const LINE_NO = /^\s*\d+ {2}/;
@@ -519,7 +540,7 @@ const editFileTool: AgentTool = {
     const e = await applyEdit(ctx, input);
     ctx.recordChange(e.path, e.before);
     await writeFile(e.path, e.after, "utf8");
-    return { output: `Edited ${e.rel}.`, diff: makeDiff(e.rel, e.before, e.after) };
+    return { output: `Edited ${e.rel}.\nNow ${changeSummary(e.before, e.after)}.`, diff: makeDiff(e.rel, e.before, e.after) };
   },
 };
 

@@ -62,6 +62,7 @@ const TaskInboxPage = lazy(() => import("./pages/TaskInboxPage").then((m) => ({ 
 const TasksPage = lazy(() => import("./pages/TasksPage").then((m) => ({ default: m.TasksPage })));
 const StudyPage = lazy(() => import("./pages/StudyPage").then((m) => ({ default: m.StudyPage })));
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
+const ScheduledPage = lazy(() => import("./chat/ScheduledList").then((m) => ({ default: m.ScheduledPage })));
 const DayPage = lazy(() => import("./pages/Day").then((m) => ({ default: m.DayPage })));
 const KnowledgePage = lazy(() => import("./pages/Knowledge").then((m) => ({ default: m.KnowledgePage })));
 const LibrariesPage = lazy(() => import("./pages/Libraries").then((m) => ({ default: m.LibrariesPage })));
@@ -370,6 +371,7 @@ export function App() {
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/day") page = <DayPage />;
+  else if (hash === "#/scheduled") page = <ScheduledPage />;
   else if (hash === "#/knowledge") page = <KnowledgePage />;
   else if (hash === "#/libraries") page = <LibrariesPage />;
   else if (hash === "#/personas") page = <PersonasPage />;

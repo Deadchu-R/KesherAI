@@ -16,6 +16,8 @@ import { allowLabel, GrantPicker, grantWhere, type GrantChoice } from "./GrantCh
 import { McpAppView } from "./McpAppView";
 import { helperAskerName } from "./Helpers";
 import { SceneDiffCard } from "./SceneDiffCard";
+import { ScheduleConfirmCard } from "./chat/ScheduleConfirmCard";
+import { parseSchedulePreview } from "./schedule-confirm";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -284,6 +286,7 @@ export function helperAction(name: string, input: Record<string, unknown>): stri
     case "computer_batch": return L("לבצע כמה פעולות במסך", "do several actions on the screen");
     case "write_file":
     case "edit_file": return L(`לשנות את ${str("path")}`, `change ${str("path")}`);
+    case "schedule_task": return L(`לתזמן "${str("name")}"`, `schedule "${str("name")}"`);
     default: return L(`להשתמש ב-${name}`, `use ${name}`);
   }
 }
@@ -316,6 +319,8 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
       </p>
     );
   }
+  // A scheduled task the model wants to save: its own card (name, schedule, next run, instructions; Save / Edit / Cancel).
+  if (ev.name === "schedule_task" && parseSchedulePreview(ev.preview)) return <ScheduleConfirmCard convId={convId} requestId={ev.requestId} preview={ev.preview} />;
   const cmd = ev.name === "run_command" && typeof ev.input.command === "string" ? ev.input.command : ev.name === "install_tool" ? ev.preview.split("\n").pop() : undefined;
   const parts = cmd ? explainCommand(cmd) : [];
   const he = getLocale() === "he";

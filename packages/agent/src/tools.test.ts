@@ -123,3 +123,28 @@ describe("guardPlaceholders", () => {
     assert.doesNotThrow(() => guardPlaceholders("a.ts", null, "const a = [1];\n"));
   });
 });
+
+describe("changeSummary and the write tools' results", () => {
+  it("gives size and a short hash, and the changed lines when the file existed", async () => {
+    const { changeSummary } = await import("./tools.js");
+    assert.match(changeSummary(null, "a\nb\n"), /^4 B, sha256 [0-9a-f]{8}$/);
+    assert.match(changeSummary("a\nb\nc\n", "a\nB\nc\nd\n"), /^8 B, sha256 [0-9a-f]{8}, \+2 −1 lines$/);
+    assert.notEqual(changeSummary(null, "x"), changeSummary(null, "y"));
+  });
+
+  it("write_file and edit_file end their result with it", async () => {
+    const { CODE_TOOLS } = await import("./tools.js");
+    const { mkdtemp, readFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "kesher-chg-"));
+    const ctx = { workspace: dir, extraRoots: [], signal: new AbortController().signal, recordChange: () => undefined } as never;
+    const write = CODE_TOOLS.find((t) => t.spec.name === "write_file")!;
+    const edit = CODE_TOOLS.find((t) => t.spec.name === "edit_file")!;
+    const w = await write.run({ path: "a.txt", content: "one\ntwo\n" }, ctx);
+    assert.match(w.output, /^Created a\.txt \(3 lines\)\.\nNow 8 B, sha256 [0-9a-f]{8}\.$/);
+    const e = await edit.run({ path: "a.txt", old_text: "two", new_text: "2\nthree" }, ctx);
+    assert.match(e.output, /^Edited a\.txt\.\nNow \d+ B, sha256 [0-9a-f]{8}, \+2 −1 lines\.$/);
+    assert.equal(await readFile(join(dir, "a.txt"), "utf8"), "one\n2\nthree\n");
+  });
+});

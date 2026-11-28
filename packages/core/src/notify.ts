@@ -5,6 +5,7 @@ import type { KesherConfig } from "./config.js";
 import type { PhoneMessage } from "./phone-push.js";
 import { phoneMessage } from "./phone-push.js";
 import { controlNoteDelay } from "./control-live.js";
+import { resultExcerpt } from "./result-excerpt.js";
 
 /**
  * Notifications: on the phone (ntfy) and on this computer, when a long chat
@@ -244,13 +245,15 @@ export class Notifier {
       if (t0 === undefined && this.stoppedBy.delete(convId)) return;
       const failed = e.status === "error";
       const fromPhone = this.askedFromPhone.delete(convId);
+      const scheduled = this.scheduledRuns.delete(convId);
+      if (scheduled) this.onScheduledEnd?.(convId, resultExcerpt(lastAnswer(), 200), e.status === "error" ? e.message ?? "error" : undefined);
       if (t0 === undefined) return;
       if (Date.now() - t0 < s.minSeconds * 1000) {
         // A short answer to a message written on the phone: the phone app alone gets it, like a messaging app
         // (it shows nothing while the app is open on screen). The computer's own notification, ntfy and the
         // list keep the "long work only" rule.
         if (fromPhone && !this.stoppedBy.delete(convId) && this.opts.app) {
-          const text = s.includeText ? (lastAnswer() ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
+          const text = s.includeText ? resultExcerpt(lastAnswer(), scheduled ? undefined : 200) : "";
           void this.opts.app.deliver(phoneMessage({ title: failed ? `Stopped with an error: ${title()}` : title(), body: text || (failed ? e.message ?? "Open KesherAI to see what happened." : "The answer is ready."), path: `#/c/${convId}` })).catch(() => undefined);
         }
         return;
@@ -261,7 +264,7 @@ export class Notifier {
       // A task-inbox agent run sends its own end notice (done, partial, limit reached…): a "Done" here would contradict
       // it (found on the phone: "OpenCode Go reached its limit" next to "Done… Finished after 3 min").
       if (isInboxRunTitle(title())) return;
-      const text = s.includeText ? (lastAnswer() ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
+      const text = s.includeText ? resultExcerpt(lastAnswer(), scheduled ? undefined : 200) : "";
       void this.send({
         title: failed ? `Stopped with an error: ${title()}` : `Done: ${title()}`,
         body: text || (failed ? e.message ?? "Open KesherAI to see what happened." : `Finished after ${minutes(Date.now() - t0)}.`),
@@ -389,6 +392,22 @@ export class Notifier {
    * @param convId - The conversation.
    */
   messageFromPhone(convId: string): void {
+    this.askedFromPhone.add(convId);
+  }
+
+  /** Called when a scheduled run's turn ends: the chat, a short redacted excerpt of its answer, and the error when it failed. */
+  onScheduledEnd?: (convId: string, excerpt: string, error?: string) => void;
+
+  /** Chats whose running turn is a scheduled run: its notification carries a short, redacted excerpt of the answer. */
+  private readonly scheduledRuns = new Set<string>();
+
+  /**
+   * A scheduled task is about to run in a chat: the phone hears when it ends, however short, with a short excerpt.
+   *
+   * @param convId - The conversation the run goes into.
+   */
+  scheduledRun(convId: string): void {
+    this.scheduledRuns.add(convId);
     this.askedFromPhone.add(convId);
   }
 

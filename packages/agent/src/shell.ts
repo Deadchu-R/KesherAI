@@ -145,6 +145,7 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     let timedOut = false;
+    let stopped = false;
     let done = false;
     const kill = () => killTree(child.pid, child);
     // Hands the running process to the background registry; if that refuses (limit), it is stopped as at a timeout.
@@ -168,7 +169,10 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
       timedOut = true;
       kill();
     }, timeoutMs);
-    const onAbort = () => kill();
+    const onAbort = () => {
+      stopped = true;
+      kill();
+    };
     signal.addEventListener("abort", onAbort, { once: true });
     detach?.onReady?.(handoff);
     const finish = (code: number | null, error?: Error) => {
@@ -177,10 +181,12 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
       clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
       const status = error
-        ? `Could not start: ${error.message}`
+        ? `Could not start: ${error.message} Exit code unknown.`
         : timedOut
-          ? `Stopped after ${timeoutMs / 1000} s (timeout).`
-          : `Exit code ${code ?? "unknown"}.`;
+          ? `Killed by timeout after ${timeoutMs / 1000} s. Exit code unknown.`
+          : stopped
+            ? `Killed by stop. Exit code ${code ?? "unknown"}.`
+            : `Exit code ${code ?? "unknown"}.`;
       resolvePromise({ output: out, code: error || timedOut ? null : code, status });
     };
     child.on("error", (err) => finish(null, err));
