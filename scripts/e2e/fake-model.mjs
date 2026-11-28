@@ -57,6 +57,8 @@ export async function startFakeModel(opts = {}) {
       }
       if (text.includes("TOOL") && last.role === "user" && body.tools?.some((t) => t.function?.name === "document")) {
         const args = { action: "write", title: "E2E report", body: "# E2E report\n\nThe quick brown fox jumps over the lazy dog.\n\nThis second paragraph stays as it is." };
+        // Like a real model under the say-first rule: one sentence, then the tool call.
+        send({ content: "I'll write the report." });
         send({ tool_calls: [{ index: 0, id: "call_e2e", function: { name: "document", arguments: JSON.stringify(args) } }] }, "tool_calls");
         return end();
       }
