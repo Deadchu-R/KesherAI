@@ -1,0 +1,53 @@
+{
+ "group": "צוות המודלים · The model team",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "ModelTeam",
+   "title": "הגדרות › צ'אטים › צוות המודלים: מתג חדש \"לעצור פקודות ברקע כשהזיכרון נגמר\" (הפקודה החדשה ביותר נעצרת ראשונה)",
+   "titleEn": "Settings › Chats › The model team: the new switch \"Stop background commands when memory runs low\" (the newest is stopped first)",
+   "route": "#/settings/chats",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": "#settings-model-team"
+    },
+    {
+     "scroll": "#settings-model-team"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/model-team",
+     "method": "GET",
+     "json": {
+      "translator": "main",
+      "toolCap": 24,
+      "smallTurns": true,
+      "shortAnswers": true,
+      "stopOnLowMemory": true
+     }
+    },
+    {
+     "url": "**/api/models",
+     "method": "GET",
+     "json": {
+      "models": []
+     }
+    },
+    {
+     "url": "**/api/models/local",
+     "method": "GET",
+     "json": []
+    }
+   ]
+  }
+ ]
+}

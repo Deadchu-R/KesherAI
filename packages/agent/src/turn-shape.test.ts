@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, asksManySteps, asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, needsSayFirst, silentToolStart, stripCode } from "./turn-shape.js";
+import { cleanSaid, forgotSendFile, SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, asksManySteps, asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, needsSayFirst, silentToolStart, stripCode } from "./turn-shape.js";
 
 const lines = (n: number, s = "line of text") => Array.from({ length: n }, () => s).join("\n");
 
@@ -111,4 +111,26 @@ test("asksManySteps: a single action or a question is not a job in steps", () =>
 test("the steps lines ask for the todo list first", () => {
   assert.match(STEPS_NOTE, /first tool call is todo/);
   assert.match(SAY_FIRST_STEPS_NUDGE, /^\[KesherAI\] Start again: .*sentence.*first call is todo/);
+});
+
+test("cleanSaid: the first line, shortened; nothing for an empty or tag-only answer", () => {
+  assert.equal(cleanSaid("  I'll read it.\nMore"), "I'll read it.");
+  assert.equal(cleanSaid("   "), undefined);
+  assert.equal(cleanSaid("<tool_call>"), undefined);
+  assert.equal(cleanSaid("x".repeat(300))!.length, 200);
+});
+
+test("forgotSendFile: a file was made for a request that asks for one and was not sent", () => {
+  assert.equal(forgotSendFile("Make me a summary file of notes.txt.", true, false, true), true);
+  assert.equal(forgotSendFile("תכין לי קובץ סיכום", true, false, true), true);
+  assert.equal(forgotSendFile("Make me a summary file of notes.txt.", true, true, true), false, "already sent");
+  assert.equal(forgotSendFile("Make me a summary file of notes.txt.", false, false, true), false, "no file made");
+  assert.equal(forgotSendFile("Make me a summary file of notes.txt.", true, false, false), false, "no send_file tool");
+  assert.equal(forgotSendFile("What is a file?", true, false, true), false, "a question, not a request");
+});
+
+test("finishFollowUp: sends the forgotten file once", () => {
+  const o = { answer: "Done.", userText: "Make me a summary file.", askedUser: false, used: new Set<string>(), skip: false, madeFile: true, sentFile: false, canSend: true };
+  assert.equal(finishFollowUp(o)?.kind, "send-file");
+  assert.equal(finishFollowUp({ ...o, used: new Set(["send-file"]) }), undefined);
 });

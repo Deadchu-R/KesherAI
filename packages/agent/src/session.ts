@@ -21,7 +21,7 @@ import { applyTodo, latestTodo, takeSteers, todoOpenLine, todoProgress, todoRepl
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { SAY_FIRST_NUDGE, SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, TURN_SHAPE_PROMPT, asksManySteps, finishFollowUp, needsSayFirst, shapeFollowUp, silentToolStart } from "./turn-shape.js";
+import { SAY_ONLY_NUDGE, cleanSaid, SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, TURN_SHAPE_PROMPT, asksManySteps, finishFollowUp, needsSayFirst, shapeFollowUp, silentToolStart } from "./turn-shape.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
@@ -120,6 +120,11 @@ export interface AgentSessionOptions {
    * call; a rewrite is asked for at most once per message.
    */
   shortAnswers?: () => { maxLines: number } | undefined;
+  /**
+   * A chat for deliverables (not a code chat): a file made for the request is posted with send_file, and the model is
+   * asked once when it forgot (turn-shape.ts `forgotSendFile`). Read on each final answer; unset = off.
+   */
+  sendMadeFiles?: () => boolean;
   /** Whether a stored file exists, so a link to a made-up file id is taken out of the answer (answer-links.ts). */
   assetExists?: (id: string) => boolean | Promise<boolean>;
   modelId: string;
@@ -330,6 +335,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly reviewerOf?: () => Reviewer | undefined;
   private readonly polishAnswer?: AgentSessionOptions["polishAnswer"];
   private readonly shortAnswers?: AgentSessionOptions["shortAnswers"];
+  private readonly sendMadeFiles?: AgentSessionOptions["sendMadeFiles"];
   private readonly assetExists?: AgentSessionOptions["assetExists"];
   private abort?: AbortController;
   private turn = 0;
@@ -464,6 +470,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.reviewerOf = opts.reviewer;
     this.polishAnswer = opts.polishAnswer;
     this.shortAnswers = opts.shortAnswers;
+    this.sendMadeFiles = opts.sendMadeFiles;
     this.assetExists = opts.assetExists;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.helperName = opts.helperName;
@@ -1588,8 +1595,18 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         // asked once more, before the call runs. Only the first step, only when "Keep answers short like Claude" applies.
         if (!firstOutputSeen && !sayNudged && step === 0 && !quick && !lastStep && !abort.signal.aborted && this.shortAnswers?.() && needsSayFirst(result.text, result.toolCalls.map((c) => c.name))) {
           sayNudged = true;
-          this.messages.push({ role: "user", content: this.manySteps ? SAY_FIRST_STEPS_NUDGE : SAY_FIRST_NUDGE });
-          continue;
+          // A job in several steps that did not start with the list is asked again whole (the list comes first). Any
+          // other first step keeps its tool calls: a short side question gets the sentence, the calls then run (no
+          // second write of the arguments, which for write_file is the whole file).
+          if (this.manySteps && !result.toolCalls.some((c) => c.name === TODO_TOOL)) {
+            this.messages.push({ role: "user", content: SAY_FIRST_STEPS_NUDGE });
+            continue;
+          }
+          const sayAt = Date.now();
+          const said = await this.model({ messages: [...conversation, { role: "user", content: SAY_ONLY_NUDGE }], tools: this.specs() }, abort.signal, onText).catch(() => undefined);
+          if (said) this.recordUsage(this.modelId, "main", conversation, said, { waitMs: Date.now() - sayAt, writeMs: 0 });
+          const sentence = said ? cleanSaid(said.text) : undefined;
+          if (sentence) result = { ...result, text: sentence };
         }
         if (!firstOutputSeen) {
           firstOutputSeen = true;
@@ -1632,10 +1649,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
               askedUser: this.events.some((e) => e.type === "tool_call" && e.name === ASK_USER_TOOL && e.seq > (lastUser?.seq ?? -1)),
               used: finishUsed,
               skip: abort.signal.aborted || step >= this.maxSteps - 1,
+              madeFile: this.events.some((e) => e.type === "tool_call" && e.name === "write_file" && e.seq > (lastUser?.seq ?? -1)),
+              sentFile: this.events.some((e) => e.type === "tool_call" && e.name === "send_file" && e.seq > (lastUser?.seq ?? -1)),
+              canSend: !!this.sendMadeFiles?.() && this.tools.has("send_file") && !this.hidden.has("send_file"),
             });
             if (finish) {
               finishUsed.add(finish.kind);
-              this.push({ type: "note", text: finish.kind === "open-steps" ? "The task list still has open steps: the agent was asked to continue once." : "The agent asked for permission for work you already asked for: it was told to do it." });
+              this.push({ type: "note", text: finish.kind === "open-steps" ? "The task list still has open steps: the agent was asked to continue once." : finish.kind === "send-file" ? "The file was made but not sent to the chat: the agent was asked to send it." : "The agent asked for permission for work you already asked for: it was told to do it." });
+              // send_file is not a core tool: load it now so the model can call what it is asked to call.
+              if (finish.kind === "send-file") this.loadTool("send_file");
               this.messages.push({ role: "user", content: finish.message });
               continue;
             }

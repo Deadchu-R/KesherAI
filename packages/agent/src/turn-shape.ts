@@ -134,7 +134,23 @@ export function asksPermission(answer: string, userText: string, askedUser: bool
 }
 
 /** What a final answer's post-check asks for. */
-export type FinishFollowUp = { kind: "open-steps" | "act"; message: string };
+export type FinishFollowUp = { kind: "open-steps" | "act" | "send-file"; message: string };
+
+/** The user asks for a thing to keep: "make me a summary file", "write a report", "תכין לי קובץ סיכום". */
+const DELIVERABLE = /\b(?:file|files|summary|report|document|doc|script|spreadsheet|csv|pdf|readme|notes?)\b|קובץ|קבצים|סיכום|דוח|מסמך|סקריפט|טבלה/i;
+
+/**
+ * Whether the model made a file for a request that asks for one and never posted it to the chat with send_file (28.11:
+ * the "summary file" check failed on the PC: the file was written, the card never came). Needs a request, not a question.
+ *
+ * @param userText - What the user wrote.
+ * @param madeFile - Whether write_file ran since the user's message.
+ * @param sentFile - Whether send_file ran since the user's message.
+ * @param canSend - Whether send_file is among the chat's tools.
+ */
+export function forgotSendFile(userText: string, madeFile: boolean, sentFile: boolean, canSend: boolean): boolean {
+  return canSend && madeFile && !sentFile && REQUEST.test(userText) && DELIVERABLE.test(userText);
+}
 
 /**
  * The one place for the "finish the job" checks on a final answer: (1) the `todo` list still has open steps, (2) the
@@ -148,12 +164,15 @@ export type FinishFollowUp = { kind: "open-steps" | "act"; message: string };
  * @param o.used - The kinds already sent for this message.
  * @param o.skip - True when the turn was stopped or hit its budget.
  */
-export function finishFollowUp(o: { answer: string; userText: string; todo?: readonly TodoItem[]; askedUser: boolean; used: ReadonlySet<string>; skip: boolean }): FinishFollowUp | undefined {
+export function finishFollowUp(o: { answer: string; userText: string; todo?: readonly TodoItem[]; askedUser: boolean; used: ReadonlySet<string>; skip: boolean; madeFile?: boolean; sentFile?: boolean; canSend?: boolean }): FinishFollowUp | undefined {
   if (o.skip) return undefined;
   const open = todoOpenNudge(o.todo);
   if (open && !o.used.has("open-steps")) return { kind: "open-steps", message: open };
   if (!o.used.has("act") && asksPermission(o.answer, o.userText, o.askedUser)) {
     return { kind: "act", message: "[KesherAI] The user already asked for this — do it. Do not ask for permission; use your tools now and finish with the outcome." };
+  }
+  if (!o.used.has("send-file") && forgotSendFile(o.userText, !!o.madeFile, !!o.sentFile, !!o.canSend)) {
+    return { kind: "send-file", message: "[KesherAI] You made the file but did not send it to the user. Call send_file with its path now (one call per file), then say in one line what it is." };
   }
   return undefined;
 }
@@ -189,6 +208,26 @@ export function asksManySteps(text: string): boolean {
   if (joints >= 2) return true;
   const files = new Set(t.match(FILE_NAME) ?? []).size;
   return joints >= 1 && (files >= 3 || COUNTED.test(t));
+}
+
+/**
+ * The cheap say-first ask (28.11, measured on the PC: the old re-ask threw the whole first step away and wrote it again,
+ * 3-6 s per turn). The first step's tool calls are kept and run; only this short question is added to a copy of the
+ * conversation (same start, so the engine's cache serves it), and the model's one sentence becomes the words before them.
+ */
+export const SAY_ONLY_NUDGE = "[KesherAI] Before you make the tool call, write ONE short sentence saying what you are about to do (in the user's language, e.g. \"I'll read notes.txt.\"). Only that sentence: no tool call, no list.";
+
+/**
+ * Cleans the model's answer to {@link SAY_ONLY_NUDGE}: its first line, trimmed, at most 200 characters. Nothing is made
+ * up: an empty answer (or one that is only a tool-call tag) gives `undefined` and the tool runs without words.
+ *
+ * @param text - What the model wrote.
+ * @returns The sentence, or `undefined` when there is none.
+ */
+export function cleanSaid(text: string): string | undefined {
+  const line = stripCode(text).split(/\n+/).map((l) => l.trim()).find((l) => l && !/^<\/?[a-z_|][^>]*>?$/i.test(l));
+  if (!line) return undefined;
+  return line.length > 200 ? `${line.slice(0, 197).trimEnd()}...` : line;
 }
 
 /**

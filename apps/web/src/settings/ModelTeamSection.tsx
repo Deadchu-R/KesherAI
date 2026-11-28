@@ -54,7 +54,7 @@ export function ModelTeamSection() {
     void api("/api/model-team", { method: "PUT", body: { toolCap: n } }).catch((e: Error) => toast(e.message));
   };
   return (
-    <section className="card stack">
+    <section className="card stack" id="settings-model-team">
       <h2>{L("צוות המודלים", "The model team")}</h2>
       <p className="muted small">{L("המודל של הצ'אט מקבל את מה שכתבת כמו שהוא. אם התשובה שלו יוצאת באנגלית או עם אותיות משפות אחרות, המתרגם מעביר את הטקסט לשפה שבה כתבת. קוד, קבצים ופקודות נשארים כמו שהם.", "The chat's model gets your words as they are. When its answer comes out in English or with letters of other languages, the translator puts the text into the language you wrote in. Code, files and commands stay as they are.")}</p>
       <label className="row">

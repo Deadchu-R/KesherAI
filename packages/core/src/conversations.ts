@@ -983,6 +983,8 @@ export class ConversationManager {
         const turnOf = modelTurnFor(this.deps.registry, pick === "main" ? model : this.deps.translatorModel ? await this.deps.translatorModel(pick) : pick);
         return answerInUserLanguage(answer, userText, async (system, text) => (await turnOf({ messages: [{ role: "system", content: system }, { role: "user", content: text }], tools: [] }, signal, () => undefined)).text);
       },
+      // A chat (not a code chat) posts the files it made for the request as cards (agent turn-shape.ts forgotSendFile).
+      sendMadeFiles: () => (this.deps.library.summary(id)?.kind ?? conversation.kind) !== "code",
       // "Keep answers short like Claude" (agent turn-shape.ts): local models only (a cloud model already shapes its turn), when the setting is on.
       shortAnswers: () => {
         if (this.deps.config.shortAnswers === false) return undefined;
