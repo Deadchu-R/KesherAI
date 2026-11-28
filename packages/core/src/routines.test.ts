@@ -343,3 +343,9 @@ test("a when-free self-work routine waits while the computer is busy and skips t
   assert.match((await r.list())[0]!.lastMessage ?? "", /Skipped/);
   r.close();
 });
+
+test("foundNothing: small models' ways of saying nothing stay quiet; a real report does not", async () => {
+  const { foundNothing } = await import("./routines.js");
+  for (const quiet of ["NOTHING", "NO", "No.", "**None**", "N/A", "Nothing new.", "אין", "אין חדש", "כלום", "", "  "]) assert.equal(foundNothing(quiet), true, JSON.stringify(quiet));
+  for (const real of ["Unity 6.4 shipped MCP support", "No new Unreal release, but Godot 4.6 beta 2 is out", "לא נמצא עדכון ל-Unreal, אבל Unity 6.4 יצא"]) assert.equal(foundNothing(real), false, real);
+});

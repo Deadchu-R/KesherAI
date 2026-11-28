@@ -127,8 +127,17 @@ export const startsAgent = (r: Routine): boolean => r.action.type === "prompt" |
 export const QUIET_NOTE =
   "\n\nThis is a scheduled check-in. Use your tools to look. If nothing needs the user's attention right now, answer exactly NOTHING and nothing else. Otherwise answer in a few short lines: only what needs them, and what to do.";
 
-/** Whether a quiet run found nothing. */
-export const foundNothing = (message: string): boolean => /^\W*nothing\W*$/i.test(message.trim()) || /^nothing\b/i.test(message.trim());
+/**
+ * Whether a quiet run found nothing. Small local models do not always write the exact word: "NO", "None", "Nothing new",
+ * "N/A", "אין", "אין חדש", "כלום" or an empty answer mean the same and must not wake the phone (28.11 02:19: the daily
+ * feature research answered "NO" and sent a notification saying only that).
+ */
+export const foundNothing = (message: string): boolean => {
+  const t = message.trim().replace(/^[*_`"'«»\s]+|[*_`"'«».!\s]+$/g, "");
+  if (!t) return true;
+  if (/^nothing\b/i.test(t)) return true;
+  return /^(no|none|nope|n\/?a|nothing new|no news|no updates?|nothing to report|אין|לא|כלום|אין חדש|אין חדשות|אין עדכונים|אין מה לדווח)$/i.test(t);
+};
 
 /**
  * The next time a schedule fires after a moment.
