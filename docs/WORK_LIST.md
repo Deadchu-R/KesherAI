@@ -6,6 +6,24 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## Order of work by whole categories (Roee 28.11 11:42)
+Finish one category, release it as a set, then the next. PC agents take the small items of the category in progress.
+1. **Check what shipped today** (0.6.511): chat checks re-run (was 11/15), web search re-timed (was 37 s / error),
+   every in-chat tool tried on the real phone over remote, 3D part tap with a GPU, real video playback.
+2. **Like Claude, finished**: open-todo check scenario, prompt budget + cache hit tracking, JSON-grammar retry, stop
+   background commands on low memory, 27B-vs-MoE advice, audit the old gap rows (media view, download chip,
+   "remembered" chip).
+3. **Tools in the chat, finished**: sound tools (Fade/Gain → Cut, Normalize, Silence, Speed) + sound mode in the phone
+   editor, Text/Music in the phone video editor, control card for browser steps, Word layout warning + export of an
+   older version, Study pages / whiteboard / plugin panels from a chat card, plugin `ui.surfaces`, Shader Graph and
+   Godot graphs in the Blueprint surface, the size/speed measure.
+4. **Live scene view in the chat** (research r-20261128-05): live picture from the engine, "live view" and "model sees
+   the view" switches.
+5. **Task dispatcher on the CPU + its chat** (research r-20261128-06), with the phone model as the organizer.
+6. **The phone's own model** (Gemini Nano / LiteRT) as a provider when the PC is offline.
+7. **Every Claude connector and plugin** (research r-20261128-07): remote MCP with OAuth, .mcpb, Claude Code plugins,
+   first test with KesherAI's own Claude connector.
+
 ## The phone's own on-device model (Roee 28.11 10:56)
 OnePlus 13 (and many recent Android phones) ship Gemini Nano through Android AICore; third-party apps reach it with
 the ML Kit GenAI Prompt API (on-device, offline, no cost per call; OnePlus 13/13s are on Google's supported list,
