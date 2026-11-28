@@ -6,6 +6,18 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## The phone's own on-device model (Roee 28.11 10:56)
+OnePlus 13 (and many recent Android phones) ship Gemini Nano through Android AICore; third-party apps reach it with
+the ML Kit GenAI Prompt API (on-device, offline, no cost per call; OnePlus 13/13s are on Google's supported list,
+nano-v2). The phone app is Capacitor (apps/android, plugins/), so this is a small native Kotlin plugin.
+- ⬜ Research first (short): Prompt API limits (context, speed, multimodal, Hebrew quality, ToS, alpha/beta status),
+  which phones, and the best uses for KesherAI.
+- ⬜ Then: a Capacitor plugin `OnDeviceModel` (available? download state, prompt with streaming) and a "Phone model"
+  provider in the phone app, used when the PC is unreachable: quick chat answers, the Tasks-page chat (read-only
+  questions, drafts of new tasks to send when the PC is back), summarize/translate notifications and messages,
+  voice-note to text tidy-up. Settings: on/off, "only when the PC is offline". Every platform: iOS has Apple's
+  Foundation Models on-device API — same provider shape (later).
+
 ## Every Claude connector and plugin works in KesherAI (Roee 28.11 10:39)
 Anything that works on Claude should work here: remote connectors (MCP over HTTP with OAuth sign-in), desktop
 extensions (.mcpb), and Claude Code plugins (skills, slash commands, agents, hooks, their MCP servers, marketplaces).
