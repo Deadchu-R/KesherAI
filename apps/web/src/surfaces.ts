@@ -31,6 +31,7 @@ import { EDITOR_FILES, EDITOR_NAMES, type EditorId } from "./editor-handoff";
 import { BLUEPRINT_TOOLS, blueprintFromResult } from "./blueprint-surface";
 import { IMAGE_FILES, imageFromResult, parseRegionSelection, regionMessage } from "./image-surface";
 import { MODEL_FILES, modelFromResult, partAskMessage } from "./model-surface";
+import { wordFromResult } from "./word-file";
 import { ENGINE_TITLE, SCENE_TOOLS, objectAskMessage, sceneFromResult } from "./scene-surface";
 import { soundSurface, videoSurface } from "./media-surface";
 
@@ -243,6 +244,25 @@ const SCENES_SURFACE: ChatSurface = {
   versions: "none",
 };
 
+/**
+ * Word files: a `.docx` chat file ("Open in chat") and `docx_open` results open the KesherAI document editor under a
+ * strip with the file's name, "Save to Word" and "Download .docx" (WordPanel.tsx). The server brings the file in
+ * (`/api/docs/import-docx`) and writes it back (`save-docx`, one .bak); the phone sends file ids only.
+ */
+const WORD_SURFACE: ChatSurface = {
+  id: "word",
+  title: { he: "קובץ Word", en: "Word file" },
+  kinds: ["word"],
+  fileTypes: /\.docx$/i,
+  fromResult: (tool, ok, output) => wordFromResult(tool, ok, output),
+  card: () => import("./WordPanel").then((m) => ({ default: m.WordCard })),
+  panel: () => import("./WordPanel").then((m) => ({ default: m.WordPanel })),
+  panelClass: "doc-panel word-panel",
+  tools: ["docx_open", "docx_save"],
+  phone: "edit",
+  versions: "server",
+};
+
 /** The item kind and agent tools of each editor. */
 const EDITOR_SURFACE: Record<EditorId, { kind: string; tools: readonly string[]; phone: SurfacePhone }> = {
   "image-editor": { kind: "image", tools: ["make_ui_sprite"], phone: "edit" },
@@ -282,6 +302,7 @@ export const BUILT_IN: readonly ChatSurface[] = [
   // Video and sound open in their own surface (player, waveform, ask); the editor plugins are its "Full editor".
   videoSurface,
   soundSurface,
+  WORD_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 

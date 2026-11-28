@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addr, computeSheet, docxFiles, fenceAt, isEditShortcut, locateSpan, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet, type TextSpan } from "@kesher/shared";
+import { addr, computeSheet, fenceAt, isEditShortcut, locateSpan, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet, type TextSpan } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { closePanel, openItem } from "./ArtifactPanel";
 import { ITEM_KINDS, selectionMessage, type ItemKind, type PanelItem } from "./doc-items";
 import type { SurfaceCardProps, SurfaceItem, SurfacePanelProps } from "./surfaces";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
+import { downloadDocx } from "./word-download";
 import { RichText } from "./RichText";
 import { SpanEdit } from "./SpanEdit";
 import { DocsPage, printDoc, saveOffice } from "./pages/DocsPage";
@@ -141,7 +142,7 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
       const body = String(shown.body ?? "");
       if (format === "pdf") printDoc(shown.title, view.current?.querySelector(".doc-panel-body")?.innerHTML ?? "");
       else if (format === "md") save(new Blob([`# ${shown.title}\n\n${body}\n`], { type: "text/markdown" }), "md");
-      else saveOffice(docxFiles(shown.title, body), `${name}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      else downloadDocx(item.id);
     } else if (item.kind === "sheet") {
       const sheet = shown as unknown as Sheet;
       if (format === "csv") save(new Blob([`${String.fromCharCode(0xfeff)}${sheetCsv(sheet)}`], { type: "text/csv;charset=utf-8" }), "csv");

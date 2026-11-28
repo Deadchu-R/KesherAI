@@ -281,20 +281,25 @@ interface Marks {
 /** Builds the inline children of a paragraph from Markdown text. */
 async function inlineDocx(D: Docx, text: string, rtl: boolean, load: LoadImage, marks: Marks = {}): Promise<Inline[]> {
   const out: Inline[] = [];
-  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\*\*(.+?)\*\*|`([^`]+)`|(?<![*\w\\])\*([^*\s](?:[^*]*[^*\s])?)\*|~~(.+?)~~|\\([\\`*_[\]#>+.\-)(!~|])/g;
+  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|`([^`]+)`|(?<![*\w\\])\*([^*\s](?:[^*]*[^*\s])?)\*|~~(.+?)~~|\\([\\`*_[\]#>+.\-)(!~|])/g;
+  /** The text as Word runs: a line break inside it ("\n", from "  \n" in Markdown) is a break before the next run. */
   const run = (t: string, m: Marks) =>
-    new D.TextRun({
-      text: t,
-      ...(m.bold ? { bold: true } : {}),
-      ...(m.italics ? { italics: true } : {}),
-      ...(m.strike ? { strike: true } : {}),
-      ...(m.code ? { font: "Consolas" } : {}),
-      ...(m.link ? { color: "0563C1", underline: {} } : {}),
-      ...(rtl ? { rightToLeft: true, ...(m.bold ? { boldComplexScript: true } : {}), ...(m.italics ? { italicsComplexScript: true } : {}) } : {}),
-    });
+    t.split("\n").map(
+      (part, i) =>
+        new D.TextRun({
+          text: part,
+          ...(i ? { break: 1 } : {}),
+          ...(m.bold ? { bold: true } : {}),
+          ...(m.italics ? { italics: true } : {}),
+          ...(m.strike ? { strike: true } : {}),
+          ...(m.code ? { font: "Consolas" } : {}),
+          ...(m.link ? { color: "0563C1", underline: {} } : {}),
+          ...(rtl ? { rightToLeft: true, ...(m.bold ? { boldComplexScript: true } : {}), ...(m.italics ? { italicsComplexScript: true } : {}) } : {}),
+        }),
+    );
   let at = 0;
   for (let m = re.exec(text); m; m = re.exec(text)) {
-    if (m.index > at) out.push(run(text.slice(at, m.index), marks));
+    if (m.index > at) out.push(...run(text.slice(at, m.index), marks));
     at = m.index + m[0].length;
     if (m[2] !== undefined) {
       const img = await load(m[2]);
@@ -302,17 +307,18 @@ async function inlineDocx(D: Docx, text: string, rtl: boolean, load: LoadImage, 
       if (img && info) {
         const k = Math.min(1, 560 / Math.max(1, info.width));
         out.push(new D.ImageRun({ type: info.type, data: img.data, transformation: { width: Math.max(1, Math.round(info.width * k)), height: Math.max(1, Math.round(info.height * k)) }, altText: { name: m[1] || "image", description: m[1] || "image", title: m[1] || "image" } }));
-      } else out.push(run(m[1] ? `[${m[1]}]` : "[image]", marks));
+      } else out.push(...run(m[1] ? `[${m[1]}]` : "[image]", marks));
     } else if (m[4] !== undefined) {
       const kids = (await inlineDocx(D, m[3]!, rtl, load, { ...marks, link: true })) as import("docx").ParagraphChild[];
-      out.push(/^(https?:|mailto:)/i.test(m[4]) ? new D.ExternalHyperlink({ link: m[4], children: kids as never }) : run(m[3]!, marks));
-    } else if (m[5] !== undefined) out.push(...(await inlineDocx(D, m[5], rtl, load, { ...marks, bold: true })));
-    else if (m[6] !== undefined) out.push(run(m[6], { ...marks, code: true }));
-    else if (m[7] !== undefined) out.push(...(await inlineDocx(D, m[7], rtl, load, { ...marks, italics: true })));
-    else if (m[8] !== undefined) out.push(...(await inlineDocx(D, m[8], rtl, load, { ...marks, strike: true })));
-    else if (m[9] !== undefined) out.push(run(m[9], marks));
+      out.push(...(/^(https?:|mailto:)/i.test(m[4]) ? [new D.ExternalHyperlink({ link: m[4], children: kids as never })] : run(m[3]!, marks)));
+    } else if (m[5] !== undefined) out.push(...(await inlineDocx(D, m[5], rtl, load, { ...marks, bold: true, italics: true })));
+    else if (m[6] !== undefined) out.push(...(await inlineDocx(D, m[6], rtl, load, { ...marks, bold: true })));
+    else if (m[7] !== undefined) out.push(...run(m[7], { ...marks, code: true }));
+    else if (m[8] !== undefined) out.push(...(await inlineDocx(D, m[8], rtl, load, { ...marks, italics: true })));
+    else if (m[9] !== undefined) out.push(...(await inlineDocx(D, m[9], rtl, load, { ...marks, strike: true })));
+    else if (m[10] !== undefined) out.push(...run(m[10], marks));
   }
-  if (at < text.length) out.push(run(text.slice(at), marks));
+  if (at < text.length) out.push(...run(text.slice(at), marks));
   return out;
 }
 
@@ -331,8 +337,8 @@ export async function markdownToDocx(title: string, md: string, load: LoadImage)
   const body: Array<import("docx").Paragraph | import("docx").Table> = [];
   const lines = md.replace(/\r/g, "").split("\n");
   const HEADINGS = [D.HeadingLevel.HEADING_1, D.HeadingLevel.HEADING_2, D.HeadingLevel.HEADING_3, D.HeadingLevel.HEADING_4, D.HeadingLevel.HEADING_5, D.HeadingLevel.HEADING_6];
-  const para = async (text: string, o: { heading?: number; bullet?: number; ordered?: number; quote?: boolean; code?: boolean } = {}) => {
-    const rtl = isRtlText(plainText(text));
+  const para = async (text: string, o: { heading?: number; bullet?: number; ordered?: number; quote?: boolean; code?: boolean; rtl?: boolean } = {}) => {
+    const rtl = o.rtl || isRtlText(plainText(text));
     const children = o.code ? [new D.TextRun({ text, font: "Consolas", ...(rtl ? { rightToLeft: true } : {}) })] : await inlineDocx(D, text, rtl, load);
     return new D.Paragraph({
       children,
@@ -362,7 +368,7 @@ export async function markdownToDocx(title: string, md: string, load: LoadImage)
       const trs = await Promise.all(
         rows.map(
           async (r, ri) =>
-            new D.TableRow({ tableHeader: ri === 0, children: await Promise.all(Array.from({ length: cols }, async (_, c) => new D.TableCell({ width: { size: Math.floor(100 / cols), type: D.WidthType.PERCENTAGE }, children: [await para(ri === 0 && r[c] ? `**${r[c]}**` : (r[c] ?? ""))] }))) }),
+            new D.TableRow({ tableHeader: ri === 0, children: await Promise.all(Array.from({ length: cols }, async (_, c) => new D.TableCell({ width: { size: Math.floor(100 / cols), type: D.WidthType.PERCENTAGE }, children: [await para(ri === 0 && r[c] ? `**${r[c]}**` : (r[c] ?? ""), rtlTable ? { rtl: true } : {})] }))) }),
         ),
       );
       body.push(new D.Table({ rows: trs, width: { size: 100, type: D.WidthType.PERCENTAGE }, ...(rtlTable ? { visuallyRightToLeft: true } : {}) }));
@@ -374,8 +380,11 @@ export async function markdownToDocx(title: string, md: string, load: LoadImage)
     else if (/^\s*([-*_])\1\1+\s*$/.test(line)) body.push(new D.Paragraph({ border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: "999999", space: 1 } } }));
     else {
       // A paragraph: its lines up to a blank line or the next block, joined by spaces.
+      // A line that ends with two spaces (or a backslash) is a hard line break.
       let text = line.trim();
-      while (i + 1 < lines.length && lines[i + 1]!.trim() && !/^(#{1,6}\s|```|>|\s*([-*+]|\d+[.)])\s|\s*\|)/.test(lines[i + 1]!)) text += ` ${lines[++i]!.trim()}`;
+      while (i + 1 < lines.length && lines[i + 1]!.trim() && !/^(#{1,6}\s|```|>|\s*([-*+]|\d+[.)])\s|\s*\|)/.test(lines[i + 1]!)) {
+        text += `${/( {2,}|\\)$/.test(lines[i]!) ? "\n" : " "}${lines[++i]!.trim()}`;
+      }
       body.push(await para(text));
     }
   }

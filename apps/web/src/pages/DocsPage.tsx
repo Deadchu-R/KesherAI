@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { strToU8, zipSync } from "fflate";
-import { docxFiles } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { ImportFile } from "../ImportFile";
+import { downloadDocx } from "../word-download";
 import { RichText } from "../RichText";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -242,7 +242,7 @@ function DocEditor({ id }: { id: string }) {
         <span className="grow" />
         <button type="button" onClick={() => printDoc(doc.title, view.current?.innerHTML ?? "")}>⬇ PDF</button>
         <button type="button" onClick={download}>Markdown</button>
-        <button type="button" onClick={() => saveOffice(docxFiles(doc.title, doc.body), `${doc.title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "document"}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>Word</button>
+        <button type="button" onClick={() => downloadDocx(doc.id)}>Word</button>
         <button type="button" className="link small" onClick={() => void copyRich()}>{L("העתקה ל-Word / Google Docs", "Copy for Word / Google Docs")}</button>
       </div>
       <article className="docs-page" ref={view}>
