@@ -1035,8 +1035,9 @@ export class HubClient {
         // The limit resets at 00:00 UTC, but the hub can still answer "limit" for a few minutes after it (2026-11-23:
         // a try at 00:02 waited a whole day). In the first hour after midnight, try again every 15 minutes instead.
         const now = Date.now();
-        const reset = afterUtcMidnight(now);
-        return this.laterAt(reset - now > 23 * 3600_000 ? now + 15 * 60_000 : reset);
+        // Decided by the clock (not the jittered reset), so 01:00–01:05 UTC is never mistaken for the first hour.
+        const firstHour = new Date(now).getUTCHours() === 0;
+        return this.laterAt(firstHour ? now + 15 * 60_000 : afterUtcMidnight(now));
       }
       if (r.status === 503 && (r.data.error === "hub-storage-error" || r.data.error === "hub-unavailable")) {
         this.fail("hub-error", this.stepText("ticket", r));

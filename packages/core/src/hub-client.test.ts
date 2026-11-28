@@ -238,7 +238,7 @@ test("the hub's daily storage limit: shown with its own code, and the next try i
   assert.equal(st.paused, false, "not mistaken for a paused hub");
   assert.equal(tries, 1);
   // In the first hour after 00:00 UTC it tries again in 15 minutes (the hub can lag its reset); otherwise after the reset.
-  const firstHour = afterUtcMidnight(Date.now(), 0) - Date.now() > 23 * 3600_000;
+  const firstHour = new Date().getUTCHours() === 0;
   const next = Date.parse(st.nextRetryAt!);
   assert.ok(firstHour ? next >= Date.now() + 14 * 60_000 && next <= Date.now() + 16 * 60_000 : next >= afterUtcMidnight(Date.now(), 0) - 1000, "waits for the reset");
   assert.equal(s.token, "kh_t", "the pairing is kept");
