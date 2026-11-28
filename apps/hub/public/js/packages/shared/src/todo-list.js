@@ -115,3 +115,40 @@ export function todoReply(items) {
             : "Mark the next step in_progress before you start it.";
     return `${p.done}/${p.total} done.\n${list}\n${next}`;
 }
+/** The longest "Open steps" line appended to a tool result, in characters. */
+export const TODO_OPEN_LINE_MAX = 120;
+/**
+ * The steps still open (pending or in progress), in list order.
+ *
+ * @param items - The list (may be undefined).
+ */
+export function openTodoSteps(items) {
+    return (items ?? []).filter((i) => i.state !== "done");
+}
+/**
+ * One short line for the end of a tool result while the list has open steps ("Open steps: 2/5 — Tests; Docs"), so a small
+ * model keeps its plan in view (Manus-style recitation). At most {@link TODO_OPEN_LINE_MAX} characters.
+ *
+ * @param items - The chat's list.
+ * @returns The line, or undefined when nothing is open.
+ */
+export function todoOpenLine(items) {
+    const open = openTodoSteps(items);
+    if (!items || !open.length)
+        return undefined;
+    const head = `Open steps: ${open.length}/${items.length} — `;
+    const line = head + open.map((i) => i.title).join("; ");
+    return line.length <= TODO_OPEN_LINE_MAX ? line : `${line.slice(0, TODO_OPEN_LINE_MAX - 1)}…`;
+}
+/**
+ * The done-gate message: sent once when the model gives a final answer while the list still has open steps.
+ *
+ * @param items - The chat's list.
+ * @returns The message, or undefined when nothing is open.
+ */
+export function todoOpenNudge(items) {
+    const open = openTodoSteps(items);
+    if (!open.length)
+        return undefined;
+    return `[KesherAI] These steps are still open: ${open.map((i) => `${i.id}. ${i.title}`).join("; ")}. Continue, or mark them done/dropped with a reason.`;
+}
