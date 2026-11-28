@@ -4,7 +4,7 @@ import { desktop } from "../library";
 import { reconnect } from "../Reconnect";
 import { getLocale, t } from "../i18n";
 
-interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[]; building?: string }
+interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[]; building?: string; lastAttempts?: Array<{ at: string; from: string; to: string; exitCode: number | null; ok: boolean; reason: string }> }
 interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string; installFailed?: boolean }
 
 /** Updates, from the side menu: this version, what is new, and installing it. */
@@ -194,6 +194,9 @@ function Updates() {
       {check && check.newCommits.length === 0 && <p className="pill good" style={{ alignSelf: "flex-start" }}>{t("upToDate")}</p>}
       {check?.building && (
         <p className="muted small">{getLocale() === "he" ? `גרסה ${check.building} עדיין נבנית למחשב הזה ב-GitHub. היא תופיע כאן כשתהיה מוכנה (בדרך כלל תוך כמה דקות).` : `Version ${check.building} is still being built for this computer on GitHub. It appears here when it is ready (usually within minutes).`}</p>
+      )}
+      {check?.lastAttempts?.[0] && !check.lastAttempts[0].ok && (
+        <p className="error small" role="status">{getLocale() === "he" ? "ניסיון העדכון האחרון נכשל" : "Last update attempt failed"}: {check.lastAttempts[0].reason}</p>
       )}
       {check && check.newCommits.length > 0 && (
         <>

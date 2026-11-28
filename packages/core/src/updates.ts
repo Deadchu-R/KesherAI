@@ -117,6 +117,24 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/** One try to run an installer, as the updates status lists it (newest first, at most {@link MAX_ATTEMPTS}). */
+export interface UpdateAttempt {
+  /** When the installer ended or was stopped (ISO time). */
+  at: string;
+  /** The version that was running. */
+  from: string;
+  /** The version the installer was meant to bring ("" when unknown). */
+  to: string;
+  /** The installer's exit code; null when it was killed or unknown. */
+  exitCode: number | null;
+  /** True when the installer ended well; flipped to false if the app is still the old version after the grace. */
+  ok: boolean;
+  /** A short reason when it failed. */
+  reason: string;
+}
+/** How many attempts the updates status keeps. */
+export const MAX_ATTEMPTS = 5;
+
 /** How long an installer is allowed to run before it is considered hung and killed. */
 export const INSTALL_TIMEOUT_MS = 15 * 60_000;
 
@@ -156,6 +174,21 @@ export class Updater {
   private installerStartedAt = 0;
   /** When that installer's process ended (ms), if it was told. */
   private installerEndedAt: number | undefined;
+  /** The last installer tries, newest first. */
+  private attempts: UpdateAttempt[] = [];
+
+  /** @returns The last installer tries (newest first, at most 5), for `GET /api/updates`. */
+  lastAttempts(): UpdateAttempt[] {
+    return this.attempts.map((a) => ({ ...a }));
+  }
+
+  /** Records one try and returns it (the list keeps the newest {@link MAX_ATTEMPTS}). */
+  private noteAttempt(to: string, exitCode: number | null, ok: boolean, reason: string): UpdateAttempt {
+    const a: UpdateAttempt = { at: new Date().toISOString(), from: this.packaged?.version ?? "", to, exitCode, ok, reason };
+    this.attempts = [a, ...this.attempts].slice(0, MAX_ATTEMPTS);
+    return a;
+  }
+
   /** The grace after the installer's end (tests make it short). */
   private installGraceMs = INSTALL_GRACE_MS;
 
@@ -197,7 +230,7 @@ export class Updater {
    * @param line - Writes a line to the update log.
    * @param saveLog - Saves the log.
    */
-  private watchInstaller(handle: InstallerHandle, line: (t: string) => void, saveLog: () => Promise<void>): void {
+  private watchInstaller(handle: InstallerHandle, to: string, line: (t: string) => void, saveLog: () => Promise<void>): void {
     const started = this.installerStartedAt;
     // Kill the installer if it runs longer than the timeout (stuck installer).
     const timeoutTimer = setTimeout(() => {
@@ -206,6 +239,7 @@ export class Updater {
       handle.child?.kill("SIGKILL");
       this.installerStartedAt = 0;
       this.installerEndedAt = undefined;
+      this.noteAttempt(to, null, false, `stuck for ${INSTALL_TIMEOUT_MS / 60_000} minutes; stopped`);
       this.installFailed("ההתקנה נתקעה והופסקה — נסה שוב");
       void saveLog();
     }, INSTALL_TIMEOUT_MS);
@@ -219,15 +253,20 @@ export class Updater {
         line(`Installer ended with error (exit code ${code})`);
         this.installerStartedAt = 0;
         this.installerEndedAt = undefined;
+        this.noteAttempt(to, code, false, `the installer ended with exit code ${code}`);
         this.installFailed(`ההתקנה הסתיימה עם קוד שגיאה ${code} — נסה שוב`);
         void saveLog();
         return;
       }
+      // Exit 0 counts as ok for now; if this process is still the old version after the grace, it is flipped to failed.
+      const attempt = this.noteAttempt(to, code, true, "");
       line(`The installer ended (exit code ${code ?? "unknown"}); waiting for the app to restart`);
       const timer = setTimeout(() => {
         if (this.installerStartedAt !== started) return;
         this.installerStartedAt = 0;
         this.installerEndedAt = undefined;
+        attempt.ok = false;
+        attempt.reason = "the installer ended but the app is still the old version";
         line(`The app did not restart after the installer ended (exit code ${code ?? "unknown"}): the install did not finish`);
         this.installFailed(INSTALL_FAILED_TEXT);
         void saveLog();
@@ -481,7 +520,7 @@ export class Updater {
         const handle = await installer.install(file);
         this.installerStartedAt = Date.now();
         this.installerEndedAt = undefined;
-        if (handle && typeof handle === "object" && "exited" in handle) this.watchInstaller(handle, line, saveLog);
+        if (handle && typeof handle === "object" && "exited" in handle) this.watchInstaller(handle, /(\d+\.\d+\.\d+)/.exec(p.name)?.[1] ?? "", line, saveLog);
         line("The installer started; the app restarts when it finishes");
         this.packagedProgress = { ...this.packagedProgress, running: false, step: "Done", finishedAt: new Date().toISOString() } as UpdateProgress;
       } catch (err) {

@@ -1104,7 +1104,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get("/api/version", async () => s.updater.version());
   app.get("/api/updates", async (_req, reply) => {
     try {
-      return await s.updater.check();
+      return { ...(await s.updater.check()), lastAttempts: s.updater.lastAttempts() };
     } catch (err) {
       return reply.code(503).send({ error: (err as Error).message });
     }

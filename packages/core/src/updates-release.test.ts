@@ -156,6 +156,12 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
     assert.equal(st.error, "ההתקנה הסתיימה עם קוד שגיאה 1 — נסה שוב");
     assert.ok(st.log.some((l) => /exit code 1/.test(l)), "the log says how the installer ended");
     assert.deepEqual(told, ["ההתקנה הסתיימה עם קוד שגיאה 1 — נסה שוב"], "the phone is told once");
+    const [a] = u.lastAttempts();
+    assert.equal(a?.ok, false);
+    assert.equal(a?.exitCode, 1);
+    assert.equal(a?.from, "0.4.1");
+    assert.equal(a?.to, "0.4.2");
+    assert.match(a?.reason ?? "", /exit code 1/);
     // Retry is possible again.
     await u.apply();
     for (let i = 0; i < 100 && runs < 2; i++) await new Promise((r) => setTimeout(r, 20));
@@ -164,6 +170,59 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
     srv.closeAllConnections();
     srv.close();
   }
+});
+
+test("exit 0 and the same version: recorded as ok first, then as failed after the grace, and the lock is lifted", async () => {
+  const srv = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+    if (req.url === "/repos/o/r/releases?per_page=10") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify([{ tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "", assets: [...NAMES.slice(0, 4), "latest.yml", "latest-mac.yml", "latest-linux.yml"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) }]));
+    }
+    if (req.url?.startsWith("/dl/latest")) return res.end(NAMES.map((n) => `  - url: ${n}\n    sha512: ${HELLO_SHA512}`).join("\n"));
+    if (req.url?.startsWith("/dl/")) return res.end("hello");
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const api = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  let runs = 0;
+  let end!: (code: number | null) => void;
+  const exited = new Promise<number | null>((r) => (end = r));
+  const u = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.1", repo: "o/r", api, install: async () => { runs++; return { exited }; } });
+  u.setInstallGrace(60);
+  const told: string[] = [];
+  u.onInstallFailed = (e) => told.push(e);
+  try {
+    await u.check();
+    await u.apply();
+    for (let i = 0; i < 100 && (u.status().running || runs === 0); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 1);
+    await assert.rejects(u.apply(), /being installed/, "locked while the installer runs");
+    end(0);
+    for (let i = 0; i < 100 && u.lastAttempts().length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(u.lastAttempts()[0]?.ok, true, "exit 0 counts as ok until the grace is over");
+    for (let i = 0; i < 100 && !u.status().installFailed; i++) await new Promise((r) => setTimeout(r, 20));
+    const [a] = u.lastAttempts();
+    assert.equal(u.lastAttempts().length, 1);
+    assert.equal(a?.ok, false);
+    assert.equal(a?.exitCode, 0);
+    assert.match(a?.reason ?? "", /still the old version/);
+    assert.equal(told.length, 1);
+    // Retry is possible again.
+    await u.apply();
+    for (let i = 0; i < 100 && runs < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 2);
+  } finally {
+    srv.closeAllConnections();
+    srv.close();
+  }
+});
+
+test("lastAttempts keeps the newest 5, newest first", () => {
+  const u = new Updater("/nonexistent", { version: "0.4.1", repo: "o/r", install: async () => undefined });
+  const note = (u as unknown as { noteAttempt(to: string, c: number | null, ok: boolean, r: string): void }).noteAttempt.bind(u);
+  for (let i = 1; i <= 7; i++) note(`0.4.${i}`, 1, false, "x");
+  assert.deepEqual(u.lastAttempts().map((x) => x.to), ["0.4.7", "0.4.6", "0.4.5", "0.4.4", "0.4.3"]);
 });
 
 test("noteRunVersion: says 'updated from' once after an update; first start and a downgrade say nothing", async () => {

@@ -4,8 +4,8 @@
  "boards": [
   {
    "id": "UpdateInstallFailed",
-   "title": "עדכונים: ההתקנה לא הסתיימה — המתקין נגמר והאפליקציה לא חזרה: \"ההתקנה לא הסתיימה — נסה שוב\", הנעילה משתחררת, ויש כפתור נסה שוב",
-   "titleEn": "Updates: the installation did not finish — the installer ended and the app did not come back: the lock is lifted, with Retry",
+   "title": "עדכונים: ההתקנה לא הסתיימה — המתקין נגמר והאפליקציה לא חזרה: \"ההתקנה לא הסתיימה — נסה שוב\", הנעילה משתחררת, ויש כפתור נסה שוב · שורה: ניסיון העדכון האחרון נכשל + הסיבה",
+   "titleEn": "Updates: the installation did not finish — the installer ended and the app did not come back: the lock is lifted, with Retry · plus the line: Last update attempt failed + the reason",
    "route": "#/updates",
    "height": {
     "desktop": 760,
@@ -25,6 +25,25 @@
        "[41.3 s] The installer started; the app restarts when it finishes",
        "[96.5 s] The installer ended (exit code 1); waiting for the app to restart",
        "[216.5 s] The app did not restart after the installer ended (exit code 1): the install did not finish"
+      ]
+     }
+    },
+    {
+     "url": "**/api/updates",
+     "json": {
+      "version": "0.6.443",
+      "install": "packaged",
+      "newCommits": [],
+      "localChanges": [],
+      "lastAttempts": [
+       {
+        "at": "2026-11-27T06:30:00Z",
+        "from": "0.6.443",
+        "to": "0.6.444",
+        "exitCode": 1,
+        "ok": false,
+        "reason": "the installer ended with exit code 1"
+       }
       ]
      }
     }
