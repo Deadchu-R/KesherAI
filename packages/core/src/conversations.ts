@@ -32,7 +32,7 @@ import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
 import { asksToBrowse, CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
-import { intentNote, isSimpleTurn, missingNote, musicNote, SEARCH_TOOLS, ToolRouter, type Route } from "./tool-router.js";
+import { intentNote, isSimpleTurn, missingNote, musicNote, scheduleNote, SEARCH_TOOLS, ToolRouter, type Route } from "./tool-router.js";
 import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
@@ -948,7 +948,7 @@ export class ConversationManager {
         // "Auto": the router picks this message's model first (a swap of the big local model when clearly better).
         if (this.deps.library.summary(id)?.auto && (this.deps.library.summary(id)?.kind ?? conversation.kind) === "chat") await this.autoRoute(id, text, r, signal).catch(() => undefined);
         const missing = missingNote(r.missing);
-        const note = [missing, intentNote(r.intent, r.tools), musicNote(r.music, r.tools)].filter(Boolean).join("\n") || undefined;
+        const note = [missing, intentNote(r.intent, r.tools), musicNote(r.music, r.tools), scheduleNote(r.recurring, r.tools)].filter(Boolean).join("\n") || undefined;
         // Model size per turn: a simple message on a local chat goes to the small model loaded beside the main one.
         const kind = this.deps.library.summary(id)?.kind ?? conversation.kind;
         const small = this.deps.config.smallTurns !== false && kind !== "code" && toolSearch() && isSimpleTurn(text, r.groups) ? this.deps.smallModel?.() : undefined;

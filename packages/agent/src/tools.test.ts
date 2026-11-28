@@ -148,3 +148,33 @@ describe("changeSummary and the write tools' results", () => {
     assert.equal(await readFile(join(dir, "a.txt"), "utf8"), "one\n2\nthree\n");
   });
 });
+
+describe("read_file on a large file read whole", () => {
+  it("returns the head, the total and how to read on; a small file stays whole; a range is honoured", async () => {
+    const { mkdtemp, writeFile: wf, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join: j } = await import("node:path");
+    const { CODE_TOOLS, LARGE_FILE_HEAD, LARGE_FILE_LINES } = await import("./tools.js");
+    const dir = await mkdtemp(j(tmpdir(), "kesher-read-"));
+    try {
+      await wf(j(dir, "big.log"), Array.from({ length: 5000 }, (_, i) => `line ${i + 1}`).join("\n"));
+      await wf(j(dir, "small.txt"), Array.from({ length: LARGE_FILE_LINES }, (_, i) => `row ${i + 1}`).join("\n"));
+      const tool = CODE_TOOLS.find((t) => t.spec.name === "read_file")!;
+      const ctx = { workspace: dir } as unknown as Parameters<typeof tool.run>[1];
+      const whole = await tool.run({ path: "big.log" }, ctx);
+      assert.match(whole.output, new RegExp(`${LARGE_FILE_HEAD}  line ${LARGE_FILE_HEAD}\\b`));
+      assert.doesNotMatch(whole.output, /line 201\b/);
+      assert.match(whole.output, /This file has 5000 lines; only the first 200 are shown/);
+      assert.match(whole.output, /offset 201/);
+      const small = await tool.run({ path: "small.txt" }, ctx);
+      assert.match(small.output, new RegExp(`row ${LARGE_FILE_LINES}$`));
+      assert.doesNotMatch(small.output, /only the first/);
+      const part = await tool.run({ path: "big.log", offset: 4000, limit: 100 }, ctx);
+      assert.match(part.output, /line 4000\b/);
+      assert.doesNotMatch(part.output, /only the first/);
+      assert.match(CODE_TOOLS.find((t) => t.spec.name === "read_file")!.spec.description, /offset and limit/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

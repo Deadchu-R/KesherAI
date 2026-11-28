@@ -21,7 +21,7 @@ import { applyTodo, latestTodo, takeSteers, todoOpenLine, todoProgress, todoRepl
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { TURN_SHAPE_PROMPT, finishFollowUp, shapeFollowUp, silentToolStart } from "./turn-shape.js";
+import { SAY_FIRST_NUDGE, TURN_SHAPE_PROMPT, finishFollowUp, needsSayFirst, shapeFollowUp, silentToolStart } from "./turn-shape.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
@@ -1443,6 +1443,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       const finishUsed = new Set<string>();
       // Whether this message's first output already started a tool (to record a start with no sentence before it).
       let firstOutputSeen = false;
+      // The says-first nudge (turn-shape.ts sayFirstNudge): asked at most once per message.
+      let sayNudged = false;
       let reviews = 0;
       const team = this.team?.() ?? [];
       const planner = team.find((m) => m.role === "planner");
@@ -1525,6 +1527,13 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           this.push({ type: "note", text: "The model ran out of room while thinking; it was asked to answer briefly." });
           if (result.text.trim()) this.messages.push({ role: "assistant", content: result.text });
           this.messages.push({ role: "user", content: "[KesherAI] You ran out of room while thinking. Do not think any more: answer briefly now, or make the next tool call with short arguments." });
+          continue;
+        }
+        // "One short sentence before the first tool" (turn-shape.ts): a local model that starts with a bare tool call is
+        // asked once more, before the call runs. Only the first step, only when "Keep answers short like Claude" applies.
+        if (!firstOutputSeen && !sayNudged && step === 0 && !quick && !lastStep && !abort.signal.aborted && this.shortAnswers?.() && needsSayFirst(result.text, result.toolCalls.map((c) => c.name))) {
+          sayNudged = true;
+          this.messages.push({ role: "user", content: SAY_FIRST_NUDGE });
           continue;
         }
         if (!firstOutputSeen) {

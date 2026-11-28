@@ -67,3 +67,9 @@ test("approval auto-answer allows only the fixtures", () => {
   assert.equal(fixtureDecision({ name: "browser_open", input: { url: `${origin}/` } }, { folder }).decision, "deny");
   assert.match(fixtureDecision({ name: "send_email", input: {} }, scope).why, /^Chat check:/);
 });
+
+test("fixtureDecision: the schedule_task confirm card is answered (no), so the turn goes on and nothing is saved", () => {
+  const d = fixtureDecision({ name: "schedule_task", input: { name: "Water", when: "daily 09:00", prompt: "drink" } }, { folder: "/tmp/x" });
+  assert.equal(d.decision, "deny");
+  assert.match(d.why, /nothing is saved during a check/);
+});

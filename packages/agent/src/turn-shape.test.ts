@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, silentToolStart, stripCode } from "./turn-shape.js";
+import { asksPermission, finishFollowUp, hasStepRecap, needsShortening, needsHebrewRewrite, shapeFollowUp, needsSayFirst, silentToolStart, stripCode } from "./turn-shape.js";
 
 const lines = (n: number, s = "line of text") => Array.from({ length: n }, () => s).join("\n");
 
@@ -81,4 +81,12 @@ test("finish follow-up: open todo steps first, each kind once, never when skippe
   assert.equal(b?.kind, "act");
   assert.match(b!.message, /already asked for this — do it/);
   assert.equal(finishFollowUp({ ...base, todo: undefined, answer: "Shall I start?", used: new Set(["act"]) }), undefined);
+});
+
+test("says-first: a bare first tool call is asked again; words, no tools, or a lone ask_user are not", () => {
+  assert.equal(needsSayFirst("", ["read_file"]), true);
+  assert.equal(needsSayFirst("  ", ["ask_user", "read_file"]), true);
+  assert.equal(needsSayFirst("I'll read it.", ["read_file"]), false);
+  assert.equal(needsSayFirst("", []), false);
+  assert.equal(needsSayFirst("", ["ask_user"]), false);
 });

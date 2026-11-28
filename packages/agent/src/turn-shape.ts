@@ -11,7 +11,7 @@ import { todoOpenNudge, type TodoItem } from "@kesher/shared";
 /** The block offered on turns that have tools (session.ts). Short, English, model-agnostic. */
 export const TURN_SHAPE_PROMPT = [
   "How to shape a turn:",
-  "- Before your first tool call, write one short sentence saying what you are about to do.",
+  "- ALWAYS write one short sentence in your message before your first tool call, saying what you are about to do (for example \"I'll read notes.txt.\"). A tool call with no words before it is wrong.",
   "- A clear request: start at once. Do not ask \"shall I?\" and do not wait for approval of a plan.",
   "- Only when the request is both ambiguous and expensive: ask ONE question first, with ask_user and options.",
   "- Between tool calls say almost nothing.",
@@ -156,6 +156,20 @@ export function finishFollowUp(o: { answer: string; userText: string; todo?: rea
     return { kind: "act", message: "[KesherAI] The user already asked for this — do it. Do not ask for permission; use your tools now and finish with the outcome." };
   }
   return undefined;
+}
+
+/** The line a local model gets when its first step was a bare tool call (asked once per message, see {@link needsSayFirst}). */
+export const SAY_FIRST_NUDGE = "[KesherAI] Start again: write one short sentence saying what you are about to do (in the user's language), then make the tool call.";
+
+/**
+ * Whether a first model step should be asked again: it started tools and wrote no words, and at least one call is real
+ * work (a lone question to the user needs no opening sentence). No text is ever made up for the model.
+ *
+ * @param text - What the model wrote in this step.
+ * @param toolNames - The tools it called.
+ */
+export function needsSayFirst(text: string, toolNames: readonly string[]): boolean {
+  return silentToolStart(text, toolNames.length) && toolNames.some((n) => n !== "ask_user");
 }
 
 /** Whether a turn's first output starts a tool with no text before it (only recorded, never fixed). */

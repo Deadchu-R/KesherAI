@@ -379,7 +379,7 @@ export function timerTools(timers: ChatTimers, convId: string, notify: (title: s
       spec: {
         name: "set_timer",
         description:
-          "Bring this chat back later: at the time, `prompt` is sent to this chat as a message and you answer it then (e.g. check a download, a build or a page again, or remind the user). Use it when the user asks to be reminded or to check something later. Give `in` (\"45m\", \"2 hours\", \"1d\") or `at` (\"2026-11-15T09:00\", this computer's time). The user sees waiting timers in the chat and can cancel them.",
+          "Bring this chat back later: at the time, `prompt` is sent to this chat as a message and you answer it then (e.g. check a download, a build or a page again, or remind the user). Use it when the user asks to be reminded or to check something ONCE, later. For anything that repeats (\"every morning\", \"each day\", \"כל יום\", \"כל בוקר\") use schedule_task instead. Give `in` (\"45m\", \"2 hours\", \"1d\") or `at` (\"2026-11-15T09:00\", this computer's time). The user sees waiting timers in the chat and can cancel them.",
         inputSchema: {
           type: "object",
           properties: {

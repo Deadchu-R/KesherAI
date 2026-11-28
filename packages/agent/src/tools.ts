@@ -146,6 +146,10 @@ export interface AgentTool {
 }
 
 const MAX_READ_LINES = 2000;
+/** A file longer than this (lines) read with no offset and no limit returns only its first {@link LARGE_FILE_HEAD} lines. */
+export const LARGE_FILE_LINES = 600;
+/** How many lines a large file shows when read whole (with the total and how to read on). */
+export const LARGE_FILE_HEAD = 200;
 
 /**
  * Shortens long tool output, keeping the start and the end, which is where
@@ -265,7 +269,7 @@ const readFileTool: AgentTool = {
   risk: "read",
   spec: {
     name: "read_file",
-    description: "Read a text file from the project. Returns numbered lines. For big files, read a range with offset and limit.",
+    description: `Read a text file from the project. Returns numbered lines. A file of more than ${LARGE_FILE_LINES} lines is not returned whole: you get its first ${LARGE_FILE_HEAD} lines and the total line count, so read the part you need with offset and limit, or find it first with search (a log, a big data file: search for the word, then read around that line).`,
     inputSchema: {
       type: "object",
       properties: {
@@ -287,7 +291,9 @@ const readFileTool: AgentTool = {
     const lines = text.split(/\r?\n/);
     const start = Math.max(1, Number(input.offset ?? 1));
     // A tiny window makes a model page through a big file in dozens of steps and lose its place: at least MIN_READ_LINES.
-    const count = Math.max(MIN_READ_LINES, Number(input.limit ?? MAX_READ_LINES) || MAX_READ_LINES);
+    // A big file asked for whole (no offset, no limit) is capped like Claude's Read: the head, the total, and how to go on.
+    const capped = input.offset === undefined && input.limit === undefined && lines.length > LARGE_FILE_LINES;
+    const count = capped ? LARGE_FILE_HEAD : Math.max(MIN_READ_LINES, Number(input.limit ?? MAX_READ_LINES) || MAX_READ_LINES);
     const slice = lines.slice(start - 1, start - 1 + count);
     // Whole lines up to the output budget, then where to read on. (Cutting the middle out, as other tools' output is,
     // hid exactly the part asked for in files with long lines, and local models read the same lines again and again.)
@@ -303,7 +309,8 @@ const readFileTool: AgentTool = {
     const more = next - 1 < lines.length && (out.length < slice.length || start - 1 + count < lines.length) ? `\n… ${lines.length - (next - 1)} more lines: read on with offset ${next}` : "";
     // A big file read from its start gets its outline first (symbols with lines), so the next read can go straight to a part.
     const outline = input.offset === undefined && lines.length >= OUTLINE_MIN_LINES ? fileOutline(text, str(input, "path")) : "";
-    return { output: (outline ? `${outline}\n\n` : "") + out.join("\n") + more };
+    const capNote = capped ? `\n[This file has ${lines.length} lines; only the first ${out.length} are shown. Read a part with offset and limit, or use search to find what you need.]` : "";
+    return { output: (outline ? `${outline}\n\n` : "") + out.join("\n") + more + capNote };
   },
 };
 

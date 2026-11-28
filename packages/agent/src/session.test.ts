@@ -1111,6 +1111,30 @@ test("turn shape: a long recap answer is rewritten once, and only when the setti
   }
 });
 
+test("turn shape: a first step with a bare tool call is asked once more, before the call runs, only when the setting applies", async () => {
+  for (const on of [true, false]) {
+    const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+    await writeFile(join(workspace, "notes.txt"), "flour\n");
+    const call = { name: "read_file", arguments: { path: "notes.txt" } };
+    // On: the bare call is dropped (never run), the retry opens with a sentence; the model's words are never made up.
+    const { model, seen } = scripted([{ calls: [call] }, { text: "I'll read notes.txt.", calls: [call] }, { text: "flour" }]);
+    const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", shortAnswers: () => (on ? { maxLines: 25 } : undefined) });
+    session.send("Read notes.txt");
+    await waitFor(session, (e) => e.type === "assistant" && e.text === "flour");
+    const calls = session.events.filter((e) => e.type === "tool_call");
+    if (on) {
+      assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /write one short sentence/);
+      assert.equal(calls.length, 1, "the bare call was not run");
+      const said = session.events.findIndex((e) => e.type === "assistant" && e.text.startsWith("I'll"));
+      assert.ok(said >= 0 && said < session.events.findIndex((e) => e.type === "tool_call"), "words come before the tool");
+    } else {
+      assert.equal(seen.length >= 2 ? JSON.stringify(seen[1]!.messages.at(-1)).includes("write one short sentence") : false, false);
+      assert.equal(calls.length >= 1, true);
+    }
+    // The first step already had words: no nudge at all.
+  }
+});
+
 test("turn shape: a Hebrew user gets one Hebrew rewrite request for a Latin answer", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
   const en = "I created the file and the tests pass. The summary is ready for you to read now.";
@@ -1125,7 +1149,7 @@ test("turn shape: a Hebrew user gets one Hebrew rewrite request for a Latin answ
 test("done-gate: a final answer with open todo steps is sent back once; tool results carry the open steps", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
   const { model, seen } = scripted([
-    { calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt", state: "in_progress" }, { title: "Check it" }] } }] },
+    { text: "On it.", calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt", state: "in_progress" }, { title: "Check it" }] } }] },
     { calls: [{ name: "list_files", arguments: { path: "." } }] },
     { text: "All finished." },
     { text: "Still finished." },
@@ -1141,7 +1165,7 @@ test("done-gate: a final answer with open todo steps is sent back once; tool res
 test("done-gate: off without the setting", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
   const { model, seen } = scripted([
-    { calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt" }] } }] },
+    { text: "On it.", calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt" }] } }] },
     { text: "All finished." },
   ]);
   const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });

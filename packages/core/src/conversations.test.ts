@@ -30,7 +30,9 @@ const scriptedFactory: ProviderFactory = {
         return { text: /Acme/.test(last.content) ? '{"add":[{"topic":"Work","fact":"Works at Acme"}],"forget":[]}' : '{"add":[],"forget":[]}', toolCalls: [] };
       }
       if (last.role === "user" && /file/.test(last.content) && req.tools.some((t) => t.name === "write_file")) {
-        return { text: "", toolCalls: [{ id: "w1", name: "write_file", arguments: { path: "out.txt", content: "from the agent" } }] };
+        // One short sentence first, like Claude (the session asks local models for it once otherwise).
+        onText?.("I'll write the file.");
+        return { text: "I'll write the file.", toolCalls: [{ id: "w1", name: "write_file", arguments: { path: "out.txt", content: "from the agent" } }] };
       }
       const text = last.role === "tool" ? `Tool said: ${last.content}` : `You said: ${last.content}`;
       onText?.(text);
@@ -119,7 +121,7 @@ test("code conversation in a project: approval over HTTP writes the file", async
 
     const final = await until(async () => {
       const r = (await app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string; text?: string }> };
-      return r.events.find((e) => e.type === "assistant");
+      return r.events.find((e) => e.type === "assistant" && /^Tool said/.test(e.text ?? ""));
     });
     assert.match(final.text ?? "", /Tool said: Created out.txt/);
 

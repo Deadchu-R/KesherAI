@@ -40,6 +40,8 @@ export interface Route {
   music?: boolean;
   /** The message only asks to make something (see {@link asksToCreate}): web_search is held back for it. */
   noSearch?: boolean;
+  /** The message asks for something that repeats (see {@link asksRecurring}): schedule_task, not a one-time timer. */
+  recurring?: boolean;
 }
 
 /** The tools held back from a model for a pure create request: it needs no search, and a weak model would use it. */
@@ -99,6 +101,33 @@ export function musicNote(music: boolean | undefined, tools: readonly string[]):
   if (!music) return undefined;
   if (tools.includes("make_music")) return "[KesherAI] This asks for a song or music: write the lyrics (in the language the user wants) and call make_music. Do not search the web for the song, and do not call generate_image (a cover picture is made by make_music itself).";
   return "[KesherAI] This asks for a song or music, but make_music is not available in this chat (ComfyUI is not installed or the Nodes part is off). Say so in one short sentence and call offer_install with \"comfyui\"; do not draw pictures instead and do not search the web for it.";
+}
+
+/** Something asked to repeat: "every morning", "each day", "daily", "weekdays", "כל בוקר", "בכל יום", "מדי שבוע"… */
+const RECURRING_WORDS = /\b(?:every|each)\s+(?:\d+\s+)?(?:morning|day|evening|night|week|weekday|month|hour|hours|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend)s?\b|\b(?:daily|weekly|hourly|weekdays|recurring|on a schedule)\b|(?<![א-ת])(?:ב)?כל\s+(?:בוקר|יום|ערב|לילה|שבוע|שעה|חודש|יום\s+(?:ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)|\d+\s+שעות)|מדי\s+(?:בוקר|יום|ערב|לילה|שבוע|שעה|חודש)|כל\s+ימות\s+השבוע|ימי\s+חול/iu;
+
+/**
+ * Whether a message asks for something that repeats on a schedule ("every morning at 9 remind me…", "כל בוקר
+ * תזכיר לי…"). Such a request is a scheduled task, never a one-time timer.
+ *
+ * @param text - The user's message.
+ * @returns True when a repeat is asked for.
+ */
+export function asksRecurring(text: string): boolean {
+  return RECURRING_WORDS.test(text);
+}
+
+/**
+ * The line the model reads when a message asks for a repeat and the chat has schedule_task: call it (it shows the user
+ * a card to save), do not answer with a promise and do not use set_timer, which fires once.
+ *
+ * @param recurring - From {@link asksRecurring}.
+ * @param tools - The tools routed for this message.
+ * @returns The line, or undefined.
+ */
+export function scheduleNote(recurring: boolean | undefined, tools: readonly string[]): string | undefined {
+  if (!recurring || !tools.includes("schedule_task")) return undefined;
+  return '[KesherAI] This asks for something that repeats: call schedule_task now (name, prompt, when such as "daily 09:00", "weekdays 08:30", "weekly mon 18:00"). Do not use set_timer (it fires once) and do not just promise to remind them.';
 }
 
 const SYSTEM = `You route a user's request to tool groups. Answer with JSON only: {"groups": [...]} with 0 to 3 ids from the list, the ones the request needs, most needed first. Requests may be in Hebrew or English. Groups:\n${CHAT_TOOL_GROUPS.map((g) => `- ${g.id}: ${g.about}`).join("\n")}`;
@@ -181,7 +210,6 @@ export class ToolRouter {
     // searched for the song's name and drew covers; make_music was never called).
     const picked = (await this.groups(text, useModel, signal)).filter((g) => !music || (g !== "images" && g !== "web")).filter((g) => !noSearch || g !== "web");
     const groups = [...new Set([...picked, ...wanted])].filter((g) => !off.includes(g));
-    const tools = available.filter((n) => { const g = groupOfTool(n); return !!g && groups.includes(g); }).sort();
     const missing = groups.flatMap((id) => {
       const g = CHAT_TOOL_GROUPS.find((x) => x.id === id);
       return g?.needs && !available.some((n) => g.tools.test(n)) ? [{ group: id, needs: g.needs }] : [];
@@ -189,7 +217,11 @@ export class ToolRouter {
     // Music comes from ComfyUI (ACE-Step): without make_music the install is offered, even when speech tools exist.
     const noMusic = music && groups.includes("audio") && !available.includes("make_music");
     if (noMusic) missing.push({ group: "audio", needs: "comfyui" });
-    return { groups, tools, missing, ...(intent ? { intent } : {}), ...(music ? { music } : {}), ...(noSearch ? { noSearch } : {}) };
+    // A repeat is asked for: the timers group comes along even when no group word matched (e.g. "each night").
+    const recurring = asksRecurring(text) && !off.includes("timers");
+    if (recurring && !groups.includes("timers")) groups.push("timers");
+    const tools = available.filter((n) => { const g = groupOfTool(n); return !!g && groups.includes(g); }).sort();
+    return { groups, tools, missing, ...(intent ? { intent } : {}), ...(music ? { music } : {}), ...(noSearch ? { noSearch } : {}), ...(recurring ? { recurring } : {}) };
   }
 }
 

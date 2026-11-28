@@ -153,6 +153,9 @@ export function fixtureDecision(req: ApprovalRequest, scope: FixtureScope): { de
     // A step on the page already open (click, type, read): the card's site must be the fixture server.
     return req.scope === fixtureHost ? allow("fixture page") : deny("only the local fixture pages are allowed.");
   }
+  // A confirm card for a scheduled task (schedule_task): the call itself is what the check judges. Nothing is saved
+  // during a check (a real schedule would keep running on the PC), so the card is always answered with "no".
+  if (req.name === "schedule_task") return deny("nothing is saved during a check; the call was seen, that is enough.");
   if (req.name === "run_command") {
     if (!scope.folder || !req.folder || !sameFolder(req.folder, scope.folder)) return deny("commands may run only in the check's folder.");
     const command = String(req.input.command ?? "").trim();

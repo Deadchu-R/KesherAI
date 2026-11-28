@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineAsk, flowIntent, intentNote, isSimpleTurn, missingNote, musicNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
+import { asksRecurring, scheduleNote, engineAsk, flowIntent, intentNote, isSimpleTurn, missingNote, musicNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
 
 const available = ["browser_open", "document", "generate_image", "read_file", "unity_scene", "web_search"];
 
@@ -129,4 +129,24 @@ test("asking to open an address in the browser routes to the browser and holds w
   assert.ok(asksToBrowse("open example.com/pricing and tell me the cheapest plan"));
   assert.equal(asksToBrowse("מה השגיאה 40161 של Ably?"), false, "no address: search stays");
   assert.equal(asksToBrowse("summarise https://example.com/a for me"), false, "an address without an open verb is left to the router");
+});
+
+test("recurring asks: English and Hebrew phrases route to timers and schedule_task, a one-time reminder does not", async () => {
+  const repeats = ["Every morning at 9 remind me to drink a glass of water.", "each night check the build", "remind me daily", "כל בוקר ב-9 תזכיר לי לשתות מים", "בכל יום תבדוק את המייל", "מדי שבוע תסכם לי", "weekdays at 8:30 send me the news", "every 6 hours check the server"];
+  const once = ["Remind me in 20 minutes to call mom", "תזכיר לי עוד שעה להתקשר", "what is the daily bread in Hebrew"];
+  const router = new ToolRouter();
+  const tools = ["schedule_task", "set_timer", "read_file"];
+  for (const t of repeats) {
+    assert.equal(asksRecurring(t), true, t);
+    const r = await router.route(t, tools, [], false);
+    assert.ok(r.tools.includes("schedule_task"), `offers schedule_task: ${t}`);
+    assert.equal(r.recurring, true, t);
+    assert.match(scheduleNote(r.recurring, r.tools)!, /call schedule_task/);
+  }
+  assert.equal(asksRecurring(once[0]!), false);
+  assert.equal(asksRecurring(once[1]!), false);
+  // The user switched timers off for the chat: not offered, no note.
+  const off = await router.route(repeats[0]!, tools, ["timers"], false);
+  assert.ok(!off.tools.includes("schedule_task"));
+  assert.equal(scheduleNote(off.recurring, off.tools), undefined);
 });
