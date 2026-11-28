@@ -19,7 +19,7 @@ const PARTS: Record<string, { files: Array<[string, string]> }> = {
 };
 
 /**
- * The phone editor's media prep (see `media-prep.ts`): `POST /api/media/prep` starts (or finds in the cache) the prep
+ * The phone editor's media prep (see `media-prep.ts`): `POST /api/media/prep` (a chat's `conversation` + `path`, or a made file's `asset` id) starts (or finds in the cache) the prep
  * of one file of a chat's folder; `GET /api/media/prep/:id` is its status; `GET /api/media/:id/(proxy|sprite|sprite.json|peaks)`
  * send the parts, with HTTP Range. Only this PC's own data folder is read; a path is checked against the chat's folder
  * as the other file routes do, and an id is a hash, never a path. From the phone these go through the usual device key.
@@ -34,15 +34,22 @@ export async function mediaPrepRoutes(app: FastifyInstance, s: KesherServices): 
   let tail: Promise<unknown> = Promise.resolve();
   const dirOf = (id: string): string => join(root, id);
 
-  app.post<{ Body: { conversation?: string; path?: string } }>("/api/media/prep", async (req, reply) => {
-    const c = await s.library.getConversation(String(req.body?.conversation ?? ""));
-    const folder = c ? s.conversations.workspaceOf(c) : undefined;
-    if (!folder) return reply.code(404).send({ error: "Conversation not found" });
+  app.post<{ Body: { conversation?: string; path?: string; asset?: string } }>("/api/media/prep", async (req, reply) => {
     let full: string;
-    try {
-      full = await resolveInWorkspace(folder, req.body?.path ?? "");
-    } catch (err) {
-      return reply.code(400).send({ error: (err as Error).message });
+    if (req.body?.asset) {
+      // A made video or sound (not in a chat's folder yet): its own file in the asset store, found by id.
+      const rec = await s.assets.recordOf(String(req.body.asset));
+      if (!rec) return reply.code(404).send({ error: "Asset not found" });
+      full = s.assets.fileOf(rec);
+    } else {
+      const c = await s.library.getConversation(String(req.body?.conversation ?? ""));
+      const folder = c ? s.conversations.workspaceOf(c) : undefined;
+      if (!folder) return reply.code(404).send({ error: "Conversation not found" });
+      try {
+        full = await resolveInWorkspace(folder, req.body?.path ?? "");
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
     }
     if (!(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "File not found" });
     const id = await mediaKey(full);

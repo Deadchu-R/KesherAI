@@ -101,6 +101,9 @@ export function OpenInChat({ convId, name, path, resolve, auto = false }: { conv
  */
 export function SurfaceOpenCard({ convId, path, live = false }: { convId: string; path: string; live?: boolean }) {
   const name = path.split("/").pop() ?? path;
+  // A video or a sound shows its own card (poster or waveform, play right there) when its surface has one.
+  const own = BUILT_IN.find((s) => s.card && s.fileTypes?.test(name));
+  if (own) return <SurfaceCard item={{ surface: own.id, kind: own.kinds[0] ?? "", id: path, path, convId, title: name }} live={live} />;
   return (
     <div className="item-card surface-open-card">
       <span className="item-card-text">

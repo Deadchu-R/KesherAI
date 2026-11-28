@@ -32,9 +32,17 @@ import { BLUEPRINT_TOOLS, blueprintFromResult } from "./blueprint-surface";
 import { IMAGE_FILES, imageFromResult, parseRegionSelection, regionMessage } from "./image-surface";
 import { MODEL_FILES, modelFromResult, partAskMessage } from "./model-surface";
 import { ENGINE_TITLE, SCENE_TOOLS, objectAskMessage, sceneFromResult } from "./scene-surface";
+import { soundSurface, videoSurface } from "./media-surface";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
 export type SurfacePhone = "edit" | "view+ask" | "open-on-pc";
+
+/** What a tool step carries besides its text: the ids of the pictures, videos and sounds it made. */
+export interface ResultExtra {
+  assetIds?: readonly string[];
+  videoIds?: readonly string[];
+  audioIds?: readonly string[];
+}
 
 /** One item open in a surface: which surface, its kind and id, the chat, a title, and a chat file when it is one. */
 export interface SurfaceItem {
@@ -97,7 +105,7 @@ export interface ChatSurface {
   /** The plugin whose page it shows; registered only once that plugin's pages are loaded. */
   plugin?: string;
   /** Which item a tool step made or opened, from its result. */
-  fromResult?(tool: string, ok: boolean, output: string, extra?: { assetIds?: readonly string[] }): Omit<SurfaceItem, "surface"> | undefined;
+  fromResult?(tool: string, ok: boolean, output: string, extra?: ResultExtra): Omit<SurfaceItem, "surface"> | undefined;
   /** A small preview in the message (no heavy dependencies); none: the chat's plain card. */
   card?: SurfaceLoader<SurfaceCardProps>;
   /** The panel (loaded when it first opens). */
@@ -271,6 +279,9 @@ export const BUILT_IN: readonly ChatSurface[] = [
   BLUEPRINT_SURFACE,
   MODEL_SURFACE,
   SCENES_SURFACE,
+  // Video and sound open in their own surface (player, waveform, ask); the editor plugins are its "Full editor".
+  videoSurface,
+  soundSurface,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 
@@ -301,7 +312,7 @@ export function buildSurfaces(defs: readonly ChatSurface[], inst: Installed): Ch
  * @param tool - The tool's name; `ok` and `output` its result; `extra` what the step carries besides its text (its picture ids).
  * @returns The item with its surface, or undefined.
  */
-export function itemFromResult(list: readonly ChatSurface[], tool: string, ok: boolean, output: string, extra?: { assetIds?: readonly string[] }): SurfaceItem | undefined {
+export function itemFromResult(list: readonly ChatSurface[], tool: string, ok: boolean, output: string, extra?: ResultExtra): SurfaceItem | undefined {
   for (const s of list) {
     const it = s.fromResult?.(tool, ok, output, extra);
     if (it) return { surface: s.id, ...it };

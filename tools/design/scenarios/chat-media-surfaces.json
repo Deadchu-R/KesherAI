@@ -1,0 +1,359 @@
+{
+ "group": "צ'אט · Chat",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "ChatVideoSurface",
+   "title": "וידאו בצ'אט: כרטיס עם פוסטר ואורך; בפאנל נגן, סימון תחילה וסוף, חיתוך, עורך מלא ושאלה על הקטע. בטלפון: צפייה ושאלה, \"עריכה\" כבויה",
+   "titleEn": "Video in chat: card with poster and length; panel with player, in/out marks, trim, Full editor, ask about a range. Phone: watch and ask, Edit disabled",
+   "route": "#/c/c9",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c9",
+     "method": "GET",
+     "json": {
+      "id": "c9",
+      "projectId": null,
+      "title": "קליפ של שועל ביער",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "30m"
+      },
+      "updatedAt": {
+       "$ago": "2m"
+      },
+      "messageCount": 4,
+      "session": {
+       "id": "c9",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "user",
+        "text": "תכין לי קליפ קצר של שועל רץ ביער ותפתח אותו"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "tool_call",
+        "callId": "o1c",
+        "name": "open_in_chat",
+        "input": {
+         "path": "shared/fox-run.mp4"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "tool_result",
+        "callId": "o1c",
+        "name": "open_in_chat",
+        "ok": true,
+        "output": "Opened in the chat: shared/fox-run.mp4\nThe user sees it in the side panel, in the installed tool for its type (or is offered to install that tool)."
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הקליפ מוכן ופתוח בצד. אפשר לסמן קטע בנגן ולשאול עליו, או לחתוך אותו."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c9/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/media/prep",
+     "method": "POST",
+     "json": {
+      "id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "state": "done",
+      "kind": "video",
+      "duration": 42,
+      "ready": {
+       "proxy": true,
+       "sprite": true,
+       "peaks": true
+      },
+      "sprite": {
+       "cols": 5,
+       "rows": 2,
+       "w": 160,
+       "h": 90,
+       "every": 4.2,
+       "count": 10
+      },
+      "peaks": {
+       "rate": 8000,
+       "perColumn": 256,
+       "columns": 900
+      }
+     }
+    },
+    {
+     "url": "**/api/media/prep/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+     "method": "GET",
+     "json": {
+      "id": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "state": "done",
+      "kind": "video",
+      "duration": 42,
+      "ready": {
+       "proxy": true,
+       "sprite": true,
+       "peaks": true
+      },
+      "sprite": {
+       "cols": 5,
+       "rows": 2,
+       "w": 160,
+       "h": 90,
+       "every": 4.2,
+       "count": 10
+      },
+      "peaks": {
+       "rate": 8000,
+       "perColumn": 256,
+       "columns": 900
+      }
+     }
+    },
+    {
+     "url": "**/api/media/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/peaks",
+     "bodyBase64": "eIh3iXWLdIxzjXOMdIx2ineId4l2inSMc4xzjXSMdYt3iXiId4l1i3SMc410jHSMdop3iHeJdop0jHOMc410jHWLd4l4iHaJdYt0jHONdIx0jHaKeIh3iXaKdIxzjHONdIx1i3eJeIh2iXWLdIxzjXSMdIx2iniId4l2inSMc4xzjXSMdYt3iXiIdop1i3SMId4j3SnWNMxBvz/BMs4o2CLdId4l2i7ROsVGujjILNMk2yHeI90p1jTLQb4+wTLOKNgi3SHeJdou0TvFRbo4yCzTJNsh3iPdKdY0y0K+PsExzifYIt0h3ibaL9E7xUW7N8gs0yTbId4j3CrWNMtCvj7CMc4n2CLeId4m2i/RO8RFuzfILNQk2yHeI9wq1jXLQr0+wjHOJ9gi3iHeJtkv0DvERbs3ySvUJNwh3iPcKtU1ykK9PcIxzyfYIt4h3ibZL9A8xES7N8kr1CTcId4j3CrVNcpDvT3CMc8n2CLeId4m2S/QPMREvDbJK9Qk3CHeI9wq1TXKQ709wzDPJ9kh3iHeJtkw0DzDRLw2ySvUI9wh3iPcKtU2ykO8PcMwzyfZId4h3ibZMNA8w0O8Nskr1SPcId4j3CvVNspDvDzDMM8m2SHeId4m2TDPPcNDvDbKK9Uj3CHeI9wr1DbJRLw8wzDQJtkh3iHeJ9kwzz3DQ702yirVI9wh3iPcK9Q2yUS8PMQv0CbZId4i3ifZMM89wkO9Ncoq1SPcId4k3CvUN8lEuzzEL9Am2SHeIt4n2DHPPcJCvTXKKtUj3CHeJNwr1DfJRLs7xC/QJtkh3iLeJ9gxzz7CQr01yyrVI9wh3iTbLNQ3yEW7O8Qv0CbaId4i3ifYMc4+wkK+Ncsq1iPcId4k2yzUN8hFuzvFL9Em2iHeIt4n2DHOPsFCvjTLKtYj3SHeJNss0zfIRbo7xS7RJtoh3iLdJ9gxzj7BQb40yynWYZ9gn2GeZJxomGyTaZdlm2KeYJ9hn2OdZppqlmuVZ5ljnWGfYJ9hnmScaJhtk2mXZZtinmCfYZ9jnWaaapZrlWeZY51hn2CfYZ5knGiYbZNpl2WbYp5gn2GfY51mmmqVa5VmmWOdYZ9gn2GeZJxomG2TaZdlm2KeYJ9hn2OdZppqlWuVZpljnWGfYJ9inmSbaJhtk2iXZJtinmCfYZ9jnWaaa5VrlWaZY51hn2CfYp5km2iYO8Qr1B3iE+0O8Q/wF+gj3DPMM8wj3BfoD/AO8RPtHeMr1DvEK9Ud4xLtDvEQ8BfoJNwzzDPNI9wX6A/wDvET7B3iK9Q7xCrVHOMS7Q7xEPAX6CTbNMwyzSPcF+kP8A7xE+wd4izUO8Uq1RzjEu0O8RDvF+gk2zTMMs0j3RbpD/AO8RPsHeIs0zrFKtUc4xLtDvEQ7xjoJNs0yzLOIt0W6Q/wDvET7B7iLNM6xSrWHOQS7Q7xEO8Y5yXbNcsyziLdFukP8A7xE+we4SzTOsYp1hvkEu0O8RDvGOcl2jXLMc4i3RbpD/AO8RPsHuEt0znGKdYb5BLuDvEQ7xjnJdo1yjHOIt4W6g/wDvEU7B7hLdI5xinXG+QS7g7xEO8Y5yXaNcoxzyHeFeoP8A7xFOsf4S3SOcco1xvkEe4O8RDvGecm2jbKMM8h3hXqD/AO8RTrH+Au0jnHKNcb5RHuDvEQ7xnmJtk2yTDPId4V6g/wDvEU6x/gLtE4xyjXGuUR7g7xEO8Z5ibZNskw0CHfFeoP8A7xFOsf4C7ROMgo2BrlEe4O8RHvGeYn2TfJL9Ag3xXqD/EO8RTrIOAv0TjIJ9ga5RHuDvER7hnmJ9g3yC/QIN8V6w/xDvEU6yDfL9E3yCfYGuYR7g7xEe4a5ifYN8gv0SDfFOsO8Q/xFesg3y/QN8gn2BnmEe4O8RHuGuUn2DjIL9Eg4BTrDvEP8RXqIN8v0DfJJ9kZ5hHvDvER7hrlKNg4yC7RH+AU6w7xD/AV6iHfMNA2ySbZGeYQ7w7xEe4a5SjXOMcu0R/gFOsO8Q/wFeoh3jDPNskm2RnmEO8O8RHuG+Uo1znHZZtgoFykWqZapVyjYJ9lmmeZYp5eolulWqZbpV6hY51omGSbYKBcpFqmWqVco2CfZppnmWKeXaJbpVqmW6VeoWOdaJdkm1+gXKRaplqlXaNhn2aaZ5linl2iW6VaplukXqFjnWiXZJxfoFykWqZapV2jYZ9mmmeZYp5dolulWqZbpF6hY51pl2ScX6BcpFqmWqVdo2GfZppnmWKeXaJbpVqmW6RfoWOdaZdknF+hXKRaplqlXaNhn2aaZ5lhnl2jW6VaplukX6FjnGmXZJxfoVykWqZapV2jYZ9mmmeZYZ5do1ulWqZbpF+hY5xpl2ScX6FcpFqmWqVdo2GfZppnmWGeXaNbpVqmW6RfoWSc",
+     "contentType": "application/octet-stream"
+    },
+    {
+     "url": "**/api/media/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/proxy",
+     "body": "",
+     "contentType": "video/mp4"
+    },
+    {
+     "url": "**/api/media/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/sprite",
+     "bodyBase64": "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",
+     "contentType": "image/jpeg"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".media-card"
+    },
+    {
+     "click": ".media-card .chip-text"
+    },
+    {
+     "wait": ".media-body"
+    },
+    {
+     "wait": ".media-wave.pick"
+    },
+    {
+     "click": ".media-wave.pick"
+    },
+    {
+     "click": ".media-actions .chip-text:nth-child(2)"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "ChatSoundSurface",
+   "title": "סאונד בצ'אט: כרטיס עם גל קול ונגן; בפאנל גל גדול, בחירת קטע, ניגון הקטע, עורך סאונד מלא ושאלה על הקטע. בטלפון: האזנה ושאלה, \"עריכה\" כבויה",
+   "titleEn": "Sound in chat: card with waveform and player; panel with big waveform, range select and play, full editor, ask about a range. Phone: listen and ask",
+   "route": "#/c/c10",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c10",
+     "method": "GET",
+     "json": {
+      "id": "c10",
+      "projectId": null,
+      "title": "מוזיקה למשחק השועל",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "30m"
+      },
+      "updatedAt": {
+       "$ago": "2m"
+      },
+      "messageCount": 4,
+      "session": {
+       "id": "c10",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "user",
+        "text": "תכין לי מנגינה קצרה למסך הפתיחה ותפתח אותה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "tool_call",
+        "callId": "o1c",
+        "name": "open_in_chat",
+        "input": {
+         "path": "shared/fox-theme.mp3"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "tool_result",
+        "callId": "o1c",
+        "name": "open_in_chat",
+        "ok": true,
+        "output": "Opened in the chat: shared/fox-theme.mp3\nThe user sees it in the side panel, in the installed tool for its type (or is offered to install that tool)."
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "המנגינה מוכנה ופתוחה בצד. אפשר לסמן קטע בגל הקול, לנגן אותו או לשאול עליו."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c10/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/media/prep",
+     "method": "POST",
+     "json": {
+      "id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "state": "done",
+      "kind": "audio",
+      "duration": 75,
+      "ready": {
+       "proxy": true,
+       "sprite": false,
+       "peaks": true
+      },
+      "peaks": {
+       "rate": 8000,
+       "perColumn": 256,
+       "columns": 900
+      }
+     }
+    },
+    {
+     "url": "**/api/media/prep/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+     "method": "GET",
+     "json": {
+      "id": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "state": "done",
+      "kind": "audio",
+      "duration": 75,
+      "ready": {
+       "proxy": true,
+       "sprite": false,
+       "peaks": true
+      },
+      "peaks": {
+       "rate": 8000,
+       "perColumn": 256,
+       "columns": 900
+      }
+     }
+    },
+    {
+     "url": "**/api/media/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/peaks",
+     "bodyBase64": "eIh3iXWLdIxzjXOMdIx2ineId4l2inSMc4xzjXSMdYt3iXiId4l1i3SMc410jHSMdop3iHeJdop0jHOMc410jHWLd4l4iHaJdYt0jHONdIx0jHaKeIh3iXaKdIxzjHONdIx1i3eJeIh2iXWLdIxzjXSMdIx2iniId4l2inSMc4xzjXSMdYt3iXiIdop1i3SMId4j3SnWNMxBvz/BMs4o2CLdId4l2i7ROsVGujjILNMk2yHeI90p1jTLQb4+wTLOKNgi3SHeJdou0TvFRbo4yCzTJNsh3iPdKdY0y0K+PsExzifYIt0h3ibaL9E7xUW7N8gs0yTbId4j3CrWNMtCvj7CMc4n2CLeId4m2i/RO8RFuzfILNQk2yHeI9wq1jXLQr0+wjHOJ9gi3iHeJtkv0DvERbs3ySvUJNwh3iPcKtU1ykK9PcIxzyfYIt4h3ibZL9A8xES7N8kr1CTcId4j3CrVNcpDvT3CMc8n2CLeId4m2S/QPMREvDbJK9Qk3CHeI9wq1TXKQ709wzDPJ9kh3iHeJtkw0DzDRLw2ySvUI9wh3iPcKtU2ykO8PcMwzyfZId4h3ibZMNA8w0O8Nskr1SPcId4j3CvVNspDvDzDMM8m2SHeId4m2TDPPcNDvDbKK9Uj3CHeI9wr1DbJRLw8wzDQJtkh3iHeJ9kwzz3DQ702yirVI9wh3iPcK9Q2yUS8PMQv0CbZId4i3ifZMM89wkO9Ncoq1SPcId4k3CvUN8lEuzzEL9Am2SHeIt4n2DHPPcJCvTXKKtUj3CHeJNwr1DfJRLs7xC/QJtkh3iLeJ9gxzz7CQr01yyrVI9wh3iTbLNQ3yEW7O8Qv0CbaId4i3ifYMc4+wkK+Ncsq1iPcId4k2yzUN8hFuzvFL9Em2iHeIt4n2DHOPsFCvjTLKtYj3SHeJNss0zfIRbo7xS7RJtoh3iLdJ9gxzj7BQb40yynWYZ9gn2GeZJxomGyTaZdlm2KeYJ9hn2OdZppqlmuVZ5ljnWGfYJ9hnmScaJhtk2mXZZtinmCfYZ9jnWaaapZrlWeZY51hn2CfYZ5knGiYbZNpl2WbYp5gn2GfY51mmmqVa5VmmWOdYZ9gn2GeZJxomG2TaZdlm2KeYJ9hn2OdZppqlWuVZpljnWGfYJ9inmSbaJhtk2iXZJtinmCfYZ9jnWaaa5VrlWaZY51hn2CfYp5km2iYO8Qr1B3iE+0O8Q/wF+gj3DPMM8wj3BfoD/AO8RPtHeMr1DvEK9Ud4xLtDvEQ8BfoJNwzzDPNI9wX6A/wDvET7B3iK9Q7xCrVHOMS7Q7xEPAX6CTbNMwyzSPcF+kP8A7xE+wd4izUO8Uq1RzjEu0O8RDvF+gk2zTMMs0j3RbpD/AO8RPsHeIs0zrFKtUc4xLtDvEQ7xjoJNs0yzLOIt0W6Q/wDvET7B7iLNM6xSrWHOQS7Q7xEO8Y5yXbNcsyziLdFukP8A7xE+we4SzTOsYp1hvkEu0O8RDvGOcl2jXLMc4i3RbpD/AO8RPsHuEt0znGKdYb5BLuDvEQ7xjnJdo1yjHOIt4W6g/wDvEU7B7hLdI5xinXG+QS7g7xEO8Y5yXaNcoxzyHeFeoP8A7xFOsf4S3SOcco1xvkEe4O8RDvGecm2jbKMM8h3hXqD/AO8RTrH+Au0jnHKNcb5RHuDvEQ7xnmJtk2yTDPId4V6g/wDvEU6x/gLtE4xyjXGuUR7g7xEO8Z5ibZNskw0CHfFeoP8A7xFOsf4C7ROMgo2BrlEe4O8RHvGeYn2TfJL9Ag3xXqD/EO8RTrIOAv0TjIJ9ga5RHuDvER7hnmJ9g3yC/QIN8V6w/xDvEU6yDfL9E3yCfYGuYR7g7xEe4a5ifYN8gv0SDfFOsO8Q/xFesg3y/QN8gn2BnmEe4O8RHuGuUn2DjIL9Eg4BTrDvEP8RXqIN8v0DfJJ9kZ5hHvDvER7hrlKNg4yC7RH+AU6w7xD/AV6iHfMNA2ySbZGeYQ7w7xEe4a5SjXOMcu0R/gFOsO8Q/wFeoh3jDPNskm2RnmEO8O8RHuG+Uo1znHZZtgoFykWqZapVyjYJ9lmmeZYp5eolulWqZbpV6hY51omGSbYKBcpFqmWqVco2CfZppnmWKeXaJbpVqmW6VeoWOdaJdkm1+gXKRaplqlXaNhn2aaZ5linl2iW6VaplukXqFjnWiXZJxfoFykWqZapV2jYZ9mmmeZYp5dolulWqZbpF6hY51pl2ScX6BcpFqmWqVdo2GfZppnmWKeXaJbpVqmW6RfoWOdaZdknF+hXKRaplqlXaNhn2aaZ5lhnl2jW6VaplukX6FjnGmXZJxfoVykWqZapV2jYZ9mmmeZYZ5do1ulWqZbpF+hY5xpl2ScX6FcpFqmWqVdo2GfZppnmWGeXaNbpVqmW6RfoWSc",
+     "contentType": "application/octet-stream"
+    },
+    {
+     "url": "**/api/media/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2/proxy",
+     "body": "",
+     "contentType": "audio/mp4"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".media-card"
+    },
+    {
+     "click": ".media-card .chip-text"
+    },
+    {
+     "wait": ".media-body"
+    },
+    {
+     "wait": ".media-wave.pick"
+    },
+    {
+     "click": ".media-wave.pick"
+    },
+    {
+     "click": ".media-actions .chip-text:nth-child(2)"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  }
+ ]
+}

@@ -25,6 +25,8 @@ import { Checkpoints } from "../checkpoints.js";
 import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
 import { redact } from "../fault-log.js";
 import { ensureFfmpeg, findFfmpeg } from "../ffmpeg.js";
+import { mediaRangeTools } from "../media-range.js";
+import { ffmpegRunner } from "../media-prep.js";
 import { googleTools } from "../google-tools.js";
 import { knowledgeTools } from "../knowledge.js";
 import { appUri, mcpResultText } from "../mcp.js";
@@ -248,6 +250,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
       ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
       ...(config.parts.browser === false ? [] : browserTools(browser, shotSaver(async (data, mimeType) => (await assets.save(data, mimeType)).id), { ffmpeg: () => findFfmpeg(paths.engines), vision: () => visionServiceOf(config) })),
       ...(config.parts.browser === false || !browser.status().pane ? [] : fabTools(browser)),
+      ...mediaRangeTools({ runner: async () => ffmpegRunner(await ensureFfmpeg({ dir: paths.engines, downloads })), assets }),
       ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
       ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({
         spec,
