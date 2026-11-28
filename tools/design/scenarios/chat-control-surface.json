@@ -1,0 +1,223 @@
+{
+ "group": "צ'אט · Chat",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "ChatControlSurface",
+   "title": "שליטה במחשב בצ'אט: כרטיס \"שליטה במחשב\" בהודעה; בפאנל תצוגה חיה של המסך, \"עכשיו\", רשימת הצעדים, עצירה (■) ושאלה על מה שעל המסך. בטלפון: צפייה, עצירה ושאלה",
+   "titleEn": "Computer control in chat: a card in the message; the panel shows the live screen, the \"Now\" line, the steps list, Stop and an ask box. Phone: view, Stop and ask",
+   "route": "#/c/c12",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c12",
+     "method": "GET",
+     "json": {
+      "id": "c12",
+      "projectId": null,
+      "title": "התקנת Unreal",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "30m"
+      },
+      "updatedAt": {
+       "$ago": "2m"
+      },
+      "messageCount": 6,
+      "session": {
+       "id": "c12",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "10m"
+        },
+        "type": "user",
+        "text": "תתקין לי את Unreal 5.5 מה-Epic Launcher"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "9m"
+        },
+        "type": "tool_call",
+        "callId": "k1",
+        "name": "computer_open_app",
+        "input": {
+         "app": "EpicGamesLauncher"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "9m"
+        },
+        "type": "tool_result",
+        "callId": "k1",
+        "name": "computer_open_app",
+        "ok": true,
+        "output": "Opened EpicGamesLauncher."
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "8m"
+        },
+        "type": "tool_call",
+        "callId": "k2",
+        "name": "computer_click",
+        "input": {
+         "target": "Library"
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "8m"
+        },
+        "type": "tool_result",
+        "callId": "k2",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Pressed Button \"Library\"."
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "פתחתי את ה-Launcher ואני מתקין עכשיו. אפשר לצפות בזמן אמת בכרטיס ולעצור בכל רגע."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c12/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": false,
+      "mode": "auto",
+      "skipAllowed": false,
+      "browser": {
+       "active": false,
+       "pane": false
+      },
+      "computer": {
+       "enabled": true,
+       "active": true,
+       "app": "EpicGamesLauncher"
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "3m"
+        },
+        "kind": "computer",
+        "action": "open app",
+        "where": "EpicGamesLauncher",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "2m"
+        },
+        "kind": "computer",
+        "action": "invoke",
+        "where": "EpicGamesLauncher",
+        "target": "Library",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "computer",
+        "action": "invoke",
+        "where": "EpicGamesLauncher",
+        "target": "Install",
+        "ok": true
+       }
+      ],
+      "approvals": [],
+      "task": {
+       "id": "t1",
+       "goal": "להתקין את Unreal 5.5 מה-Epic Launcher",
+       "apps": [
+        "EpicGamesLauncher"
+       ],
+       "planner": "gemini",
+       "status": "running",
+       "step": 3,
+       "maxSteps": 40,
+       "steps": [
+        {
+         "n": 1,
+         "action": "open EpicGamesLauncher",
+         "note": "",
+         "ok": true
+        },
+        {
+         "n": 2,
+         "action": "press Button \"Library\"",
+         "note": "",
+         "ok": true
+        },
+        {
+         "n": 3,
+         "action": "press Button \"Install\"",
+         "note": "waiting for the version list",
+         "ok": true
+        }
+       ],
+       "summary": "",
+       "startedAt": 0
+      }
+     }
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "bodyBase64": "iVBORw0KGgoAAAANSUhEUgAAAoAAAAFoCAIAAABIUN0GAAAP1ElEQVR4Xu3deZgU9Z3A4eqengGGYUBxWEOigvqsRkQ0+hiiiERlY2IUY1BQY7Ie0aCCQsziGsWIMR5LDjGiETxWzcoqIojEW+TQmDVuXJTLhJV4jD6KCqFnhDm692mbnXWnBwYw8E3C+z780VNT9ftVVffDh6opILX3fgMTAGDbSm/b6QCAAgEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAmTeX1kbMC0AbN9cAQNAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAmQ+yZyVVd0+yeZAUX121Zadip5DH9myDYE/l9ppR2/ZUK6AASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgACf6N+CbtecR2cvXrqsuNqCZ569595prTbp3avXAf36Tp85a0NDDTn2mOOO+Upzc/OabPbaCT9959132510cz02e+Y/HDNkc7faFFtvZAD+2m3dADc2NZ13wZiNnKNXV6x4dcWKDa1w8EEHHn7YgHPOv6Cpqekbpwy/5J++e+H3Lv5rP+MAkCRbOcClHps988GHZvfZZ58kn7/y6mtr33q7eJnYrWvXsReNrq6ubmxsvOKqqz/4oPCfw5wy7MRf3Hp7U1NTkiTTZzzYt88+6XR6t113HXvR6C5VnWfNfnjqffcnSWHMufPmH9Cv3y+n3rtf33377ttn2vQHpt53f5cuXcaMOr979x3LM5kbbvrF4iVLTzzh+K9+5cv5fH7SLVP+4/nftvkJ6N2rV+n4LZfILRe1j82eef8DM/v13beqqurWO+6cO39Bm4dwzlln9Ou7b3V19eTb7pg7f0HpLq3f//kLXvn9H+67/wEfSoDtxLb+GXBFefnSZa+MGHnhjFmzR503ouUsjzz3O089Pe+8C8Y8/uScs07/VnF57969/rD8v4uv6+vrx35/XC6XG3rCkJtumTJi1OhThw8rfqtDRcWMB2efN/q7F40edd/0B86/8LvFb53/nbOnTZ8xasz3fnDV1RdfNDpJktO/edqIUaMvv/KqowcfuaE3uHT8NpVnMqtXrz73gjEXX3b5hSPPS5I2DqGivLy4ziXjflBcp3SXkqSw2hNPzlFfgO3K1r0FXZ7J3Hj9T4on9KZbpry8aHE+n587f0GSJE89PXfkuee0nOuDDjzgmgk/TpLk4UcfmztvfnF5WVlZ8cXJJw0dcOgh3XfcYfhpp9948+Sjjhh06Bf6V3auLH43l8stWbYsl8s1NTUtLbzId+jYIUmSzx980Gc+8+niOh07dkyn088+95txl4ydPuPB8T+6dkNvc+n4H5dOpYpfptPphx5+NEmS2tq3qjp3TpI2DiGVShXXee31N4rrlO5SLpdrzuWef+GF7epjB8DWDXDpz4Bz+Xxzc6543hsbGlvegHQ6nSSFtuVyuWxdXXH562+8ueceuy9Zuuyee6fN+tUjD02/N0mSq64YN2fuvGnTZ5ww5Nj14zQ15XKFMdc1NORy+ZYxy8rKRn/v4oaGhnQ6tV/fvrlc7ofXXLd/v/2GDT1h8FFHXHXNv7T59peO3xLdqqqq8vLy9ZM2Nmaz2eLrfFKYtPQQStcp3aUkSZqbmz++2wBsD7b1LehMWdkh/T+fJMkRgw5/4XcvtpzixUuWDhxwSJIkxx3zlRFnn1VcPnPW7G+f8Y+ZTOFPCUO/NqT5o8ruvdffPzVnbkVFRXl5xcbfoZdeXnT4YQOSJOl/8MHfPPXkqs6dJ13/k5cXLR5/1TWHfL6wD20qHT9bV9e7V68kSb40+Mh8fn3gc//7YiOHULpOq13aHj5hALRp614Bf/wW9MuLFt90y5R1DQ2DBh526vCT1mSzP7puQss+Tbzx5kvGXvT144dk6+pa7g8/+vgTvXbb9a7bJq9cufKRx59sbm4uPo31ixsn/mH58mw2W15e3tj4f5fRrVz/80ljLxrzteO+2tzcfPWEn2Tr6p759XOTJ92QTqdvv/PulpXLM5mbf3598cuFL71cOv5PJ974wx9c9sGqVYuXLG3Y8HRtHsLGd8mHEmC7lerRc88tPvjKqm6bu62/Ggul6rOFx/63QM+hj2zBVsCfUe20o7dstG19CxoAKDw5tI3Pwlb6N6cA4K/Ltg4wABBwBQwACDAAxHALGgACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGLZf86/pvYkHf/pR3dpcs2WEVkN9/MtNn6VdrYZ6bsLuU0b2LP467Ytt72GpPXauOHFAdbtztdJ/r04Pjdu1ONd5x+zY8t0NLYd2ZdpdA+CMo3a4/YlVf2nnobEpf9YNtZu7V8vfblj+dsPmbtW9OnPHk6umPfOnVhtuaDm0S4CBwpXlvy9YfcDuHbt0Krv54fefWlg3fGDX4/t3yeeTibPe3793x8oO6ZvO7Tlh+spLh9V0qUzP+PWau5/e7B6XzpJ8NPVTC+uWvrlu9vNrxn69ZqfqskxZ6qczV778x3V77FyxudOVTtG9S9llw2uqK8tq328c8NnKQZesKE562MWvFl+0OvDqynSr3Sh+Pmqqy1a801j6WdnQcmiXAANJeSa1Kps7c2LtZ7qXTx7V86mFdWd/aYdjx79W063srME7XHr3O6cc3nXEpNrvn1Rzw0PvLX+rYdo/77oFAS6dJUmSikzq0f/MPru0/vKTa6bOW/3SH9fuvEPm+m9/ath1rw8f2HVzpyudYvTx3R/7XfZXv81+sW/nwftXtXqz21h/SPdWu1HcZKfqzC415d86otvq+uYJD7z3xsr1Md7QcmiXAANJKpXM/E3h5uob7zV26Vh4NGTB4vorT+tx7/zVl979TssJ+tnM9770uarD+nTu3DG1BWetdJYkSZrz+eeW1SdJ8oW9K3fZqbw4bKcOqXS6/enKM6kpI3sWN5k46/2FK9aWTnHQnp3G3/NukiTzFtXncq33unT90t0obpVP8q+82Xjl1HeP7Nd53PCas3++/tb3hpZDuwQYSBqb82s+XF+nfL5wQsb98p3P7dHp1EFdv3xgl8v/bX2Drzvj7558sW7qvNXtPsSUyyfpdCFdZelUc+6jEduapRDg5sLKSZJk0qlzb36roTGfTiX7794pl2t/utKfAZceSHnZ+j8rpFOF3LZSun7pbhTdM3f126uakiSZ81LdpcNqWsbZ0HJol6eggST//y8Nqzqlbx3Vc+GKtZfe9c6AfSqTJEmlCwHrs0uHx17MVmRSFZl2roAXvba2/16FDQ/5bKdFr63/MWqrWVp58dW1R+zXOUmSQ/epPHNw4ZHmTZ+uRekU/7Vi7aC+hWGP2K9z6U6Xrl+6G0Wjjus+sE9hnL67dfx9beEZrsoOhd8/S5fDJnIFDLSW/TA3b1H9nWM+nU4lkx/9IEmS3y1f+7Nvf+reBX/61ws//cqbDWvqcxWZVENT/rV3G88YvMNtj3/Q8qI41rX3rxw3vKbY0fFTC3eA2zVh+srLhteceGh1U3Ny5UebbGS64mgfvwW9cMW6ibPeK53lxw+8N/7UHsMO67pwxdoPG0ruQZco3Y2iSbPfv+KUHt8Y1HVdU754RD8+c+cRk2pLl8MmSvXouecmrlqqsmpT/+IdsBH12c1+orio59BHnNiNG39qj7vmrPp9bUOfXTuMOX6nMye+6Yzx51U77egtG9AVMPC37J55qy8eWrOuMVeeSV193yZdi8O2IcDA37Ilr69z1ctfJg9hAUAAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIIAAA0AAAQaAAAIMAAEEGAACCDAABBBgAAggwAAQQIABIECqR889t3jayqpuW7wt0KI+u8rZgO2NK2AACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEggAADQAABBoAAAgwAAQQYAAIIMAAEEGAACCDAABBAgAEgQOaTzFmfXfVJNgeA7ZYrYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAAAEGgAACDAABBBgAAggwAAQQYAAIIMAAEECAASCAAANAgP8BkXHjegTy6VgAAAAASUVORK5CYII=",
+     "contentType": "image/png"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".control-card"
+    },
+    {
+     "click": ".control-card"
+    },
+    {
+     "wait": ".cl-shot"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  }
+ ]
+}

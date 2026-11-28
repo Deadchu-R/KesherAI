@@ -34,6 +34,7 @@ import { MODEL_FILES, modelFromResult, partAskMessage } from "./model-surface";
 import { wordFromResult } from "./word-file";
 import { ENGINE_TITLE, SCENE_TOOLS, objectAskMessage, sceneFromResult } from "./scene-surface";
 import { soundSurface, videoSurface } from "./media-surface";
+import { controlSurface } from "./control-surface";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
 export type SurfacePhone = "edit" | "view+ask" | "open-on-pc";
@@ -302,6 +303,7 @@ export const BUILT_IN: readonly ChatSurface[] = [
   // Video and sound open in their own surface (player, waveform, ask); the editor plugins are its "Full editor".
   videoSurface,
   soundSurface,
+  controlSurface,
   WORD_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];

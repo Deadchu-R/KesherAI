@@ -5078,6 +5078,13 @@ a.cw-row:hover .cw-title { text-decoration: underline; }
 .scenes-row .tree-row.on, .scenes-diff li.on { background: var(--accent-soft); }
 .scenes-obj { width: 100%; background: none; border: 0; text-align: start; color: inherit; min-height: 36px; }
 .scenes-card { min-height: 52px; }
+/* Computer-control surface (ControlSurface.tsx): the live view scrolls; the ask row stays at the bottom. */
+.control-sf { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.control-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex: none; }
+.control-body { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
+.control-ask { display: flex; gap: 8px; padding: 8px 10px; flex: none; border-top: 1px solid var(--border, #2a2f3a); }
+.control-ask input { flex: 1; min-width: 0; min-height: 44px; }
+.control-card { min-height: 52px; }
 @media (max-width: 700px) {
   .model-sf-lists { grid-template-columns: 1fr; max-height: 32%; }
 }
