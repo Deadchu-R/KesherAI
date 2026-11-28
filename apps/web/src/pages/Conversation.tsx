@@ -1014,7 +1014,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId && !r.plan) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
                     // An item a tool wrote or opened (a document, sheet, deck…; surfaces.ts): one card per item (its last edit in the group), Open beside the chat.
                     ...[...new Map(b.steps.flatMap((st) => {
-                      const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output) : undefined;
+                      const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output, st.result.assetIds ? { assetIds: st.result.assetIds } : undefined) : undefined;
                       const title = typeof st.call.input.title === "string" ? st.call.input.title : undefined;
                       const diff = st.result?.diff;
                       return it ? [[`${it.surface}:${it.id}`, { ...it, convId: id, ...(title ? { title } : {}), ...(diff && it.surface === "code" ? { diff } : {}) }] as const] : [];

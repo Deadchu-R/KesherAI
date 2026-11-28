@@ -52,8 +52,8 @@ export function CanvasPanel({ item, full, onFull, onClose }: { item: CanvasItem;
   );
 }
 
-/** A picture to zoom, pan and compare, with the chat's pictures as its history. */
-function ImageCanvas({ item }: { item: Extract<CanvasItem, { kind: "image" }> }) {
+/** A picture to zoom, pan and compare, with the chat's pictures as its history (the image surface shows its versions in it too). */
+export function ImageCanvas({ item }: { item: Extract<CanvasItem, { kind: "image" }> }) {
   const [id, setId] = useState(item.assetId);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });

@@ -28,6 +28,7 @@ import type { ComponentType } from "react";
 import { ITEM_KINDS, itemFromResult as docFromResult, selectionMessage, type ItemKind } from "./doc-items";
 import { CODE_FILES, askMessage, codeFileFromResult } from "./code-surface";
 import { EDITOR_FILES, EDITOR_NAMES, type EditorId } from "./editor-handoff";
+import { IMAGE_FILES, imageFromResult, parseRegionSelection, regionMessage } from "./image-surface";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
 export type SurfacePhone = "edit" | "view+ask" | "open-on-pc";
@@ -91,7 +92,7 @@ export interface ChatSurface {
   /** The plugin whose page it shows; registered only once that plugin's pages are loaded. */
   plugin?: string;
   /** Which item a tool step made or opened, from its result. */
-  fromResult?(tool: string, ok: boolean, output: string): Omit<SurfaceItem, "surface"> | undefined;
+  fromResult?(tool: string, ok: boolean, output: string, extra?: { assetIds?: readonly string[] }): Omit<SurfaceItem, "surface"> | undefined;
   /** A small preview in the message (no heavy dependencies); none: the chat's plain card. */
   card?: SurfaceLoader<SurfaceCardProps>;
   /** The panel (loaded when it first opens). */
@@ -146,9 +147,36 @@ const CODE_SURFACE: ChatSurface = {
   versions: "none",
 };
 
+/**
+ * Pictures: what `generate_image` / `edit_image` make and any chat picture file (ImagePanel.tsx: zoom, compare with the
+ * previous version, crop, rotate, resize, change an area, variations, "Ask about this area"). Always there (its editors
+ * are the panel itself); the image-editor plugin's page opens from it for the heavier work. Before the editor surfaces so
+ * a picture file opens here first.
+ */
+const IMAGE_SURFACE: ChatSurface = {
+  id: "image",
+  title: { he: "תמונה", en: "Picture" },
+  kinds: ["image"],
+  fileTypes: IMAGE_FILES,
+  fromResult: (tool, ok, output, extra) => {
+    const id = imageFromResult(tool, ok, output, extra?.assetIds);
+    return id ? { kind: "image", id } : undefined;
+  },
+  card: () => import("./ImagePanel").then((m) => ({ default: m.ImageCard })),
+  panel: () => import("./ImagePanel").then((m) => ({ default: m.ImagePanel })),
+  panelClass: "image-panel",
+  tools: ["generate_image", "edit_image"],
+  phone: "edit",
+  selection: (p) => {
+    const r = parseRegionSelection(p.selection);
+    return r ? regionMessage({ id: p.item.id, title: p.title, size: r.size, region: r.region, instruction: p.instruction, change: p.change, he: p.he }) : p.instruction;
+  },
+  versions: "server",
+};
+
 /** The item kind and agent tools of each editor. */
 const EDITOR_SURFACE: Record<EditorId, { kind: string; tools: readonly string[]; phone: SurfacePhone }> = {
-  "image-editor": { kind: "image", tools: ["generate_image", "make_ui_sprite"], phone: "edit" },
+  "image-editor": { kind: "image", tools: ["make_ui_sprite"], phone: "edit" },
   "video-editor": { kind: "video", tools: ["generate_video"], phone: "view+ask" },
   "sound-editor": { kind: "audio", tools: ["make_music", "make_sound", "speak_text"], phone: "view+ask" },
   "model-editor": { kind: "model", tools: [], phone: "edit" },
@@ -178,6 +206,7 @@ export const BUILT_IN: readonly ChatSurface[] = [
   docSurface("sheet", { he: "גיליון", en: "Sheet" }),
   docSurface("deck", { he: "מצגת", en: "Slides" }),
   CODE_SURFACE,
+  IMAGE_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 
@@ -205,12 +234,12 @@ export function buildSurfaces(defs: readonly ChatSurface[], inst: Installed): Ch
  * The item a tool step made or opened, by the first registered surface that recognises it.
  *
  * @param list - The registered surfaces.
- * @param tool - The tool's name; `ok` and `output` its result.
+ * @param tool - The tool's name; `ok` and `output` its result; `extra` what the step carries besides its text (its picture ids).
  * @returns The item with its surface, or undefined.
  */
-export function itemFromResult(list: readonly ChatSurface[], tool: string, ok: boolean, output: string): SurfaceItem | undefined {
+export function itemFromResult(list: readonly ChatSurface[], tool: string, ok: boolean, output: string, extra?: { assetIds?: readonly string[] }): SurfaceItem | undefined {
   for (const s of list) {
-    const it = s.fromResult?.(tool, ok, output);
+    const it = s.fromResult?.(tool, ok, output, extra);
     if (it) return { surface: s.id, ...it };
   }
   return undefined;

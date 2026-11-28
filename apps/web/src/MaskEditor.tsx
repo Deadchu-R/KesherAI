@@ -17,9 +17,10 @@ export interface StartImage {
  * (inpainting). Without painting, the whole picture changes (image to image).
  *
  * @param props.max - The longest side to make it (a multiple of 64).
+ * @param props.from - A picture's address to start from (the image surface edits the open picture); then the picker is hidden.
  * @param props.onChange - Gets the start image, or undefined when removed.
  */
-export function MaskEditor({ max, onChange }: { max: number; onChange: (s: StartImage | undefined) => void }) {
+export function MaskEditor({ max, from, onChange }: { max: number; from?: string; onChange: (s: StartImage | undefined) => void }) {
   const [src, setSrc] = useState<HTMLImageElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [brush, setBrush] = useState(40);
@@ -73,24 +74,31 @@ export function MaskEditor({ max, onChange }: { max: number; onChange: (s: Start
     if (src) emit();
   }, [src, painted, strength, size.w, size.h]);
 
+  /** Starts from a loaded picture: the size it will be made at, the longest side `max`, both sides multiples of 64. */
+  const adopt = (img: HTMLImageElement) => {
+    const k = max / Math.max(img.naturalWidth, img.naturalHeight);
+    const w = Math.max(64, Math.round((img.naturalWidth * k) / 64) * 64);
+    const h = Math.max(64, Math.round((img.naturalHeight * k) / 64) * 64);
+    const m = document.createElement("canvas");
+    m.width = w;
+    m.height = h;
+    mask.current = m;
+    setSize({ w, h });
+    setPainted(false);
+    setSrc(img);
+  };
   const load = (f: File | undefined) => {
     if (!f) return;
     const img = new Image();
-    img.onload = () => {
-      // The size it will be made at: the longest side `max`, both sides multiples of 64.
-      const k = max / Math.max(img.naturalWidth, img.naturalHeight);
-      const w = Math.max(64, Math.round((img.naturalWidth * k) / 64) * 64);
-      const h = Math.max(64, Math.round((img.naturalHeight * k) / 64) * 64);
-      const m = document.createElement("canvas");
-      m.width = w;
-      m.height = h;
-      mask.current = m;
-      setSize({ w, h });
-      setPainted(false);
-      setSrc(img);
-    };
+    img.onload = () => adopt(img);
     img.src = URL.createObjectURL(f);
   };
+  useEffect(() => {
+    if (!from) return;
+    const img = new Image();
+    img.onload = () => adopt(img);
+    img.src = from;
+  }, [from]);
   useEffect(redraw, [src, size.w, size.h, painted]);
 
   const paint = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -125,7 +133,7 @@ export function MaskEditor({ max, onChange }: { max: number; onChange: (s: Start
 
   return (
     <div className="stack mask-editor" style={{ gridColumn: "1 / -1", gap: 6 }}>
-      <span className="row">
+      <span className="row" hidden={!!from}>
         <span className="grow">{t("startFrom")}</span>
         <button type="button" className="as-link" onClick={() => file.current?.click()}>{src ? t("startReplace") : t("startPick")}</button>
         {src && <button type="button" className="as-link" onClick={() => { setSrc(null); onChange(undefined); }}>{t("remove")}</button>}

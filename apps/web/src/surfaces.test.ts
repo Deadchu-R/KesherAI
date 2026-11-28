@@ -7,11 +7,11 @@ const ids = (l: ReadonlyArray<{ id: string }>) => l.map((s) => s.id);
 const nothing = { parts: [], pluginPages: [] };
 
 test("the registry is built from what is installed: an off part or an unloaded plugin is not registered", () => {
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code", "image"]);
   const on = buildSurfaces(BUILT_IN, { parts: [{ id: "image-editor", on: true }, { id: "model-editor", on: false }], pluginPages: [{ pluginId: "image-editor" }, { pluginId: "model-editor" }] });
-  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image-editor"]);
+  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image", "image-editor"]);
   // A part the server does not list counts as on (as partOn does), but its plugin page must be loaded.
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "sound-editor"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "image", "sound-editor"]);
 });
 
 test("the surface contract: every surface has an id, kinds, a lazy panel, tools, phone and versions", () => {
@@ -64,10 +64,27 @@ test("open_in_chat: an item address opens its doc surface; a file is mapped by i
 test("Open in chat by file type: the installed surface, else the install offer for its part, else nothing", () => {
   const list = buildSurfaces(BUILT_IN, { parts: [{ id: "image-editor", on: true }, { id: "model-editor", on: false }], pluginPages: [{ pluginId: "image-editor" }] });
   const pic = openTarget(BUILT_IN, list, "shared/Hero.PNG");
-  assert.ok(pic && !("install" in pic) && pic.surface.id === "image-editor");
+  assert.ok(pic && !("install" in pic) && pic.surface.id === "image");
   const model = openTarget(BUILT_IN, list, "out/ship.glb");
   assert.ok(model && "install" in model && model.install === "model-editor");
   const song = openTarget(BUILT_IN, list, "song.mp3");
   assert.ok(song && "install" in song && song.install === "sound-editor");
   assert.equal(openTarget(BUILT_IN, list, "notes.txt"), undefined);
+});
+
+test("image surface: generate_image / edit_image results make a card, a picture file opens it, a region becomes the chat message", () => {
+  const list = buildSurfaces(BUILT_IN, nothing);
+  const A = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  assert.deepEqual(itemFromResult(list, "generate_image", true, "Generated 1 image(s).", { assetIds: [A] }), { surface: "image", kind: "image", id: A });
+  assert.deepEqual(itemFromResult(list, "edit_image", true, `Edited (ids: ${A}).`), { surface: "image", kind: "image", id: A });
+  assert.equal(itemFromResult(list, "generate_image", false, "x", { assetIds: [A] }), undefined);
+  assert.equal(itemFromResult(list, "make_music", true, "Made", { assetIds: [A] }), undefined);
+  const img = BUILT_IN.find((s) => s.id === "image")!;
+  assert.equal(img.versions, "server");
+  assert.equal(img.phone, "edit");
+  assert.ok(["a.png", "b.jpg", "c.webp", "d.gif"].every((f) => img.fileTypes!.test(f)));
+  const item = { surface: "image", kind: "image", id: A };
+  const msg = (he: boolean) => img.selection!({ item, title: "fox", selection: "10,20,100,50/400×200", instruction: "what is it?", change: false, he });
+  assert.match(msg(false), /about this area: x=10, y=20, width=100, height=50 \(of 400×200/);
+  assert.match(msg(true), /על האזור הזה/);
 });
