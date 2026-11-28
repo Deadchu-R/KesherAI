@@ -22,6 +22,8 @@ export interface Doc {
   /** The text, as Markdown. */
   body: string;
   convId?: string;
+  /** The Word file this document was brought in from ("save back" writes to it again). */
+  source?: { path: string };
   rev: number;
   updatedAt: string;
   /** The current version's number ("v3"; older files have none). */
@@ -61,11 +63,11 @@ export class DocStore extends EventEmitter {
   }
 
   /** A new document (a chat's own when convId is given; its existing one is returned). */
-  async create(p: { title: string; body?: string; convId?: string }): Promise<Doc> {
+  async create(p: { title: string; body?: string; convId?: string; source?: { path: string } }): Promise<Doc> {
     const id = p.convId ? `chat-${p.convId}` : randomUUID();
     const had = p.convId ? await this.get(id) : undefined;
     if (had) return had;
-    const d: Doc = { id, title: p.title.trim().slice(0, 160) || "Document", body: String(p.body ?? "").slice(0, MAX), ...(p.convId ? { convId: p.convId } : {}), rev: 0, updatedAt: new Date().toISOString() };
+    const d: Doc = { id, title: p.title.trim().slice(0, 160) || "Document", body: String(p.body ?? "").slice(0, MAX), ...(p.convId ? { convId: p.convId } : {}), ...(p.source ? { source: p.source } : {}), rev: 0, updatedAt: new Date().toISOString() };
     await this.write(d);
     return d;
   }

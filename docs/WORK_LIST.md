@@ -637,7 +637,7 @@ Every installed tool opens, edits and creates inside the chat, like Claude's art
 - ⬜ M: Blueprint surface: `BlueprintChatPanel` and `BlueprintCanvas` as an item in the panel (view and ask on the phone).
 - ⬜ L: video surface: player with trim in the chat, the video editor in the panel; export encoder per platform (NVENC, AMF, VideoToolbox, VAAPI, CPU) behind a switch; phone is view and ask plus "Open on the PC".
 - ⬜ M: music and sound surface: waveform card and the sound editor in the panel; peaks computed in a worker.
-- ⬜ L: Word `.docx`: import and round trip into the doc surface (decide the converter library with Roee first; no new dependency without asking), fidelity test on 10 real files.
+- 🟨 L: Word `.docx`: SERVER DONE 28.11 (mammoth in, `docx` out, RTL, `POST /api/docs/import-docx`, `GET /api/docs/:id/export.docx`, `POST /api/docs/:id/save-docx` with one .bak, agent tools `docx_open`/`docx_save`, lazy loaded; choice in RESEARCH_LOG). Left: the chat-surface Open chip and save button, the fidelity check on 10 real files, moving the chat's "export docx" action to the new writer.
 - ⬜ M: computer-control surface: `ControlLive` in the panel from a control task card (view and ask on the phone); measure CPU and latency at 720p over remote.
 - ⬜ S: Study pages (slides, sheet, video) open from a chat card in the panel; ⬜ S: Canvas whiteboard and plugin panels registered as surfaces.
 - ⬜ S: measure first, before step 2: cold JS bytes of the chat with all parts off vs on (registry under 5 KB) and time to open each surface on the PC, a weak laptop and the phone over remote.

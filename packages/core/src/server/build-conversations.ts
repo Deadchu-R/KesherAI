@@ -15,6 +15,7 @@ import { fabTools } from "../fab-tools.js";
 import { canvasTools } from "../canvas.js";
 import { deckStoreFor, deckTools } from "../decks.js";
 import { docStoreFor, docTools } from "../docs.js";
+import { docxRoots, docxTools } from "../docx-service.js";
 import { versionNumber } from "../versions.js";
 import { sheetStoreFor, sheetTools } from "../sheets.js";
 import { timerTools } from "../chat-timers.js";
@@ -349,7 +350,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     travelTools: () => travelTools(travel),
     // None in an incognito chat: a timer is written to disk (scan 65).
     // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
-    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? "", { assets, ...(renderPdf ? { renderPdf } : {}) }), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),
+    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? "", { assets, ...(renderPdf ? { renderPdf } : {}) }), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? ""), ...docxTools({ docs: docStoreFor(join(paths.root, "docs")), assets, roots: docxRoots })]),
     // A deep research's report: a new document of the chat (none in an incognito chat).
     writeReport: async (convId, title, body) => {
       if (library.summary(convId)?.incognito) return undefined;

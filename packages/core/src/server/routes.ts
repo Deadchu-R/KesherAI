@@ -195,6 +195,10 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
     const docs = docStoreFor(join(paths.root, "docs"));
     await docs.importPages(join(paths.root, "pages")).catch(() => 0);
     await docRoutes(app, docs, services);
+    // Real Word files: in, out and saved back (the libraries load on first use).
+    const { docxRoutes } = await import("../routes/docx.js");
+    const { docxRoots } = await import("../docx-service.js");
+    await docxRoutes(app, { docs, assets: services.assets, roots: docxRoots });
   }
   await sheetRoutes(app, sheetStoreFor(join(paths.root, "sheets")));
   await lensRoutes(app, services);
