@@ -56,7 +56,7 @@ import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { ControlApproval } from "../ControlApproval";
-import { itemFromResult, openedFile } from "../surfaces";
+import { itemFromResult, openedFile, resultExtra } from "../surfaces";
 import { SurfaceCard, SurfaceOpenCard, useSurfaces } from "../chat/surface-ui";
 import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
 import { PlanCard, PlanSheet } from "../PlanCard";
@@ -1005,6 +1005,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   // after the group, so "the last block" missed a build that was running after its approval).
                   live={busy && (bi === blocks.length - 1 || b.steps.some((st) => !st.result))}
                   convId={id}
+                  // Videos and songs a surface card shows are not drawn a second time as a MadeMedia player.
+                  surfaced={new Set(b.steps.flatMap((st) => { const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output, resultExtra(st.result)) : undefined; return it && (it.kind === "video" || it.kind === "audio") ? [it.id] : []; }))}
                   renderStep={(s, acted) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} {...(acted ? { acted } : {})} convId={id} pinned={pinnedResults.has(s.call.callId)} />}
                   liveOutput={liveOut}
                   // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
@@ -1014,7 +1016,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId && !r.plan) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
                     // An item a tool wrote or opened (a document, sheet, deck…; surfaces.ts): one card per item (its last edit in the group), Open beside the chat.
                     ...[...new Map(b.steps.flatMap((st) => {
-                      const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output, st.result.assetIds ? { assetIds: st.result.assetIds } : undefined) : undefined;
+                      const it = st.result ? itemFromResult(surfaces, st.call.name, st.result.ok, st.result.output, resultExtra(st.result)) : undefined;
                       const title = typeof st.call.input.title === "string" ? st.call.input.title : undefined;
                       const diff = st.result?.diff;
                       return it ? [[`${it.surface}:${it.id}`, { ...it, convId: id, ...(title ? { title } : {}), ...(diff && it.surface === "code" ? { diff } : {}) }] as const] : [];

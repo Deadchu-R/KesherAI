@@ -341,6 +341,22 @@ export function itemFromResult(list: readonly ChatSurface[], tool: string, ok: b
   return undefined;
 }
 
+/**
+ * The made-media ids of a tool step's result, in the shape `fromResult` takes (undefined when it made none).
+ *
+ * @param r - The step's result (`assetIds`, `videoIds`, `audioIds`).
+ * @returns The ids it made, or undefined.
+ */
+export function resultExtra(r?: ResultExtra): ResultExtra | undefined {
+  if (!r) return undefined;
+  const out: ResultExtra = {
+    ...(r.assetIds?.length ? { assetIds: r.assetIds } : {}),
+    ...(r.videoIds?.length ? { videoIds: r.videoIds } : {}),
+    ...(r.audioIds?.length ? { audioIds: r.audioIds } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Where "Open in chat" goes for a file: a registered surface, the part to install first, or nothing. */
 export type OpenTarget = { surface: ChatSurface } | { install: string; surface: ChatSurface } | undefined;
 

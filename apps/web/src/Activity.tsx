@@ -132,7 +132,7 @@ function FoldHeader({ steps, live, current, kind, shots }: { steps: Step[]; live
  * @param props.live - Whether the agent is still working on this group.
  * @param props.renderStep - Draws one step when the group is open (with the screenshot it acted on, when it has one).
  */
-export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after }: { steps: Step[]; live: boolean; renderStep: (s: Step, acted?: ActedOn) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[] }) {
+export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after, surfaced }: { steps: Step[]; live: boolean; renderStep: (s: Step, acted?: ActedOn) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[]; /** Ids of made videos and sounds a chat surface card already shows (no player of their own). */ surfaced?: ReadonlySet<string> }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const acted = actedOnShots(steps);
   const foldKey = `${convId ?? ""}:${steps[0]?.call.callId ?? ""}`;
@@ -264,14 +264,14 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
         <div className="activity-audio">
           {sounds.map(({ id, title, lyrics, cover }) => (
             <div key={id} className="audio-card">
-              <MadeMedia
+              {!surfaced?.has(id) && <MadeMedia
                 file={{ assetId: id }}
                 kind="audio"
                 name={`${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || `kesher-music-${id.slice(0, 8)}`}.mp3`}
                 {...(title ? { title } : {})}
                 {...(cover ? { poster: withToken(`/api/assets/${cover}`) } : {})}
                 {...(convId ? { convId } : {})}
-              />
+              />}
               <ResultActions actions={playerActions(id, "audio", can)} label={t("actionsSound")} />
               {lyrics && (
                 <details className="audio-lyrics">
@@ -287,7 +287,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
         <div className="activity-images">
           {videos.map((id) => (
             <div key={id} className="made-with-actions">
-              <MadeMedia file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />
+              {!surfaced?.has(id) && <MadeMedia file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />}
               <PromptUsed text={promptOf.get(id)} />
               <ResultActions actions={playerActions(id, "video", can)} label={t("actionsVideo")} />
             </div>

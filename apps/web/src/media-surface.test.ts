@@ -75,3 +75,12 @@ test("range → ask payload and chat message, in both languages", () => {
   const he = rangeMessage(rangeAsk(file, { start: 1, end: 4 }), "a.mp4", "  ", true);
   assert.match(he, /^על הקטע 0:01-0:04 של "a\.mp4": מה קורה בקטע הזה\?/);
 });
+
+test("resultExtra: carries the video and sound ids of a step to fromResult, nothing when it made none", async () => {
+  const { resultExtra } = await import("./surfaces");
+  assert.equal(resultExtra(undefined), undefined);
+  assert.equal(resultExtra({ assetIds: [] }), undefined);
+  const x = resultExtra({ videoIds: ["v"], audioIds: ["a"], assetIds: ["c"] });
+  assert.deepEqual(itemFromResult(list, "generate_video", true, "", x)?.id, "v");
+  assert.deepEqual(itemFromResult(list, "make_music", true, "", x)?.id, "a");
+});
