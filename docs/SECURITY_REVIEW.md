@@ -2107,3 +2107,15 @@ client ID, the CPU pool, the Claude Desktop extension, check_back_later and todo
 - **Left (low, listed):** `sitesInText` treats `user named example.com` as every `*.example.com` (navigation only;
   clicking and typing still follow the mode). The inbox's task goals (written by the user, Claude or a research split)
   count as "the user's words" in a task's chat, as before.
+
+## Scan after 0.6.508 (28.11, 0.6.503–0.6.508, since 4e02351)
+
+Lead's quick pass over 156 changed files (no helper: both slots were building surfaces).
+- Code view (CodePanel `dangerouslySetInnerHTML`): every token goes through `esc()` in `highlightLines` — OK.
+- `.docx` read/write: `guardDocxPath` (absolute, `.docx`, no NUL, `resolveInWorkspace` against the allowed folders) — OK.
+- Media prep routes: `isPrepId` on the id, fixed part names, byte ranges parsed — OK.
+- Background commands: output file capped, the restart kill only for a matching process start time — OK.
+- New `/api/*` routes (browser sites, chat checks, agents' Claude work, travel) sit behind the same local-only server and origin checks as the rest.
+- Agent shell `shell: true` is the approval-gated command tool, unchanged in design.
+- No personal paths, emails or keys in the diff.
+Nothing to fix. Performance pass left for the next scan with a helper (media prep ffmpeg and the image surface).
