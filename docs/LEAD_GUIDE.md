@@ -21,6 +21,12 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
 - Keep Claude's own steps few: batch tool calls, short outputs (`tail`), no screenshots read unless the look matters.
 - Reports to Roee in Hebrew: the changes as ✅/⬜ and what is next (the full list is in WORK_LIST.md); then start it.
 - Security scan every 5 builds; while working, tests for what changed; the full suite before each build.
+- **Release in sets, not per feature (Roee, 28.11).** Features go to `main` as they finish; a release is cut only
+  when a set is ready (about 4-6 finished features) or about every 3 hours, whichever comes first. Each release costs
+  a full build + test (~25 min), a CI check, the install, three updates and timers — and every failure repeats it
+  (27-28.11: 6 releases after midnight, 2 failed). Release sooner only for: a fix for something broken in the
+  installed version, or something Roee is waiting to try now. Before cutting one, let running helpers finish their
+  commit so the set is tested once.
 
 ## Saving Claude tokens first (Roee, 2026-11-20: the top priority, before KesherAI's own efficiency)
 - Small, clear tasks go to the task inbox (kesher-inbox) for KesherAI's local model or Antigravity (his Gemini plan),
