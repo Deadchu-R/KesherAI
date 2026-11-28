@@ -79,6 +79,9 @@ When Roee asks for a work night (or leaves the lead running overnight), the lead
 
 1. **Always a timer.** Before ending ANY turn, schedule the next check (`send_later`, 20-30 min). A turn that ends
    without one stops the night (27.11: two and a half idle hours after the 21:00 doc update).
+   **Never change or delete a timer while Roee sleeps** (no `update_trigger` / `delete_trigger`): it asks him for
+   approval, and the whole session waits on it (28.11: one `update_trigger` at 02:25 stopped the night until 09:30).
+   Only create new ones with `send_later`; a stale timer that fires later is fine — read it, see it is old, move on.
 2. **Never wait on a build.** Release builds, tests and renders run in the background (`run_in_background`);
    meanwhile the lead reviews agents' reports, reads inbox results, writes the next tasks, fixes small things.
 3. **Keep every lane busy, in Roee's priority order** (tonight: "chats that work just like Claude" first):
