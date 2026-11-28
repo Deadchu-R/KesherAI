@@ -42,7 +42,8 @@ export async function startFakeModel(opts = {}) {
       const messages = body.messages ?? [];
       const last = messages.at(-1) ?? {};
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
-      const text = typeof lastUser?.content === "string" ? lastUser.content : JSON.stringify(lastUser?.content ?? "");
+      // On a local model the chat's own instructions ride in front of its first message (session.ts stabilize).
+      const text = (typeof lastUser?.content === "string" ? lastUser.content : JSON.stringify(lastUser?.content ?? "")).replace(/^\[Instructions and context for this chat\][\s\S]*?\[End of the instructions and context\]\n\n/, "");
       const helper = !body.tools?.length;
       if (!helper || text.includes("REWRITE")) heard.push(text.slice(0, 200));
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });

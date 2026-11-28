@@ -947,6 +947,14 @@ export class ConversationManager {
       // Read on every request, so adding or removing a teammate applies to the next message.
       team: () => this.teamOf(id),
       toolSearch,
+      // A local engine keeps its prompt cache across chats when every request starts the same (session.ts stabilize).
+      stablePrefix: () => {
+        try {
+          return this.deps.registry.resolve(this.deps.library.summary(id)?.modelId ?? conversation.modelId).provider.location !== "cloud";
+        } catch {
+          return true;
+        }
+      },
       // The per-turn cap on tools sent in full (Settings → Models → the model team).
       toolCap: () => this.deps.config.toolCap,
       // Routing by meaning (tool-router.ts): the tools a message points at, and a note when what it needs is not installed.

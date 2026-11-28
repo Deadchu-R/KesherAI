@@ -11,7 +11,7 @@ export { CODE_TOOLS, ASK_USER_TOOL, askUserSpec, makeDiff, truncate, type AgentT
 export { decide, dangerReason, type PermissionVerdict } from "./permissions.js";
 export { modelReviewer, parseReview, reviewPrompt, REVIEW_SYSTEM, type Reviewer, type ReviewRequest, type ReviewVerdict } from "./reviewer.js";
 export { resolveInWorkspace, displayPath, globToRegExp, IGNORED_DIRS } from "./workspace.js";
-export { buildSystemPrompt, readProjectGuide, type PromptOptions } from "./prompt.js";
+export { buildSystemPrompt, readProjectGuide, splitPrompt, CHAT_CONTEXT_MARK, type PromptOptions } from "./prompt.js";
 export * from "./system-tools.js";
 export * from "./search-query.js";
 export * from "./answer-links.js";

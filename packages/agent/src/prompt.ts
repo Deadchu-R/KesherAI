@@ -10,6 +10,23 @@ import { platform } from "node:os";
 export const TODO_PROMPT =
   "Your live task list, shown to the user as a checklist. Use it when a job has 3 or more steps or ends with a file; not for one quick answer. First write the steps (items, short, in the user's language; the last step checks the work). Mark a step in_progress just before you start it and done right after it is finished, with set: [{id, state}] (one step in progress at a time).";
 
+/**
+ * Splits the fixed part of a system prompt (the same in every chat) from the part that belongs to one chat. The
+ * session reads it to keep the start of every request identical across chats (prompt cache, see `splitPrompt`).
+ */
+export const CHAT_CONTEXT_MARK = "\n\n\u2063kesher:chat-context\u2063\n\n";
+
+/**
+ * Splits a prompt built by {@link buildSystemPrompt} in its fixed part and its per-chat part.
+ *
+ * @param prompt - A system prompt (with or without the mark).
+ * @returns `fixed` (the same in every chat) and `chat` (folders, notes, memory, persona; empty when none).
+ */
+export function splitPrompt(prompt: string): { fixed: string; chat: string } {
+  const at = prompt.indexOf(CHAT_CONTEXT_MARK);
+  return at < 0 ? { fixed: prompt, chat: "" } : { fixed: prompt.slice(0, at), chat: prompt.slice(at + CHAT_CONTEXT_MARK.length).split(CHAT_CONTEXT_MARK).join("\n\n") };
+}
+
 /** What goes into a system prompt. */
 export interface PromptOptions {
   /** Product name, from branding. */
@@ -81,6 +98,7 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
   // Everything above is the same in every chat and every turn, so llama.cpp's prompt cache keeps it; what is per chat
   // (its folders, notes, memory, the project's and the persona's words) comes after it (28.11: a first step re-read 14k
   // tokens with nothing cached; the chat's private folder sat in the middle of the fixed text).
+  const fixedCount = parts.length;
   if (opts.workspace) {
     parts.push(
       [
@@ -113,5 +131,6 @@ export async function buildSystemPrompt(opts: PromptOptions): Promise<string> {
   if (opts.toolNotes?.length) parts.push(opts.toolNotes.join("\n"));
   if (opts.projectInstructions) parts.push(`Instructions for this project:\n${opts.projectInstructions}`);
   if (opts.persona) parts.push(opts.persona);
-  return parts.join("\n\n");
+  // The mark between the two parts lets the session send only the fixed part in the system turn (see splitPrompt).
+  return parts.length > fixedCount ? `${parts.slice(0, fixedCount).join("\n\n")}${CHAT_CONTEXT_MARK}${parts.slice(fixedCount).join("\n\n")}` : parts.join("\n\n");
 }

@@ -29,12 +29,14 @@ const scriptedFactory: ProviderFactory = {
       if (last.role === "user" && last.content.startsWith("You keep a memory about the user")) {
         return { text: /Acme/.test(last.content) ? '{"add":[{"topic":"Work","fact":"Works at Acme"}],"forget":[]}' : '{"add":[],"forget":[]}', toolCalls: [] };
       }
-      if (last.role === "user" && /file/.test(last.content) && req.tools.some((t) => t.name === "write_file")) {
+      // The chat's own instructions ride in front of its first message on a local model (session.ts stabilize).
+      const said = last.content.replace(/^\[Instructions and context for this chat\][\s\S]*?\[End of the instructions and context\]\n\n/, "");
+      if (last.role === "user" && /file/.test(said) && req.tools.some((t) => t.name === "write_file")) {
         // One short sentence first, like Claude (the session asks local models for it once otherwise).
         onText?.("I'll write the file.");
         return { text: "I'll write the file.", toolCalls: [{ id: "w1", name: "write_file", arguments: { path: "out.txt", content: "from the agent" } }] };
       }
-      const text = last.role === "tool" ? `Tool said: ${last.content}` : `You said: ${last.content}`;
+      const text = last.role === "tool" ? `Tool said: ${last.content}` : `You said: ${said}`;
       onText?.(text);
       return { text, toolCalls: [] };
     },

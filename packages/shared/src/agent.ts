@@ -400,6 +400,8 @@ export type AgentEvent = EventBase &
          * `cached_tokens`). Only when the provider reported it; older servers and clients leave it out.
          */
         cached?: number;
+        /** `cached` / `input` (0 to 1, three digits): how much of the prompt the server did not have to read again. */
+        cachedShare?: number;
         /** Of `input`, the tokens written to the prompt cache this call (Anthropic; billed a bit above plain input). */
         cacheWrite?: number;
         /**

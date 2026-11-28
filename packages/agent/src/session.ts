@@ -25,6 +25,12 @@ import { SAY_FIRST_NUDGE, SAY_FIRST_STEPS_NUDGE, STEPS_NOTE, TURN_SHAPE_PROMPT, 
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
+import { splitPrompt } from "./prompt.js";
+
+/** Around the chat's own part of the prompt when it rides in front of the first user message (see stabilize). */
+const CHAT_CONTEXT_OPEN = "[Instructions and context for this chat]";
+const CHAT_CONTEXT_CLOSE = "[End of the instructions and context]";
+
 /** Added to the system prompt in plan mode. */
 const PLAN_NOTE =
   "PLAN MODE is on. Do not change anything: no file edits, no commands that change things (those tools are refused). Look around with the read-only tools (list, read and search files) until you understand what is needed, ask the user with ask_user if a choice is theirs, then call present_plan with a clear, numbered plan. After that, stop and wait.";
@@ -174,6 +180,13 @@ export interface AgentSessionOptions {
    * them when the model needs them. Read on every request; empty = off.
    */
   toolSearch?: () => readonly string[] | undefined;
+  /**
+   * Keep the start of every request the same across chats (local engines' prompt cache): the system turn holds only
+   * the fixed part of the prompt, the chat's own part (folders, notes, memory, persona, summary) goes in front of the
+   * first user message, and the tools that are always sent come before the ones this message loaded. Read on every
+   * request; unset = off (a cloud model keeps its system prompt whole).
+   */
+  stablePrefix?: () => boolean;
   /**
    * With tool search: the most tools sent in full per turn (default 24); the rest are listed in `more_tools`. Read on
    * every request. See capTools in budget.ts.
@@ -342,9 +355,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
   private readonly toolSearch?: () => readonly string[] | undefined;
+  private readonly stablePrefix?: () => boolean;
   private readonly toolCap?: () => number | undefined;
   private readonly route?: AgentSessionOptions["route"];
-  /** Tools not offered for the current message (the router's `hide`). */
+  /** Tools not offered for the current message (the router's `hide`; with `stablePrefix` listed but refused). */
   private hidden = new Set<string>();
   /** The message waiting for the router (set by send, routed at the start of the run). */
   private routeText?: string;
@@ -462,6 +476,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.team = opts.team;
     if (opts.undoStore) this.undoStore = opts.undoStore;
     this.toolSearch = opts.toolSearch;
+    this.stablePrefix = opts.stablePrefix;
     this.toolCap = opts.toolCap;
     this.route = opts.route;
     this.events = [...(opts.events ?? [])];
@@ -1031,10 +1046,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const cacheWrite = result.usage?.cacheWriteTokens;
     // What the token budget left out of this call (main model only; teammates get their own short prompts).
     // For comparing before and after a speed change (debug only): each model step's input, cached tokens and time.
-    this.debugOf?.(`step ${this.id} ${role} ${modelId}: input ${input}, cached ${cached ?? "?"}, output ${output}${timing ? `, wait ${timing.waitMs} ms, write ${timing.writeMs} ms` : ""}`);
+    const cachedShare = typeof cached === "number" && cached >= 0 && input > 0 ? Math.round((Math.min(cached, input) / input) * 1000) / 1000 : undefined;
+    this.debugOf?.(`step ${this.id} ${role} ${modelId}: input ${input}, cached ${cached ?? "?"}${cachedShare !== undefined ? ` (${Math.round(cachedShare * 100)}%)` : ""}, output ${output}${timing ? `, wait ${timing.waitMs} ms, write ${timing.writeMs} ms` : ""}`);
     const pruned = role === "main" ? Math.round((this.lastPrunedChars + this.lastCappedChars) / this.charsPerToken) : 0;
     this.savedTokens += pruned;
-    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(typeof cacheWrite === "number" && cacheWrite > 0 ? { cacheWrite: Math.min(cacheWrite, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(cachedShare !== undefined ? { cachedShare } : {}), ...(typeof cacheWrite === "number" && cacheWrite > 0 ? { cacheWrite: Math.min(cacheWrite, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
   }
 
   /** Tokens the token budget left out of all main-model calls of this conversation (the usage events' `pruned`). */
@@ -1205,7 +1221,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // Local models drift into English after long tool runs: say the user's language again, last thing in the instructions.
     const note = languageNote([...this.messages].reverse().find((m) => m.role === "user")?.content ?? "");
     if (note && out[0]?.role === "system") out[0] = { ...out[0], content: `${out[0].content}\n\n${note}` };
-    return out;
+    return this.stabilize(out);
   }
 
   /**
@@ -1213,8 +1229,33 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * that do work (turn-shape.ts).
    */
   private basePrompt(): string {
+    const { fixed, rest } = this.promptParts();
+    return rest ? `${fixed}\n\n${rest}` : fixed;
+  }
+
+  /**
+   * The system prompt in two parts: `fixed` (the same in every chat, then the turn-shape block) and `rest` (this
+   * chat's own part and the plan-mode note). With `stablePrefix` only `fixed` stays in the system turn.
+   */
+  private promptParts(): { fixed: string; rest: string } {
+    const { fixed, chat } = splitPrompt(this.systemPrompt);
     const shape = offersTodo(this.specs().map((t) => t.name), false) ? `\n\n${TURN_SHAPE_PROMPT}` : "";
-    return this.mode === "plan" ? `${this.systemPrompt}${shape}\n\n${PLAN_NOTE}` : `${this.systemPrompt}${shape}`;
+    return { fixed: `${fixed}${shape}`, rest: [chat, this.mode === "plan" ? PLAN_NOTE : ""].filter(Boolean).join("\n\n") };
+  }
+
+  /**
+   * Moves everything after the fixed part of the system turn (the chat's part, a summary, the language note) to the
+   * front of the first user message, so the system turn and the tools after it read the same in every chat.
+   * Only when `stablePrefix` is on and the first message after the system turn is the user's.
+   */
+  private stabilize(out: AgentMessage[]): AgentMessage[] {
+    const sys = out[0];
+    if (!this.stablePrefix?.() || sys?.role !== "system" || out[1]?.role !== "user") return out;
+    const { fixed } = this.promptParts();
+    if (!sys.content.startsWith(fixed)) return out;
+    const rest = sys.content.slice(fixed.length).trim();
+    if (!rest) return out;
+    return [{ ...sys, content: fixed }, { ...out[1], content: `${CHAT_CONTEXT_OPEN}\n${rest}\n${CHAT_CONTEXT_CLOSE}\n\n${out[1].content}` }, ...out.slice(2)];
   }
 
   /**
@@ -1355,12 +1396,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (this.toolsUnsupported) return [];
     // By name, not by the order tools were registered (MCP servers and plugins connect in any order), so the tool
     // list, which sits at the top of the prompt, stays the same from turn to turn and the engine keeps its cache.
-    const all = sortSpecs([...this.tools.values()].map((t) => t.spec).filter((t) => !this.hidden.has(t.name)));
+    const all = sortSpecs([...this.tools.values()].map((t) => t.spec).filter((t) => this.stablePrefix?.() || !this.hidden.has(t.name)));
     const core = this.toolSearch?.();
     const list = latestTodo(this.events);
     const todo = offersTodo(all.map((t) => t.name), !!list?.length && !todoProgress(list).finished) ? [todoSpec] : [];
-    const base = [askUserSpec, requestAccessSpec, ...todo, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
-    if (!core?.length) return [...base, ...all];
+    // The tools every chat sends come first and never move (the chat template puts them right after the system turn,
+    // so they are part of the prompt cache's start); what depends on this chat or message comes after them.
+    const always = [askUserSpec, requestAccessSpec];
+    const extra = [...todo, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
+    if (!core?.length) return [...always, ...all, ...extra];
     // Tool search: the core tools and the ones loaded so far in full; the rest by name only. Loaded tools come after
     // the core ones, so loading one changes only the end of the list.
     const loaded = [...all.filter((t) => core.includes(t.name)), ...all.filter((t) => !core.includes(t.name) && this.loadedTools.has(t.name))];
@@ -1368,14 +1412,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const { keep: full, over } = capTools(loaded, { core, rank: this.toolRank, since: this.rankSince, cap: this.toolCap?.() ?? DEFAULT_TOOL_CAP });
     this.lastCappedChars = over.length ? JSON.stringify(loaded.filter((t) => over.includes(t.name))).length : 0;
     const rest = all.filter((t) => !full.includes(t));
-    if (!rest.length) return [...base, ...full];
+    const stable = [...always, ...full.filter((t) => core.includes(t.name))];
+    const loadedFull = full.filter((t) => !core.includes(t.name));
+    if (!rest.length) return [...stable, ...extra, ...loadedFull];
     const short = (d: string) => (d.split(/(?<=\.)\s/)[0] ?? d).slice(0, 90);
     const find: ToolSpec = {
       name: FIND_TOOLS_TOOL,
       description: `Load more tools before using them (their full instructions come with the next step). Available: ${rest.map((t) => `${t.name} (${short(t.description)})`).join("; ")}`,
       inputSchema: { type: "object", properties: { names: { type: "array", items: { type: "string" }, description: "Tool names from the list." } }, required: ["names"] },
     };
-    return [...base, ...full, find];
+    return [...stable, ...extra, ...loadedFull, find];
   }
 
   /** One turn of an outside agent: its text, steps and approval questions, shown like KesherAI's own. */
@@ -1929,6 +1975,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
     const tool = this.tools.get(call.name);
     if (!tool) return fail(`There is no tool called "${call.name}".`);
+    // With stablePrefix a held-back tool stays in the list (so the list reads the same in every chat) but is refused.
+    if (this.stablePrefix?.() && this.hidden.has(call.name)) return fail(`${call.name} is not needed for this request: answer or make it directly, without looking things up.`);
     const step = this.readMemo.tick();
     // A write outside what this run may change is refused now, with what it may change (not found only at commit time).
     if (this.writeGuard && tool.risk === "write" && typeof call.arguments.path === "string") {
