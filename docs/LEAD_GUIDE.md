@@ -58,7 +58,7 @@ If `$S/design2` is gone: Artifact read the doc into `$S/design2` first.
 
 ## Releases
 1. Bump the version in package.json, apps/desktop, apps/web, packages/agent, packages/core.
-2. `pnpm -s lint && pnpm -s typecheck && pnpm -s test` (clean /tmp kesher-* folders after).
+2. `pnpm audit --prod --audit-level high && pnpm -s lint && pnpm -s typecheck && pnpm -s test` (clean /tmp kesher-* folders after). The audit is the release CI's first check: a new dependency at an old version (sharp 0.34, 28.11) fails the whole release.
 3. Commit `0.6.NN: …` with `Desktop-he:` / `Phone-he:` lines and the session trailer; push `main`, then
    `git push -qf origin HEAD:release`.
 4. Wait for the GitHub release in the background (`gh api repos/Deadchu-R/KesherAI/releases/latest --jq .tag_name`
