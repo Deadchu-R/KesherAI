@@ -247,6 +247,8 @@ test("a session reports its stage and live details while it is analysed, and non
       },
     }));
     const s = await ideas.start({ file, seconds: 600 });
+    // The analysis starts in the background: on a busy machine its first stage is set a moment after start() returns.
+    await wait(async () => (await ideas.get(s.id)).progress?.stage === "transcribing");
     let p = (await ideas.get(s.id)).progress;
     assert.equal(p?.stage, "transcribing");
     assert.equal(p?.audioSeconds, 600);
