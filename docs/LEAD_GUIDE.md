@@ -79,6 +79,13 @@ A scheduled task on Roee's Claude account ("KesherAI daily feature review vs com
 - Fewer agents: group related steps into one agent task; do small edits (a few lines, docs) as the lead. Model per agent by the job: big or risky code = Opus; small UI/doc/test fixes, boards, research, reviews = Sonnet; lookups and mechanical loops = Haiku.
 - His PC: use it only when a feature needs it (setup, real checks); keep KesherAI on the newest release there and things tidy; close what was opened.
 
+## Which provider may run what (Roee, 2026-11-28 10:34)
+
+Any task WITHOUT security issues or private data may run on ANY provider (GhostCLI, OpenCode Go, Gemini, free cloud
+models, Antigravity, the local model), including free ones that train on data. Only tasks that touch security or private
+data (keys, personal info, his files, confidential code) stay on the local model or providers that do not train. Pick by
+quota left; never wait on one provider while another with quota is free.
+
 ## Night work loop (Roee, 2026-11-27 23:47: work all night without stopping)
 
 When Roee asks for a work night (or leaves the lead running overnight), the lead never goes idle:
