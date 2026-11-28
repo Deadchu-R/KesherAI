@@ -7,11 +7,11 @@ const ids = (l: ReadonlyArray<{ id: string }>) => l.map((s) => s.id);
 const nothing = { parts: [], pluginPages: [] };
 
 test("the registry is built from what is installed: an off part or an unloaded plugin is not registered", () => {
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code", "image", "blueprint"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, nothing)), ["doc", "sheet", "deck", "code", "image", "blueprint", "model", "scenes"]);
   const on = buildSurfaces(BUILT_IN, { parts: [{ id: "image-editor", on: true }, { id: "model-editor", on: false }], pluginPages: [{ pluginId: "image-editor" }, { pluginId: "model-editor" }] });
-  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image", "blueprint", "image-editor"]);
+  assert.deepEqual(ids(on), ["doc", "sheet", "deck", "code", "image", "blueprint", "model", "scenes", "image-editor"]);
   // A part the server does not list counts as on (as partOn does), but its plugin page must be loaded.
-  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "image", "blueprint", "sound-editor"]);
+  assert.deepEqual(ids(buildSurfaces(BUILT_IN, { parts: [], pluginPages: [{ pluginId: "sound-editor" }] })), ["doc", "sheet", "deck", "code", "image", "blueprint", "model", "scenes", "sound-editor"]);
 });
 
 test("the surface contract: every surface has an id, kinds, a lazy panel, tools, phone and versions", () => {
@@ -66,7 +66,8 @@ test("Open in chat by file type: the installed surface, else the install offer f
   const pic = openTarget(BUILT_IN, list, "shared/Hero.PNG");
   assert.ok(pic && !("install" in pic) && pic.surface.id === "image");
   const model = openTarget(BUILT_IN, list, "out/ship.glb");
-  assert.ok(model && "install" in model && model.install === "model-editor");
+  // The built-in 3D viewer opens a model with no install; the 3D editor is offered from inside it.
+  assert.ok(model && !("install" in model) && model.surface.id === "model");
   const song = openTarget(BUILT_IN, list, "song.mp3");
   assert.ok(song && "install" in song && song.install === "sound-editor");
   assert.equal(openTarget(BUILT_IN, list, "notes.txt"), undefined);

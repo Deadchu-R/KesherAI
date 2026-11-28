@@ -1,0 +1,155 @@
+{
+ "group": "צ'אט · Chat",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c10",
+   "method": "GET",
+   "json": {
+    "id": "c10",
+    "projectId": null,
+    "title": "מודל של שועל",
+    "kind": "chat",
+    "modelId": "qwen3",
+    "mode": "ask",
+    "createdAt": {
+     "$ago": "30m"
+    },
+    "updatedAt": {
+     "$ago": "2m"
+    },
+    "messageCount": 4,
+    "session": {
+     "id": "c8",
+     "status": "idle",
+     "modelId": "qwen3",
+     "mode": "ask",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "10m"
+      },
+      "type": "user",
+      "text": "תהפוך את התמונה של השועל למודל תלת ממד"
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "9m"
+      },
+      "type": "tool_call",
+      "callId": "m1",
+      "name": "make_3d",
+      "input": {
+       "image": "fox.png"
+      }
+     },
+     {
+      "seq": 3,
+      "at": {
+       "$ago": "8m"
+      },
+      "type": "tool_result",
+      "callId": "m1",
+      "name": "make_3d",
+      "ok": true,
+      "output": "Made the 3D model models/fox.glb (GLB, with its colours and materials); the user can download it and open it in Blender, Unreal or Unity."
+     },
+     {
+      "seq": 4,
+      "at": {
+       "$ago": "7m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "המודל מוכן. אפשר לסובב אותו בצד."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c10/events*",
+   "body": ": hi\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/parts",
+   "json": {
+    "simple": false,
+    "parts": [
+     {
+      "id": "model-editor",
+      "pages": [],
+      "icon": "🧊",
+      "downloadGb": 0,
+      "plugin": "model-editor",
+      "title": {
+       "en": "3D editor",
+       "he": "עורך תלת ממד"
+      },
+      "description": {
+       "en": "",
+       "he": ""
+      },
+      "on": false
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c10/files/download*",
+   "bodyBase64": "Z2xURgIAAAAUAQAAAAEAAEpTT057ImFzc2V0Ijp7InZlcnNpb24iOiIyLjAifSwibWVzaGVzIjpbeyJuYW1lIjoiQm9keSJ9LHsibmFtZSI6IlRhaWwifSx7Im5hbWUiOiJFYXJzIn1dLCJtYXRlcmlhbHMiOlt7Im5hbWUiOiJGdXIiLCJwYnJNZXRhbGxpY1JvdWdobmVzcyI6eyJiYXNlQ29sb3JGYWN0b3IiOlswLjksMC41LDAuMTUsMV19fSx7Im5hbWUiOiJFeWVzIiwicGJyTWV0YWxsaWNSb3VnaG5lc3MiOnsiYmFzZUNvbG9yRmFjdG9yIjpbMC4wNSwwLjA1LDAuMDgsMV19fV19ICAg",
+   "contentType": "model/gltf-binary"
+  },
+  {
+   "url": "**/api/conversations/c10/files",
+   "method": "GET",
+   "json": {
+    "folder": "/work/fox",
+    "files": [
+     {
+      "path": "models/fox.glb",
+      "size": 900,
+      "modifiedAt": "2026-11-28T10:00:00Z"
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "Chat3DSurface",
+   "title": "כלים בצ'אט: תלת ממד. כרטיס עם תמונה, ופאנל עם מודל מסתובב, רשת, תאורה, חומרים, חלקים ושאלה על חלק",
+   "titleEn": "Tools in chat: 3D. Card with a poster, then a panel: turning model, wireframe, light, materials, parts, ask about a part",
+   "route": "#/c/c10",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 820,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".model-card"
+    },
+    {
+     "click": ".model-card"
+    },
+    {
+     "wait": ".model-sf-lists li"
+    },
+    {
+     "click": ".model-sf-lists li button"
+    }
+   ]
+  }
+ ]
+}

@@ -30,6 +30,8 @@ import { CODE_FILES, askMessage, codeFileFromResult } from "./code-surface";
 import { EDITOR_FILES, EDITOR_NAMES, type EditorId } from "./editor-handoff";
 import { BLUEPRINT_TOOLS, blueprintFromResult } from "./blueprint-surface";
 import { IMAGE_FILES, imageFromResult, parseRegionSelection, regionMessage } from "./image-surface";
+import { MODEL_FILES, modelFromResult, partAskMessage } from "./model-surface";
+import { ENGINE_TITLE, SCENE_TOOLS, objectAskMessage, sceneFromResult } from "./scene-surface";
 
 /** What a surface lets the phone do: edit there, view and ask the model, or only "Open on the PC". */
 export type SurfacePhone = "edit" | "view+ask" | "open-on-pc";
@@ -196,6 +198,43 @@ const BLUEPRINT_SURFACE: ChatSurface = {
   versions: "none",
 };
 
+/** 3D models: .glb/.gltf/.fbx/.obj files and `make_3d` results open the viewer panel (ModelPanel.tsx); the 3D editor opens from it. */
+const MODEL_SURFACE: ChatSurface = {
+  id: "model",
+  title: { he: "מודל תלת ממד", en: "3D model" },
+  kinds: ["model"],
+  fileTypes: MODEL_FILES,
+  fromResult: (tool, ok, output) => {
+    const path = modelFromResult(tool, ok, output);
+    return path ? { kind: "model", id: path, path, title: path.split("/").pop() ?? path } : undefined;
+  },
+  card: () => import("./ModelPanel").then((m) => ({ default: m.ModelCard })),
+  panel: () => import("./ModelPanel").then((m) => ({ default: m.ModelPanel })),
+  panelClass: "model-panel",
+  tools: ["make_3d"],
+  phone: "view+ask",
+  selection: (p) => partAskMessage({ path: p.item.path ?? p.item.id, part: p.selection, instruction: p.instruction, he: p.he }),
+  versions: "none",
+};
+
+/** Unity, Unreal and Godot scenes: the engine's scene tools open the hierarchy and diff panel (ScenesPanel.tsx); one item per engine. */
+const SCENES_SURFACE: ChatSurface = {
+  id: "scenes",
+  title: { he: "סצנות", en: "Scenes" },
+  kinds: ["scene"],
+  fromResult: (tool, ok, output) => {
+    const engine = sceneFromResult(tool, ok, output);
+    return engine ? { kind: "scene", id: engine, title: ENGINE_TITLE[engine].en } : undefined;
+  },
+  card: () => import("./ScenesPanel").then((m) => ({ default: m.ScenesCard })),
+  panel: () => import("./ScenesPanel").then((m) => ({ default: m.ScenesPanel })),
+  panelClass: "scenes-panel",
+  tools: Object.keys(SCENE_TOOLS),
+  phone: "view+ask",
+  selection: (p) => objectAskMessage({ engine: p.item.id === "godot" || p.item.id === "unreal" ? p.item.id : "unity", object: p.selection, instruction: p.instruction, he: p.he }),
+  versions: "none",
+};
+
 /** The item kind and agent tools of each editor. */
 const EDITOR_SURFACE: Record<EditorId, { kind: string; tools: readonly string[]; phone: SurfacePhone }> = {
   "image-editor": { kind: "image", tools: ["make_ui_sprite"], phone: "edit" },
@@ -230,6 +269,8 @@ export const BUILT_IN: readonly ChatSurface[] = [
   CODE_SURFACE,
   IMAGE_SURFACE,
   BLUEPRINT_SURFACE,
+  MODEL_SURFACE,
+  SCENES_SURFACE,
   ...(Object.keys(EDITOR_SURFACE) as EditorId[]).map(editorSurface),
 ];
 
