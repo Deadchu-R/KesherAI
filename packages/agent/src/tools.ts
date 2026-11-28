@@ -60,6 +60,8 @@ export interface ToolContext {
   lastUser?: string;
   /** Environment variables for commands (the project's environment). */
   env?: Record<string, string>;
+  /** Lets a foreground command move to the background at its timeout or on the user's button (see ShellDetach). Optional. */
+  detach?: import("./shell.js").ShellDetach;
   /** The chat's web search settings (sites, depth). */
   web?: import("@kesher/shared").WebPrefs;
   /** Opens a page through Tor, for a page that does not open directly (when Tor is installed and the chat allows it). */
@@ -526,13 +528,13 @@ const runCommandTool: AgentTool = {
   spec: {
     name: "run_command",
     description:
-      "Run a shell command in the project folder (cmd on Windows, sh elsewhere) and return its output and exit code. Use it to build, test, run git status, install packages. Commands that never finish (servers, watchers) are stopped at the timeout. Use background:true for builds, installs, servers and anything over about 30 seconds: it returns at once with an id, you keep working, and the chat gets a new turn when it ends (read its output with command_output, tail or grep, never whole).",
+      "Run a shell command in the project folder (cmd on Windows, sh elsewhere) and return its output and exit code. Use it to build, test, run git status, install packages. A command still running at the timeout keeps running in the background (its id comes back). Use background:true for builds, installs, servers and anything over about 30 seconds: it returns at once with an id, you keep working, and the chat gets a new turn when it ends (read its output with command_output, tail or grep, never whole).",
     inputSchema: {
       type: "object",
       properties: {
         command: { type: "string", description: "The command line." },
         purpose: { type: "string", description: "One short sentence for the user, in their language: what this command does and why it is needed now. Shown when they approve it." },
-        timeout_seconds: { type: "integer", description: "Stop after this many seconds (default 120, max 600). Not used with background." },
+        timeout_seconds: { type: "integer", description: "Stop after this many seconds (default 120, max 600). Not used with background. A command still running at the timeout is not stopped: it moves to the background (you get its id)." },
         background: { type: "boolean", description: "Start it and return at once (see above); the output goes to a file." },
       },
       required: ["command"],
@@ -547,7 +549,7 @@ const runCommandTool: AgentTool = {
     const command = str(input, "command");
     if (input.background === true) throw new Error("Background commands are not available in this conversation; run it without background.");
     const timeoutMs = Math.min(600, Math.max(1, Number(input.timeout_seconds ?? 120))) * 1000;
-    const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress, ctx.env);
+    const r = await runShell(command, cwd, timeoutMs, ctx.signal, ctx.progress, ctx.env ?? {}, ctx.detach);
     return { output: truncate(`${r.output.trim() || "(no output)"}\n\n${r.status}`) };
   },
 };

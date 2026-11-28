@@ -197,3 +197,44 @@ test("on restart a pid the OS gave to another program (or a gone process) is nev
   assert.deepEqual(s.killed, []);
   assert.ok(second.list("c1").every((c) => c.state === "ended"));
 });
+
+test("adopt: a foreground process moves in with its output so far, keeps writing, and wakes the chat at its end", async () => {
+  const s = await setup();
+  const bg = s.mk();
+  const f = new Fake();
+  const d = bg.detachFor("c1", "npm test", "/p", "call1");
+  const note = d.adopt(f as unknown as ChildProcess, "before\n");
+  assert.match(note ?? "", /moved to the background as [0-9a-f]{8}/);
+  f.stdout.write("after\n");
+  await flush();
+  const c = bg.list("c1")[0]!;
+  assert.equal(await readFile(c.file, "utf8"), "before\nafter\n");
+  assert.equal(s.procs.length, 0, "nothing was started again");
+  f.exit(0);
+  await flush();
+  assert.equal(bg.list("c1")[0]!.state, "exited");
+  assert.equal(s.sent.length, 1);
+});
+
+test("adopt refuses at the per-chat limit; the Run in background button hands over the call's process once", async () => {
+  const s = await setup();
+  const bg = s.mk();
+  for (let i = 0; i < RUNNING_PER_CHAT; i++) await bg.run("c1", `x${i}`, "/p");
+  assert.equal(bg.detachFor("c1", "y", "/p", "k").adopt(new Fake() as unknown as ChildProcess, ""), undefined);
+  let handed = 0;
+  bg.detachFor("c2", "y", "/p", "call9").onReady(() => handed++);
+  assert.equal(bg.handoffForeground("c2", "call9"), true);
+  assert.equal(bg.handoffForeground("c2", "call9"), false);
+  assert.equal(bg.handoffForeground("c3", "call9"), false);
+  assert.equal(handed, 1);
+});
+
+test("a stopped command is killed, not handed over", async () => {
+  const s = await setup();
+  const bg = s.mk();
+  const f = new Fake();
+  const c = bg.adopt("c1", "npm run dev", "/p", f as unknown as ChildProcess, "")!;
+  assert.equal(await bg.stop("c1", c.id), true);
+  assert.equal(f.killed, true);
+  assert.equal(bg.list("c1")[0]!.state, "stopped");
+});

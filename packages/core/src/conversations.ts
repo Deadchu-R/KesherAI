@@ -16,6 +16,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, isSearchQuery, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
+import { detectHardwareCached } from "@kesher/downloads";
 import { branding, editQueued, moveQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate, type StopAfter } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
@@ -983,6 +984,11 @@ export class ConversationManager {
       },
       isAlwaysAllowed: (tool, modelId, command, scope, input) => this.grantAllows(id, tool, modelId, command, scope, input),
       env: () => this.envFor(id),
+      // Read-only tool calls of one step run side by side: 3 at once on a computer without a graphics card, else 6.
+      parallelReads: () => (noGraphicsCard() ? 3 : 6),
+      debug: (line) => {
+        if (process.env.KESHER_DEBUG) console.debug(`[kesher] ${line}`);
+      },
       // The chat's own web settings with the user's filter from Settings → Web (blocked sites, safe search, .onion).
       web: () => withFilter(this.deps.library.summary(id)?.web, this.deps.config.webFilter, this.deps.tor?.installed() === true),
       // A blocked page once more through Tor, when it is installed and the chat did not switch it off.
@@ -2150,6 +2156,16 @@ export async function assertFolder(folder: string): Promise<void> {
 /** The first addresses in web_search's output. */
 function parseFirstUrls(out: string, n: number): string[] {
   return [...out.matchAll(/^\s{3}(https?:\/\/\S+)$/gm)].map((m) => m[1]!).slice(0, n);
+}
+
+/** Whether this computer has no graphics card (known after the first look at the hardware, which starts here). */
+let gpuCount: number | undefined;
+function noGraphicsCard(): boolean {
+  if (gpuCount === undefined) {
+    gpuCount = -1;
+    void detectHardwareCached().then((h) => (gpuCount = h.gpus.length), () => (gpuCount = 1));
+  }
+  return gpuCount === 0;
 }
 
 /**

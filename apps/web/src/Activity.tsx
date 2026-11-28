@@ -4,7 +4,7 @@ import { SentFileCard } from "./chat/SentFileCard";
 import { MemoryChip } from "./chat/MemoryChip";
 import { InstallOffer } from "./chat/InstallOffer";
 import { mediaKindOf } from "./chat/chat-inline";
-import { JobProgressView, MEDIA_JOB, useChatLive } from "./chat/ChatLive";
+import { JobProgressView, MEDIA_JOB, RunInBackground, useChatLive } from "./chat/ChatLive";
 import { ResultActions, useQuickNames } from "./chat/ResultActions";
 import { imageActions, playerActions, stepActions } from "./chat/result-actions";
 import type { AgentEvent } from "@kesher/shared";
@@ -249,6 +249,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
             ))}
         </ul>
       )}
+      {live && current && !current.result && current.call.name === "run_command" && current.call.input.background !== true && <RunInBackground callId={current.call.callId} />}
       {current && !current.result && liveOutput?.[current.call.callId] && <LiveOutput text={liveOutput[current.call.callId]!} />}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {/* A picture, video, song or 3D job: ComfyUI's steps and preview frames, and Cancel (design ChatJobProgress). */}

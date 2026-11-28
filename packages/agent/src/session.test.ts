@@ -1159,3 +1159,51 @@ test("act, don't ask: 'Shall I...?' for a clear request gets one nudge", async (
   assert.equal(seen.length, 2);
   assert.match(JSON.stringify(seen[1]!.messages.at(-1)), /already asked for this — do it/);
 });
+
+/** A read-only tool that waits `ms`, recording when calls overlap. */
+function napTool(name: string, state: { now: number; peak: number }, ms = 60): AgentTool {
+  return {
+    risk: "read",
+    spec: { name, description: "", inputSchema: { type: "object", properties: {} } },
+    run: async (input) => {
+      state.peak = Math.max(state.peak, ++state.now);
+      await new Promise((r) => setTimeout(r, ms));
+      state.now--;
+      return { output: `out ${String(input.n)}` };
+    },
+  };
+}
+
+async function parallelRun(names: string[], opts: { limit?: number; extra?: AgentTool[] } = {}) {
+  const state = { now: 0, peak: 0 };
+  const lines: string[] = [];
+  const calls = names.map((name, n) => ({ name, arguments: { n } }));
+  const { model } = scripted([{ calls }, { text: "done" }]);
+  const tools = [...new Set(names)].map((n) => opts.extra?.find((t) => t.spec.name === n) ?? napTool(n, state));
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", tools, systemPrompt: "sys", ...(opts.limit ? { parallelReads: () => opts.limit! } : {}), debug: (l) => lines.push(l) });
+  session.send("go");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle" && session.events.some((x) => x.type === "assistant"));
+  return { session, state, lines };
+}
+
+test("parallel: three read-only calls of one step run together, results stay in call order, the turn is logged", async () => {
+  const { session, state, lines } = await parallelRun(["read_file", "list_files", "search"], { limit: 6 });
+  assert.equal(state.peak, 3);
+  const order = session.events.filter((e) => e.type === "tool_call" || e.type === "tool_result").map((e) => `${e.type}:${(e as { name: string }).name}`);
+  assert.deepEqual(order, ["tool_call:read_file", "tool_result:read_file", "tool_call:list_files", "tool_result:list_files", "tool_call:search", "tool_result:search"]);
+  assert.deepEqual(order.filter((o) => o.startsWith("tool_call")), ["tool_call:read_file", "tool_call:list_files", "tool_call:search"]);
+  const tools = session.events.filter((e) => e.type === "tool_result").map((e) => (e as { output: string }).output);
+  assert.deepEqual(tools, ["out 0", "out 1", "out 2"]);
+  assert.match(lines[0] ?? "", /2 steps, 3 tool calls \(1 steps run side by side\), \d+\.\d s/);
+});
+
+test("parallel: the limit holds (CPU-only: 3 of 5 at once) and a mixed step stays one after the other", async () => {
+  const five = await parallelRun(["read_file", "list_files", "search", "code_map", "find_symbol"], { limit: 3 });
+  assert.equal(five.state.peak, 3);
+  const mixed = await parallelRun(["read_file", "write_file"], {
+    extra: [{ ...napTool("write_file", { now: 0, peak: 0 }), risk: "write" }],
+  });
+  assert.equal(mixed.state.peak, 1, "a write in the step keeps the old path");
+  const single = await parallelRun(["read_file"]);
+  assert.match(single.lines[0] ?? "", /0 steps run side by side|\(0 steps/);
+});

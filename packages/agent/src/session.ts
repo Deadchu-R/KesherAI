@@ -93,9 +93,16 @@ export interface ExternalAgent {
   turn: (text: string, io: ExternalIO, signal: AbortSignal) => Promise<void>;
 }
 
+/** Tools that only look (no change, no command, no approval): one step with several of them runs side by side. */
+export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(["read_file", "list_files", "search", "code_map", "find_symbol", "find_assets", "web_search", "web_fetch", "search_chats", "recent_chats", "read_chat"]);
+
 /** How a session is set up. */
 export interface AgentSessionOptions {
   id: string;
+  /** How many read-only tool calls of one model step may run at once (3 on a computer without a graphics card, else 6). Default 3. */
+  parallelReads?: () => number;
+  /** Gets one line per finished turn: steps, tool calls, parallel steps, seconds (to compare before and after). */
+  debug?: (line: string) => void;
   /**
    * The model team's language layer (core answer-language.ts): the final answer in the user's language when the model
    * answered in another one or mixed alphabets. Undefined leaves the answer as it is.
@@ -320,6 +327,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly onAlwaysScope?: (scope: string) => void;
   private readonly helperName?: string;
   private readonly envOf?: () => Record<string, string>;
+  private readonly parallelOf?: () => number;
+  private readonly debugOf?: (line: string) => void;
+  /** Events of the calls running side by side are held here (by call id) and pushed in call order afterwards. */
+  private held?: Map<string, Array<[NewEvent, boolean]>>;
   private readonly webOf?: () => import("@kesher/shared").WebPrefs | undefined;
   private readonly torOf?: AgentSessionOptions["viaTor"];
   /** Tokens the model can read; see {@link AgentSessionOptions.contextTokens}. */
@@ -442,6 +453,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.helperName = opts.helperName;
     this.envOf = opts.env;
     this.webOf = opts.web;
+    this.parallelOf = opts.parallelReads;
+    this.debugOf = opts.debug;
     this.torOf = opts.viaTor;
     this.contextTokens = opts.contextTokens ?? 12_000;
     this.team = opts.team;
@@ -917,6 +930,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   private push(e: NewEvent, persist = true): AgentEvent {
+    const hold = this.held && (e.type === "tool_call" || e.type === "tool_result" || e.type === "tool_output") ? this.held.get(e.callId) : undefined;
+    if (hold) {
+      if (persist) hold.push([e, persist]);
+      return { ...e, seq: 0, at: new Date().toISOString() } as AgentEvent;
+    }
     const event = { ...e, seq: persist ? this.events.length + 1 : 0, at: new Date().toISOString() } as AgentEvent;
     if (persist) this.events.push(event);
     this.emit("event", event);
@@ -1414,6 +1432,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const abort = new AbortController();
     this.abort = abort;
     this.setStatus("running");
+    const stats = { steps: 0, calls: 0, parallel: 0, from: Date.now() };
     try {
       let nudges = 0;
       // A turn cut off at the token limit gets one nudge to answer briefly (see `truncated` below).
@@ -1438,6 +1457,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
+        stats.steps++;
         // Background helpers that ended since the last turn: their reports go in before the model is asked.
         if (this.inbox.length) this.messages.push({ role: "user", content: `[KesherAI] ${this.inbox.splice(0).join("\n\n")}` });
         // Steering (chat-queue.ts): messages the user sent during this turn to change its course go in before the next step.
@@ -1577,9 +1597,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           this.setStatus("idle");
           return;
         }
-        for (const call of result.toolCalls) {
+        stats.calls += result.toolCalls.length;
+        const limit = this.parallelStep(result.toolCalls);
+        let outputs: string[] | undefined;
+        if (limit) {
+          stats.parallel++;
+          outputs = await this.executeTogether(result.toolCalls, limit, abort.signal);
+        }
+        for (const [i, call] of result.toolCalls.entries()) {
           this.pendingImages = undefined;
-          const output = await this.execute(call, abort.signal);
+          const output = outputs ? outputs[i]! : await this.execute(call, abort.signal);
           const images = this.pendingImages as Array<{ mimeType: string; data: string }> | undefined;
           if (images) {
             // Screenshots are big: only the newest one stays in the conversation.
@@ -1613,6 +1640,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       }
     } finally {
       if (this.abort === abort) this.abort = undefined;
+      this.debugOf?.(`turn ${this.id}: ${stats.steps} steps, ${stats.calls} tool calls (${stats.parallel} steps run side by side), ${((Date.now() - stats.from) / 1000).toFixed(1)} s`);
       await this.receipt(changedFrom).catch(() => undefined);
       this.onChange?.(this);
     }
@@ -1739,6 +1767,52 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
     this.messages.push({ role: "user", content: `(The user undid one of your changes to ${only} from one run. Read the file again before changing it.)` });
     return { files: back ? [only] : [] };
+  }
+
+  /**
+   * Whether one model step may run its tool calls side by side: several calls, all of them read-only (the
+   * {@link READ_ONLY_TOOLS} list, risk "read", no gate and no question first, valid arguments). Anything else in the step
+   * (a write, a command, a call that may need approval) keeps the whole step in order, one call after the other.
+   *
+   * @param calls - The step's tool calls.
+   * @returns How many may run at once, or 0 for the old one-by-one path.
+   */
+  private parallelStep(calls: ToolCall[]): number {
+    if (calls.length < 2) return 0;
+    for (const c of calls) {
+      const t = this.tools.get(c.name);
+      if (!t || !READ_ONLY_TOOLS.has(c.name) || (t.risk !== "read" && t.risk !== "safe") || t.gate || t.askFirst || typeof c.arguments._invalidJson === "string") return 0;
+    }
+    return Math.max(1, Math.min(8, Math.floor(this.parallelOf?.() ?? 3)));
+  }
+
+  /**
+   * Runs read-only calls with at most `limit` at once. What the user and the model see stays in call order: the
+   * events of each call are held until all are done, then pushed in order.
+   *
+   * @param calls - The calls (see {@link parallelStep}).
+   * @param limit - How many at once.
+   * @param signal - Stop.
+   * @returns Each call's output, in call order.
+   */
+  private async executeTogether(calls: ToolCall[], limit: number, signal: AbortSignal): Promise<string[]> {
+    const held = new Map<string, Array<[NewEvent, boolean]>>(calls.map((c) => [c.id, []]));
+    this.held = held;
+    const outputs: string[] = new Array(calls.length);
+    let next = 0;
+    try {
+      const worker = async () => {
+        while (next < calls.length) {
+          const i = next++;
+          outputs[i] = await this.execute(calls[i]!, signal);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(limit, calls.length) }, worker));
+    } finally {
+      this.held = undefined;
+      for (const c of calls) for (const [e, persist] of held.get(c.id) ?? []) this.push(e, persist);
+    }
+    return outputs;
   }
 
   /** Runs one tool call, asking for approval when needed. Returns what the model sees. */

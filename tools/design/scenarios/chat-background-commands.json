@@ -4,8 +4,8 @@
  "boards": [
   {
    "id": "ChatBackgroundCommands",
-   "title": "צ'אט: פקודות ברקע — שבבים בראש הצ'אט: ⏳ npm run build · 1:12 · עצירה; בסיום כרטיס עם קוד יציאה ו\"הצג פלט\", תור חדש והתראה לטלפון",
-   "titleEn": "Chat: background commands — chips at the top: ⏳ npm run build · 1:12 · Stop; when done a card with exit code and \"Show output\", a new turn, a phone ping",
+   "title": "צ'אט: פקודות ברקע — שבבים למעלה, ופקודה שרצה: \"הרצה ברקע\" (גם בסוף הזמן)",
+   "titleEn": "Chat: background commands — chips on top; a running command has \"Run in background\" (also at its timeout)",
    "route": "#/c/c1",
    "height": {
     "desktop": 700,
@@ -34,7 +34,7 @@
       "messageCount": 2,
       "session": {
        "id": "c1",
-       "status": "idle",
+       "status": "running",
        "modelId": "llamacpp/Qwen3.8-27B-Q4",
        "mode": "ask",
        "pendingApprovals": [],
@@ -61,6 +61,19 @@
         "type": "assistant",
         "turn": 1,
         "text": "הבנייה וההתקנה רצות ברקע. אני ממשיך לכתוב את הערות העדכון, ואקרא את סוף הפלט כשהן יסתיימו."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "20s"
+        },
+        "type": "tool_call",
+        "callId": "r1",
+        "name": "run_command",
+        "input": {
+         "command": "pnpm test",
+         "purpose": "בדיקת הקוד"
+        }
        }
       ]
      }

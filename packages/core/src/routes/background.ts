@@ -19,6 +19,10 @@ export async function backgroundRoutes(app: FastifyInstance, background: Backgro
   app.post<{ Params: { id: string; cid: string } }>("/api/conversations/:id/commands/:cid/stop", async (req, reply) =>
     (await background.stop(req.params.id, req.params.cid)) ? { ok: true } : reply.code(404).send({ error: "This command is no longer running." }),
   );
+  // "Run in background" on a running command card: the call's process moves to the registry (nothing runs again).
+  app.post<{ Params: { id: string; callId: string } }>("/api/conversations/:id/tool-calls/:callId/background", async (req, reply) =>
+    background.handoffForeground(req.params.id, req.params.callId) ? { ok: true } : reply.code(404).send({ error: "This command is no longer running." }),
+  );
   app.get<{ Params: { id: string; cid: string }; Querystring: { tail?: string } }>("/api/conversations/:id/commands/:cid/output", async (req, reply) => {
     const c = background.list(req.params.id).find((x) => x.id === req.params.cid);
     if (!c) return reply.code(404).send({ error: "This command is gone." });

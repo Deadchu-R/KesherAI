@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import type { AgentEvent, JobProgress } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -44,6 +44,30 @@ function phaseText(phase: string | undefined): string {
     case "maps": return L("מכין מפות נורמל, חספוס ו-AO", "Making normal, roughness and AO maps");
     default: return phase ?? L("מתחיל", "Starting");
   }
+}
+
+/**
+ * "Run in background" under a running command: the process keeps running as a background command (a chip at the top
+ * of the chat, `command_output` / `command_stop`) and the agent goes on at once. Nothing runs again.
+ *
+ * @param props.callId - The run_command step.
+ */
+export function RunInBackground({ callId }: { callId: string }) {
+  const live = useChatLive();
+  const [sent, setSent] = useState(false);
+  if (!live) return null;
+  const go = () => {
+    setSent(true);
+    void api(`/api/conversations/${encodeURIComponent(live.convId)}/tool-calls/${encodeURIComponent(callId)}/background`, { method: "POST" }).then(
+      () => toast(L("הפקודה ממשיכה ברקע", "The command goes on in the background")),
+      (e: Error) => (setSent(false), toast(e.message)),
+    );
+  };
+  return (
+    <div className="job-line">
+      <button type="button" className="chip-text job-cancel" onClick={go} disabled={!live.busy || sent}>⇩ {L("הרצה ברקע", "Run in background")}</button>
+    </div>
+  );
 }
 
 /**

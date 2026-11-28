@@ -13,6 +13,23 @@ export interface ShellResult {
 }
 
 /**
+ * Lets a foreground command keep running in the background instead of being killed at its timeout, or when the user
+ * presses "Run in background" (background-commands.ts implements it). Nothing is run again: the same process moves.
+ */
+export interface ShellDetach {
+  /**
+   * Takes over the still running process.
+   *
+   * @param child - The process (its output pipes are attached by the new owner at once, synchronously).
+   * @param output - What it printed so far.
+   * @returns A line for the model (id, how to read it), or undefined when it cannot be taken (limit reached): it is then stopped.
+   */
+  adopt(child: ChildProcess, output: string): string | undefined;
+  /** Called once with a function that hands the process over right now (the "Run in background" button). */
+  onReady?(handoff: () => void): void;
+}
+
+/**
  * The agent's own name in git: its commits never carry the user's name or email from the computer's git settings
  * (Roee: nothing in git may show who he is). `.invalid` is a reserved domain, so the address reaches no one and
  * belongs to no GitHub account.
@@ -111,9 +128,11 @@ export function killTree(pid: number | undefined, child?: ChildProcess): void {
  * @param signal - Abort to stop it.
  * @param onOutput - Gets the output as it comes (for a live view).
  * @param extraEnv - More variables (the project's environment).
+ * @param detach - When given, a command that reaches the timeout (or is handed over by the user) moves to the
+ *   background instead of being stopped; the user's Stop (`signal`) still stops it before that.
  * @returns Output and exit code.
  */
-export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void, extraEnv: Record<string, string> = {}): Promise<ShellResult> {
+export function runShell(command: string, cwd: string, timeoutMs: number, signal: AbortSignal, onOutput?: (text: string) => void, extraEnv: Record<string, string> = {}, detach?: ShellDetach): Promise<ShellResult> {
   return new Promise<ShellResult>((resolvePromise) => {
     const child = spawnShell(command, cwd, extraEnv);
     let out = "";
@@ -126,14 +145,32 @@ export function runShell(command: string, cwd: string, timeoutMs: number, signal
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     let timedOut = false;
+    let done = false;
     const kill = () => killTree(child.pid, child);
+    // Hands the running process to the background registry; if that refuses (limit), it is stopped as at a timeout.
+    const handoff = () => {
+      if (done) return;
+      const note = detach?.adopt(child, out);
+      if (note === undefined) {
+        timedOut = true;
+        kill();
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      child.stdout?.off("data", onData);
+      child.stderr?.off("data", onData);
+      resolvePromise({ output: out, code: null, status: note });
+    };
     const timer = setTimeout(() => {
+      if (detach) return handoff();
       timedOut = true;
       kill();
     }, timeoutMs);
     const onAbort = () => kill();
     signal.addEventListener("abort", onAbort, { once: true });
-    let done = false;
+    detach?.onReady?.(handoff);
     const finish = (code: number | null, error?: Error) => {
       if (done) return;
       done = true;

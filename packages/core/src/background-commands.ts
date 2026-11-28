@@ -106,6 +106,8 @@ export function tailLines(text: string, n: number, grep?: string): string[] {
 export class BackgroundCommands {
   private list_: BackgroundCommand[] = [];
   private readonly live = new Map<string, { child: ChildProcess; written: number; queue: Promise<void> }>();
+  /** Foreground run_command calls that can still be handed over, by `chat:call`. */
+  private readonly foreground = new Map<string, () => void>();
   private loaded?: Promise<void>;
   private saving: Promise<void> = Promise.resolve();
   private readonly now: () => number;
@@ -175,10 +177,23 @@ export class BackgroundCommands {
     const id = randomUUID().slice(0, 8);
     const c: BackgroundCommand = { id, convId, command, cwd, state: "running", startedAt: this.now(), file: join(this.deps.dir, `${id}.log`) };
     await writeFile(c.file, "", "utf8");
-    const child = (this.deps.spawn ?? spawnShell)(command, cwd, env);
+    this.attach(c, (this.deps.spawn ?? spawnShell)(command, cwd, env), Promise.resolve(), 0);
+    await this.save();
+    return c;
+  }
+
+  /**
+   * Wires a started process to its command record: output goes to the log file, its end is recorded and wakes the chat.
+   *
+   * @param c - The record (added to the list here).
+   * @param child - The process.
+   * @param ready - Resolves when the log file exists (writes wait for it).
+   * @param written - Bytes already in the file.
+   */
+  private attach(c: BackgroundCommand, child: ChildProcess, ready: Promise<void>, written: number): void {
     if (child.pid) c.pid = child.pid;
-    const live = { child, written: 0, queue: Promise.resolve() as Promise<void> } as { child: ChildProcess; written: number; queue: Promise<void> };
-    this.live.set(id, live);
+    const live = { child, written, queue: ready } as { child: ChildProcess; written: number; queue: Promise<void> };
+    this.live.set(c.id, live);
     this.list_.push(c);
     const onData = (b: Buffer | string) => {
       const buf = Buffer.from(b);
@@ -204,8 +219,64 @@ export class BackgroundCommands {
         finish(code);
       }, 1500).unref?.(),
     );
-    await this.save();
+  }
+
+  /**
+   * Takes over a foreground command that is still running (timeout or the user's "Run in background"): nothing is run
+   * again; its output so far is written first and the rest follows. Synchronous, so no output is lost in between.
+   *
+   * @param convId - The chat.
+   * @param command - The command line.
+   * @param cwd - The working folder.
+   * @param child - The running process.
+   * @param output - What it printed so far.
+   * @returns The command, or undefined when a limit is reached (the caller stops the process).
+   */
+  adopt(convId: string, command: string, cwd: string, child: ChildProcess, output: string): BackgroundCommand | undefined {
+    const running = this.list_.filter((c) => c.state === "running");
+    if (running.filter((c) => c.convId === convId).length >= RUNNING_PER_CHAT || running.length >= RUNNING_TOTAL) return undefined;
+    const id = randomUUID().slice(0, 8);
+    const c: BackgroundCommand = { id, convId, command, cwd, state: "running", startedAt: this.now(), file: join(this.deps.dir, `${id}.log`) };
+    const first = Buffer.from(output);
+    this.attach(c, child, mkdir(this.deps.dir, { recursive: true }).then(() => writeFile(c.file, first)).catch(() => undefined), first.length);
+    void this.save();
     return c;
+  }
+
+  /**
+   * The `detach` of one foreground run_command call (agent ShellDetach): at its timeout the process moves here, and
+   * the call's "Run in background" button (`handoff`) does the same at once.
+   *
+   * @param convId - The chat.
+   * @param command - The command line.
+   * @param cwd - The working folder.
+   * @param callId - The tool call's id (the button names it).
+   */
+  detachFor(convId: string, command: string, cwd: string, callId: string | undefined): { adopt(child: ChildProcess, output: string): string | undefined; onReady(handoff: () => void): void } {
+    return {
+      adopt: (child, output) => {
+        const c = this.adopt(convId, command, cwd, child, output);
+        return c ? `Still running; moved to the background as ${c.id}. Output so far is above; use command_output (tail_lines, grep) to read more and command_stop to stop it. The chat gets a new turn when it ends.` : undefined;
+      },
+      onReady: (handoff) => {
+        if (callId) this.foreground.set(`${convId}:${callId}`, handoff);
+      },
+    };
+  }
+
+  /**
+   * "Run in background" on a running command card: hands that call's process over now.
+   *
+   * @param convId - The chat.
+   * @param callId - The tool call's id.
+   * @returns Whether the call was a running foreground command.
+   */
+  handoffForeground(convId: string, callId: string): boolean {
+    const h = this.foreground.get(`${convId}:${callId}`);
+    if (!h) return false;
+    this.foreground.delete(`${convId}:${callId}`);
+    h();
+    return true;
   }
 
   /** Appends output; past the cap the older half is dropped. */
@@ -304,7 +375,16 @@ export class BackgroundCommands {
     return {
       ...tool,
       run: async (input, ctx) => {
-        if (input.background !== true) return tool.run(input, ctx);
+        if (input.background !== true) {
+          // A foreground command that reaches its timeout (or gets the button) moves to the background instead of dying.
+          await this.start();
+          const key = ctx.callId ? `${convId}:${ctx.callId}` : "";
+          try {
+            return await tool.run(input, ctx.workspace ? { ...ctx, detach: this.detachFor(convId, String(input.command ?? ""), ctx.workspace, ctx.callId) } : ctx);
+          } finally {
+            if (key) this.foreground.delete(key);
+          }
+        }
         if (!ctx.workspace) throw new Error("This conversation has no project folder. Start a code conversation to run commands.");
         const c = await this.run(convId, String(input.command ?? ""), ctx.workspace, ctx.env ?? {});
         return { output: `Started in the background (id ${c.id}). Output file: ${c.file}\nKeep working; the chat gets a new turn when it ends. Read the output with command_output (tail_lines, grep), stop it with command_stop.` };

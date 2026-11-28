@@ -33,3 +33,38 @@ test("an SSHFS-Win path runs commands on the other computer, in its folder, neve
   assert.deepEqual(args.slice(0, 7), ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-p", "22", "me@box"]);
   assert.equal(args[7], `cd "$HOME"/'it'\\''s here' && exec bash -lc 'npm test && echo '\\''ok'\\'''`);
 });
+
+test("detach: a command at its timeout moves on (not killed); without detach it is stopped", { skip: process.platform === "win32" }, async () => {
+  let adopted: import("node:child_process").ChildProcess | undefined;
+  let seen = "";
+  const r = await runShell("echo hi; sleep 30", process.cwd(), 400, new AbortController().signal, undefined, {}, {
+    adopt: (child, output) => {
+      adopted = child;
+      seen = output;
+      return "moved to the background as abc";
+    },
+  });
+  assert.equal(r.status, "moved to the background as abc");
+  assert.match(seen, /hi/);
+  assert.ok(adopted && adopted.exitCode === null && !adopted.killed, "still running");
+  adopted!.kill("SIGKILL");
+  const plain = await runShell("sleep 30", process.cwd(), 300, new AbortController().signal);
+  assert.match(plain.status, /timeout/);
+});
+
+test("detach: the button hands the process over at once; Stop still kills; a refused handoff kills", { skip: process.platform === "win32" }, async () => {
+  let handoff: (() => void) | undefined;
+  let child: import("node:child_process").ChildProcess | undefined;
+  const p = runShell("sleep 30", process.cwd(), 30_000, new AbortController().signal, undefined, {}, { adopt: (c) => ((child = c), "bg 1"), onReady: (h) => (handoff = h) });
+  handoff!();
+  assert.equal((await p).status, "bg 1");
+  child!.kill("SIGKILL");
+  const stop = new AbortController();
+  const q = runShell("sleep 30", process.cwd(), 30_000, stop.signal, undefined, {}, { adopt: () => "never" });
+  setTimeout(() => stop.abort(), 100);
+  assert.equal((await q).code, null);
+  let refused: (() => void) | undefined;
+  const t = runShell("sleep 30", process.cwd(), 30_000, new AbortController().signal, undefined, {}, { adopt: () => undefined, onReady: (h) => (refused = h) });
+  refused!();
+  assert.match((await t).status, /timeout/);
+});
