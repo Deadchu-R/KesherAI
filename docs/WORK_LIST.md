@@ -603,7 +603,9 @@ Goal: the best for the request — usually the cheapest per category.
 - Every system is a chat surface (card → panel → full screen; phone: view, filter, open the page) per the 28.11 rule.
 - Before building: research how Skyscanner (calendar, "everywhere"), Google Flights (date grid, price graph), Kiwi
   (virtual interlining / self-transfer), Hopper, Booking, Hostelworld, GetYourGuide do it end to end, which data
-  sources are free or keyed (Amadeus key from Roee, Kiwi Tequila, …), and the private-browsing approach. Builds on the
+  sources are free or keyed, and the private-browsing approach. NOTE (checked 28.11): Amadeus Self-Service closed on
+  17.07.2026 (no Amadeus key to get) and Kiwi Tequila is partners-only since 2024 — candidates: Travelpayouts (cached
+  price calendar), self-serve fare APIs (e.g. Ignav), and reading the real sites in KesherAI's browser. Builds on the
   27.11 research below (r-20261127-08 / -10).
 
 ## Idea: travel skill — flights and stays, local and private (Roee, 27.11)
