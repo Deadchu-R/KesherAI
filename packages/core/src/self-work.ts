@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { heavyGate } from "./heavy-gate.js";
+import { RunGuard, RunWatch, type RunLimits } from "./agent-watch.js";
 
 /**
  * Self-work: KesherAI works on a git project by itself (its own code, on the
@@ -355,6 +356,10 @@ export class SelfWork {
     const wt = r.worktree ?? r.repo;
     const headOf = async () => (await this.d.git(wt, ["rev-parse", "HEAD"]).catch(() => ({ code: 1, out: "" }))).out.trim();
     const head0 = this.d.stopTurn ? await headOf() : "";
+    // The run guard (agent-watch.ts), the same one the task inbox attaches: it watches the turn's steps and, when the
+    // same step repeats with no edit for many steps, stops the turn and leaves a short rescue hint for the model.
+    const g = this.startGuard(r.convId, wt);
+    const guard = g.guard;
     let polls = 0;
     for (;;) {
       await this.sleep(2000);
@@ -370,6 +375,7 @@ export class SelfWork {
       if (head0 && st.status === "running" && ++polls % 15 === 0) {
         const head = await headOf();
         if (head && head !== head0) {
+          guard.end();
           this.d.stopTurn!(r.convId);
           const subject = (await this.d.git(wt, ["log", "-1", "--format=%s"]).catch(() => ({ code: 1, out: "" }))).out.trim();
           return { status: "idle", last: `ITEM DONE: ${subject || "committed in the chat"}` };
@@ -378,6 +384,14 @@ export class SelfWork {
       if (st.events !== undefined && st.events !== seen) {
         seen = st.events;
         movedAt = this.now();
+      }
+      // The guard's own check (a loop of the same step, or no progress for its window): stop and leave a rescue hint.
+      if (guard.tick()) {
+        this.d.stopTurn?.(r.convId);
+        r.status = "running";
+        r.note = "A watcher stopped a looping turn: the same step repeated with no change. The next turn gets a short hint to try a different step.";
+        await this.save();
+        return { status: "idle", last: "" };
       }
       if (st.status === "waiting") {
         if (!waitingSince) {
@@ -398,7 +412,7 @@ export class SelfWork {
         delete r.note;
         await this.save();
       }
-      if (st.status !== "running") return st;
+      if (st.status !== "running") { guard.end(); return st; }
       // Stuck (the engine hung, a command never returned): stop the turn and count it as an error, so the item is
       // resumed, and given up on after 3 (found on the PC: a run that waited with nothing happening).
       if (this.d.stopTurn && this.now() - movedAt > STALL_MS) {
@@ -416,6 +430,28 @@ export class SelfWork {
         return undefined;
       }
     }
+  }
+
+  /**
+   * Attaches a {@link RunGuard} to the current run's turn, exactly like the task inbox does (inbox-runner.ts
+   * `startGuard`): a run that loops (the same tool and arguments repeated with no edit for many steps), or that goes
+   * over its time, is stopped and a short rescue hint is left on the board item so the next turn tries a different
+   * step. One guard per turn; `guard.end()` stops its timer.
+   *
+   * @param convId - The self-work chat whose steps the guard watches.
+   * @param worktree - Where the agent works (a changed file there counts as progress).
+   * @returns The guard and `end`, which stops its timer.
+   */
+  private startGuard(convId: string, worktree: string): { guard: RunGuard; end: () => void } {
+    const limits: RunLimits = { ceilingMs: STEP_MS + OVERRUN_MS };
+    const watch = new RunWatch(limits, () => this.now());
+    const guard = new RunGuard(watch, {
+      stop: () => this.d.stopTurn?.(convId),
+      step: () => this.d.state(convId).then((s) => s.last ?? ""),
+      changed: async () => (await this.d.git(worktree, ["status", "--porcelain"]).catch(() => ({ code: 1, out: "" }))).out.trim().length > 0,
+    });
+    guard.start();
+    return { guard, end: () => guard.end() };
   }
 
   /**
@@ -448,6 +484,13 @@ export class SelfWork {
   private async work(fresh: boolean, why = "KesherAI restarted"): Promise<void> {
     const r = this.run_!;
     if (!fresh) await this.d.send(r.convId, `${why}. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).`).catch(() => undefined);
+    // A rescue hint left by the run guard on the previous turn (a loop it stopped): tell the model, in one short
+    // line, to do something different rather than repeat the same step.
+    if (r.note && /loop/i.test(r.note)) {
+      await this.d.send(r.convId, "The last turn was stopped for looping (the same step with no change). Do something different: another tool, another file, or finish the item (ITEM DONE / ALL DONE / BLOCKED).").catch(() => undefined);
+      delete r.note;
+      await this.save();
+    }
     try {
       while (!this.stopRequested) {
         if (Date.now() > r.until) return await this.end("stopped", "The time limit was reached.");

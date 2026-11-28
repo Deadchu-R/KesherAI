@@ -265,4 +265,28 @@ test("an item still going 20 minutes past the run's end is stopped, and the run 
   assert.match(sw.current?.note ?? "", /20 minutes/);
   assert.ok(!git.some((a) => a[0] === "commit"), "nothing was committed");
   assert.ok(clock - Date.now() < 60 * 60_000, "about 15 minutes of run and 20 past it, not two hours");
-});
+  });
+
+  test("a turn that loops (the same step, no change) is stopped by the run guard and leaves a rescue hint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "selfwork-"));
+  const repo = join(root, "repo");
+  await mkdir(join(repo, ".git"), { recursive: true });
+  const stopped: string[] = [];
+  const sw = new SelfWork(join(root, "selfwork.json"), {
+    createChat: async () => "c1",
+    send: async () => undefined,
+    // The same step every poll, never changing: the loop the guard is for.
+    state: async () => ({ status: "running", last: "read_file packages/core/src/big.ts" }),
+    stopTurn: (id) => void stopped.push(id),
+    git: async (_r, args) => ({ code: 0, out: args[0] === "rev-parse" ? "abc\n" : "" }),
+    check: async () => ({ code: 0, out: "" }),
+    notify: async () => undefined,
+    sleep: async () => undefined,
+    now: () => Date.now() + (stopped.length ? 1 : 0),
+  });
+  await sw.start({ repo, goal: "x", hours: 1 });
+  await sw.settled();
+  assert.deepEqual(stopped, ["c1"], "the guard stopped the looping turn");
+  assert.match(sw.current?.note ?? "", /loop/i, "a short rescue hint is left on the item");
+  assert.equal(sw.current?.status, "running", "the run itself goes on with the next turn");
+  });

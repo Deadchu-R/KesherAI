@@ -42,7 +42,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ⬜ g-01: a-03 (PR for finished code tasks) now has its GitHub account: check it end to end on the PC once Roee signs in (Settings › Connections › GitHub)
 - ⬜ g-02: GitHub card: "Switch account" (GCM `credential reject` + sign in again) and a link to revoke KesherAI on github.com (Settings › Applications)
 - ⬜ g-03: repository picker from the signed-in account (clone a repo into Projects from the card's list)
-- ⬜ Run guard for self-work (the local model's board runs): attach `RunGuard` from agent-watch.ts to its agent loop (stop + rescue hint like the inbox)
+- ✅ Run guard for self-work (the local model's board runs): attach `RunGuard` from agent-watch.ts to its agent loop (stop + rescue hint like the inbox) — self-work.ts `startGuard` (one guard per turn, same hooks as inbox-runner.ts); a loop (same tool + args, no edit) or a stall stops the turn and leaves a short rescue hint on the board item for the next turn; tested with a fake loop (self-work.test.ts)
 - ⬜ Run guard in user chats (code/agent chats, any provider): attach `RunGuard` with `advise` only (never stop or inject): a short "the agent may be stuck: hint / stop?" line in the chat, he/en
 - ⬜ Check on a real overnight run that the free-cloud rescue/reviewer and the CPU watchdog (router model GGUF, `-ngl 0`) answer in time
 
