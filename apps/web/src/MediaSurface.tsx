@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
+import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { closePanel, openSurface } from "./ArtifactPanel";
 import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
@@ -14,6 +15,9 @@ import type { SurfaceCardProps, SurfaceItem, SurfacePanelProps } from "./surface
  * PC's media prep (a small proxy, a thumbnail sprite, the sound's peaks; served with Range), never the original, so it
  * is light on the phone and the same over remote. The waveform is drawn from the peaks on a canvas: no whole-file decode.
  */
+
+/** The phone editor is its own chunk: nothing of it loads until someone taps Edit. */
+const MediaEditor = lazy(() => import("./MediaEditor"));
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const narrow = () => matchMedia("(max-width: 1099px)").matches;
@@ -303,6 +307,9 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState("");
   const [editor, setEditor] = useState(false);
+  /** The phone editor's file: the prep as it was when it opened (a new version must not swap them under it). */
+  const [editing, setEditing] = useState<{ info: PrepInfo }>();
+  const editPeaks = usePeaks(editing?.info);
   const stopAt = useRef<number | undefined>(undefined);
   const duration = info?.duration ?? 0;
   const title = nameOf(item);
@@ -430,12 +437,13 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
           </form>
           {phone ? (
             <div className="media-phone-edit">
-              <button type="button" disabled aria-describedby="media-soon">{L("עריכה", "Edit")}</button>
-              <span id="media-soon" className="muted small">{L("בקרוב בטלפון", "coming soon on the phone")}</span>
+              <button type="button" disabled={!video || !info?.ready.proxy} onClick={() => info && setEditing({ info })} aria-describedby={video ? undefined : "media-soon"}>✎ {L("עריכה", "Edit")}</button>
+              {!video && <span id="media-soon" className="muted small">{L("עריכת סאונד בקרוב בטלפון", "sound editing is coming soon on the phone")}</span>}
             </div>
           ) : (
             <div className="media-actions">
               {video && <button type="button" onClick={() => void trim()} disabled={!marks || !item.convId || !!busy}>{busy === "trim" ? L("חותך…", "Cutting…") : `✂ ${L("חיתוך לקטע", "Trim to range")}`}</button>}
+              {video && <button type="button" onClick={() => info && setEditing({ info })} disabled={!info?.ready.proxy}>✎ {L("עריכה", "Edit")}</button>}
               <button type="button" onClick={() => void openEditor()} disabled={!!busy}>{page ? L("עורך מלא", "Full editor") : `📦 ${L("עורך מלא (התקנה)", "Full editor (install)")}`}</button>
             </div>
           )}
@@ -447,6 +455,23 @@ function MediaPanel({ item, full, onFull, video }: SurfacePanelProps & { video: 
             </ul>
           )}
         </div>
+      )}
+      {editing && createPortal(
+        <Suspense fallback={<div className="media-editor me-loading" role="status">{L("טוען את העורך…", "Loading the editor…")}</div>}>
+          <MediaEditor
+            item={{ ...item, ...(path ? { path } : {}) }}
+            info={editing.info}
+            peaks={editPeaks}
+            title={title}
+            onClose={() => setEditing(undefined)}
+            onExported={(made) => {
+              setRenders((v) => [...v, made]);
+              setPath(made);
+              setMarks(undefined);
+            }}
+          />
+        </Suspense>,
+        document.body,
       )}
       {editor && <div className="media-actions"><button type="button" className="ghost" onClick={() => setEditor(false)}>‹ {L("חזרה לנגן", "Back to the player")}</button></div>}
     </>

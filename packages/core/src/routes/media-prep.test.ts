@@ -35,7 +35,10 @@ test("media prep routes: path guard, cache hit, Range, and the phone needs its k
       runs++;
       await writeFile(args.at(-1)!, "0123456789");
     },
-    stream: async (_a, onData) => onData(Buffer.alloc(1024)),
+    stream: async (a, onData) => {
+      if (a.includes("-filter_complex")) await writeFile(a.at(-1)!, "rendered");
+      else onData(Buffer.alloc(1024));
+    },
   } satisfies PrepRunner;
   try {
     await app.inject({ method: "POST", url: "/api/providers", payload: { id: "idle", type: "idle" } });
@@ -77,6 +80,23 @@ test("media prep routes: path guard, cache hit, Range, and the phone needs its k
     assert.equal((await app.inject({ url: `/api/media/${first.id}/proxy`, headers: { range: "bytes=50-" } })).statusCode, 416);
     assert.equal((await app.inject({ url: `/api/media/${first.id}/peaks` })).rawPayload.length, 4);
     assert.equal((await app.inject({ url: `/api/media/${first.id}/sprite.json` })).json<{ cols: number }>().cols, 20);
+
+    // Export: ids only (a path is refused), the edit is checked, the render lands in the chat's shared/ folder.
+    const exp = (body: object) => app.inject({ method: "POST", url: "/api/media/export", payload: { conversation: id, ...body } });
+    const edit = { v: 1, video: [{ src: 0, from: 0, to: 1.5 }], lanes: [] };
+    assert.equal((await exp({ sources: [join(folder, "clip.mp4")], edit })).statusCode, 400);
+    assert.equal((await exp({ sources: ["c".repeat(40)], edit })).statusCode, 404);
+    assert.equal((await exp({ sources: [first.id], edit: { v: 1, video: [{ src: 5, from: 0, to: 1 }], lanes: [] } })).statusCode, 400);
+    const rendered = await exp({ sources: [first.id], edit, height: 720 });
+    assert.equal(rendered.statusCode, 200);
+    const { job } = rendered.json() as { job: string };
+    let ex = { state: "running" } as { state: string; path?: string };
+    for (let i = 0; i < 100 && ex.state === "running"; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      ex = (await app.inject({ url: `/api/media/export/${job}` })).json();
+    }
+    assert.equal(ex.state, "done");
+    assert.match(ex.path ?? "", /^shared\/clip-edit\.mp4$/);
 
     // Ids and parts are never paths.
     assert.equal((await app.inject({ url: "/api/media/..%2F..%2Fsecret/proxy" })).statusCode, 400);
