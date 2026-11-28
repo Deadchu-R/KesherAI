@@ -92,6 +92,8 @@ Any task WITHOUT security issues or private data may run on ANY provider (GhostC
 models, Antigravity, the local model), including free ones that train on data. Only tasks that touch security or private
 data (keys, personal info, his files, confidential code) stay on the local model or providers that do not train. Pick by
 quota left; never wait on one provider while another with quota is free.
+When a task has failed on most providers (or keeps bouncing between them), the lead takes it and does it itself
+(Roee, 2026-11-28 10:36), within the usage tiers above.
 
 ## Night work loop (Roee, 2026-11-27 23:47: work all night without stopping)
 
