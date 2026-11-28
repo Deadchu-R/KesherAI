@@ -215,6 +215,8 @@ export class ChatChecks {
       const scope = { ...(s.web && server ? { origin: server.origin } : {}), folder: chat.folder, ...(s.commands ? { commands: s.commands } : {}) };
       const events: AgentEvent[] = [];
       let userSeq = Infinity;
+      /** Whether the turn was seen working (a non-idle status) after the user's message: an idle before it is the old turn's. */
+      let busy = false;
       let ended: (why?: string) => void = () => undefined;
       const done = new Promise<string | undefined>((ok) => (ended = ok));
       unwatch = await h.watch(chat.id, (e) => {
@@ -228,7 +230,11 @@ export class ChatChecks {
           else if (e.kind === "access") h.answer(chat.id, e.questionId, "");
           else if (s.stopOnQuestion) h.stop(chat.id);
           else h.answer(chat.id, e.questionId, NO_PREFERENCE);
-        } else if (e.type === "status" && e.seq > userSeq && (e.status === "idle" || e.status === "error")) {
+        } else if (e.type === "status" && userSeq !== Infinity && e.status !== "idle" && e.status !== "error") {
+          busy = true;
+        } else if (e.type === "status" && userSeq !== Infinity && (e.seq === undefined || e.seq > userSeq) && (e.status === "error" || (e.status === "idle" && (busy || events.some((x) => x.type === "assistant" && (x.seq === undefined || x.seq > userSeq)))))) {
+          // Live status events carry no seq (only saved events do): "after the user's message" is "after we saw it",
+          // and idle counts once the turn was seen working or has answered.
           ended(e.status === "error" ? `the turn ended with an error${e.message ? `: ${e.message}` : ""}` : undefined);
         }
       });
