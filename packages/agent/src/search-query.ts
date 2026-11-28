@@ -69,7 +69,10 @@ export async function searchQueryFor(typed: string, ask: ((system: string, user:
   if (!ask || rules.split(" ").length <= 3) return { query: rules, by: "rules" };
   try {
     // Raced against the budget too: a model that is still loading may not honour the signal.
-    const raw = await Promise.race([ask("Write one short web-search query (2 to 7 key words, same language as the message, no punctuation, keep names, places and dates) for the user's message. Reply with the query only.", typed.slice(0, 300), AbortSignal.timeout(budgetMs)), new Promise<string>((_, no) => setTimeout(() => no(new Error("over budget")), budgetMs).unref())]);
+    // A plain timer (cleared after), not unref'd: a model that never answers must still be cut off at the budget.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const over = new Promise<string>((_, no) => (timer = setTimeout(() => no(new Error("over budget")), budgetMs)));
+    const raw = await Promise.race([ask("Write one short web-search query (2 to 7 key words, same language as the message, no punctuation, keep names, places and dates) for the user's message. Reply with the query only.", typed.slice(0, 300), AbortSignal.timeout(budgetMs)), over]).finally(() => clearTimeout(timer));
     const q = raw.replace(/^["'`\s]+|["'`\s]+$/g, "").split("\n")[0]!.replace(/\s+/g, " ").trim();
     const n = q.split(" ").length;
     return q && n >= 1 && n <= 9 && q.length <= 100 ? { query: q, by: "model" } : { query: rules, by: "rules" };
